@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
         .linkage = .dynamic,
     });
 
+    lib_example.linker_allow_shlib_undefined = true;
     const install_lib_example = b.addInstallArtifact(lib_example, .{
         .dest_sub_path = "example.node",
     });
@@ -40,7 +41,7 @@ pub fn build(b: *std.Build) void {
     const test_napi = b.addTest(.{
         .name = "napi",
         .root_module = module_napi,
-        .filters = &[_][]const u8{},
+        .filters = b.option([][]const u8, "napi.filters", "napi test filters") orelse &[_][]const u8{},
     });
     const install_test_napi = b.addInstallArtifact(test_napi, .{});
     const tls_install_test_napi = b.step("build-test:napi", "Install the napi test");
@@ -54,7 +55,7 @@ pub fn build(b: *std.Build) void {
     const test_example = b.addTest(.{
         .name = "example",
         .root_module = module_example,
-        .filters = &[_][]const u8{},
+        .filters = b.option([][]const u8, "example.filters", "example test filters") orelse &[_][]const u8{},
     });
     const install_test_example = b.addInstallArtifact(test_example, .{});
     const tls_install_test_example = b.step("build-test:example", "Install the example test");

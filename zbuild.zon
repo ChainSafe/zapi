@@ -18,6 +18,7 @@
                 .imports = .{.napi},
             },
             .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example.node",
         },
     },
