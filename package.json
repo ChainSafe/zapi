@@ -3,7 +3,7 @@
   "license": "MIT",
   "version": "0.1.1",
   "description": "A tool for managing and publishing Zig NAPI packages.",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "build": "tsc --outDir js"
   },
