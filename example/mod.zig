@@ -27,7 +27,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         2,
         void,
         napi.createCallback(void, add, .{}),
-        @constCast(&{}),
+        null,
     ));
     try module.setNamedProperty("add_semimanual", try env.createFunction(
         "add_semimanual",
@@ -37,7 +37,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
             .args = .{ .env, .auto, .value },
             .returns = .value,
         }),
-        @constCast(&{}),
+        null,
     ));
     try module.setNamedProperty("surprise", try env.createFunction(
         "surprise",
@@ -46,7 +46,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         napi.createCallback(void, surprise, .{
             .returns = .string,
         }),
-        @constCast(&{}),
+        null,
     ));
     try module.setNamedProperty("update", try env.createFunction(
         "update",

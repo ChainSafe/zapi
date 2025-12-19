@@ -613,7 +613,7 @@ pub fn callFunction(self: Env, function: Value, recv: Value, args: Values) NapiE
     };
 }
 
-pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, comptime DataType: type, comptime cb: Callback(DataType), data: *DataType) NapiError!Value {
+pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, comptime DataType: type, comptime cb: Callback(DataType), data: ?*DataType) NapiError!Value {
     var value: c.napi_value = undefined;
     const callback = wrapCallback(argc, DataType, cb);
     try status.check(
