@@ -105,6 +105,9 @@ pub fn toValue(
             };
             return try toValue(eu.payload, non_error_v, env, hint);
         },
+        .void => {
+            return try env.getUndefined();
+        },
         else => {
             return error.GenericFailure; // Unsupported type
         },

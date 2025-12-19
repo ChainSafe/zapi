@@ -694,12 +694,15 @@ pub fn defineClass(self: Env, utf8_name: []const u8, constructor: c.napi_callbac
     };
 }
 
-pub fn wrap(self: Env, object: Value, native_object: ?*anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!c.napi_ref {
+pub fn wrap(self: Env, object: Value, native_object: ?*anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Ref {
     var ref_: c.napi_ref = undefined;
     try status.check(
         c.napi_wrap(self.env, object.value, native_object, finalize_cb, finalize_hint, &ref_),
     );
-    return ref_;
+    return Ref{
+        .env = self.env,
+        .ref_ = ref_,
+    };
 }
 
 pub fn unwrap(self: Env, object: Value) NapiError!?*anyopaque {
@@ -732,12 +735,15 @@ pub fn checkObjectTypeTag(self: Env, value: Value, type_tag: c.napi_type_tag) Na
     return result;
 }
 
-pub fn addFinalizer(self: Env, object: Value, finalize_data: *anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!c.napi_ref {
+pub fn addFinalizer(self: Env, object: Value, finalize_data: *anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Ref {
     var ref_: c.napi_ref = undefined;
     try status.check(
         c.napi_add_finalizer(self.env, object.value, @ptrCast(finalize_data), finalize_cb, finalize_hint, &ref_),
     );
-    return ref_;
+    return Ref{
+        .env = self.env,
+        .ref_ = ref_,
+    };
 }
 
 //// Custom asynchronous operations
