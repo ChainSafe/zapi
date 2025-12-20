@@ -739,10 +739,10 @@ pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     return native_object;
 }
 
-pub fn removeWrap(self: Env, object: Value) NapiError!?*anyopaque {
-    var native_object: ?*anyopaque = undefined;
+pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+    var native_object: *Data = undefined;
     try status.check(
-        c.napi_remove_wrap(self.env, object.value, &native_object),
+        c.napi_remove_wrap(self.env, object.value, @ptrCast(&native_object)),
     );
     return native_object;
 }
