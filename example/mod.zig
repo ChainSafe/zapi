@@ -148,7 +148,7 @@ fn surprise() []const u8 {
 const allocator = std.heap.page_allocator;
 
 fn Timer_finalize(_: napi.Env, timer: *std.time.Timer, _: ?*void) void {
-    std.debug.print("Destroying timer\n", .{});
+    std.debug.print("Destroying timer {any}\n", .{timer});
     allocator.destroy(timer);
 }
 
@@ -157,8 +157,10 @@ fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
     timer.* = std.time.Timer.start() catch unreachable;
     _ = env.wrap(
         cb.this(),
+        std.time.Timer,
+        void,
+        Timer_finalize,
         timer,
-        napi.wrapFinalizeCallback(*std.time.Timer, ?*void, Timer_finalize),
         null,
     ) catch unreachable;
     return cb.this();

@@ -16,6 +16,8 @@ const Ref = @import("Ref.zig");
 const Deferred = @import("Deferred.zig");
 const NodeVersion = @import("NodeVersion.zig");
 const AsyncContext = @import("AsyncContext.zig");
+const FinalizeCallback = @import("finalize_callback.zig").FinalizeCallback;
+const wrapFinalizeCallback = @import("finalize_callback.zig").wrapFinalizeCallback;
 
 env: c.napi_env,
 
@@ -703,10 +705,25 @@ pub fn defineClass(
     };
 }
 
-pub fn wrap(self: Env, object: Value, native_object: ?*anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Ref {
+pub fn wrap(
+    self: Env,
+    object: Value,
+    comptime Data: type,
+    comptime Hint: type,
+    comptime finalize_cb: FinalizeCallback(Data, Hint),
+    native_object: *Data,
+    finalize_hint: ?*Hint,
+) NapiError!Ref {
     var ref_: c.napi_ref = undefined;
     try status.check(
-        c.napi_wrap(self.env, object.value, native_object, finalize_cb, finalize_hint, &ref_),
+        c.napi_wrap(
+            self.env,
+            object.value,
+            native_object,
+            wrapFinalizeCallback(Data, Hint, finalize_cb),
+            finalize_hint,
+            &ref_,
+        ),
     );
     return Ref{
         .env = self.env,

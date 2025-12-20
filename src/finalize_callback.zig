@@ -3,7 +3,7 @@ const c = @import("c.zig");
 const Env = @import("Env.zig");
 
 pub fn FinalizeCallback(comptime Data: type, comptime Hint: type) type {
-    return *const fn (Env, Data, Hint) void;
+    return *const fn (Env, *Data, ?*Hint) void;
 }
 
 pub fn wrapFinalizeCallback(
