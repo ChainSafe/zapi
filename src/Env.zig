@@ -683,10 +683,19 @@ pub fn newInstance(self: Env, constructor: Value, args: Values) NapiError!Value 
     };
 }
 
-pub fn defineClass(self: Env, utf8_name: []const u8, constructor: c.napi_callback, data: ?*anyopaque, properties: []const c.napi_property_descriptor) NapiError!Value {
+pub fn defineClass(
+    self: Env,
+    utf8_name: []const u8,
+    comptime argc: usize,
+    comptime DataType: type,
+    comptime constructor: Callback(DataType),
+    data: ?*DataType,
+    properties: []const c.napi_property_descriptor,
+) NapiError!Value {
+    const cb = wrapCallback(argc, DataType, constructor);
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_define_class(self.env, utf8_name.ptr, utf8_name.len, constructor, data, properties.len, properties.ptr, &value),
+        c.napi_define_class(self.env, utf8_name.ptr, utf8_name.len, cb, data, properties.len, properties.ptr, &value),
     );
     return Value{
         .env = self.env,
