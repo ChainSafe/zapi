@@ -19,7 +19,7 @@ pub fn wrapFinalizeCallback(
         ) callconv(.C) void {
             return finalize_cb(
                 Env{ .env = env },
-                @ptrCast(data),
+                @alignCast(@ptrCast(data)),
                 @alignCast(@ptrCast(hint)),
             );
         }

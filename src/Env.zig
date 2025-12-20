@@ -714,10 +714,10 @@ pub fn wrap(self: Env, object: Value, native_object: ?*anyopaque, finalize_cb: c
     };
 }
 
-pub fn unwrap(self: Env, object: Value) NapiError!?*anyopaque {
-    var native_object: ?*anyopaque = undefined;
+pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+    var native_object: *Data = undefined;
     try status.check(
-        c.napi_unwrap(self.env, object.value, &native_object),
+        c.napi_unwrap(self.env, object.value, @ptrCast(&native_object)),
     );
     return native_object;
 }

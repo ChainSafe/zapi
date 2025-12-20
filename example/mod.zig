@@ -57,6 +57,27 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         }),
         &s,
     ));
+
+    try module.setNamedProperty(
+        "Timer",
+        try env.defineClass(
+            "Timer",
+            0,
+            void,
+            Timer_ctor,
+            null,
+            &[_]napi.c.napi_property_descriptor{ .{
+                .utf8name = "reset",
+                .method = napi.wrapCallback(0, void, Timer_reset),
+            }, .{
+                .utf8name = "read",
+                .method = napi.wrapCallback(0, void, Timer_read),
+            }, .{
+                .utf8name = "lap",
+                .method = napi.wrapCallback(0, void, Timer_lap),
+            } },
+        ),
+    );
 }
 
 /// Example function that shows Env, Value param and Value return type.
@@ -122,4 +143,39 @@ fn add(a: i32, b: i32) !i32 {
 
 fn surprise() []const u8 {
     return "Surprise!";
+}
+
+const allocator = std.heap.page_allocator;
+
+fn Timer_finalize(_: napi.Env, timer: *std.time.Timer, _: ?*void) void {
+    std.debug.print("Destroying timer\n", .{});
+    allocator.destroy(timer);
+}
+
+fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+    const timer = allocator.create(std.time.Timer) catch unreachable;
+    timer.* = std.time.Timer.start() catch unreachable;
+    _ = env.wrap(
+        cb.this(),
+        timer,
+        napi.wrapFinalizeCallback(*std.time.Timer, ?*void, Timer_finalize),
+        null,
+    ) catch unreachable;
+    return cb.this();
+}
+
+fn Timer_reset(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+    const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
+    timer.reset();
+    return env.getUndefined() catch unreachable;
+}
+
+fn Timer_read(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+    const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
+    return env.createInt64(@bitCast(timer.read())) catch unreachable;
+}
+
+fn Timer_lap(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+    const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
+    return env.createInt64(@bitCast(timer.lap())) catch unreachable;
 }
