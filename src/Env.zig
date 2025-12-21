@@ -61,23 +61,23 @@ pub fn throwError(self: Env, code: [:0]const u8, message: [:0]const u8) NapiErro
 }
 
 /// https://nodejs.org/api/n-api.html#napi_throw_type_error
-pub fn throwTypeError(self: Env, code: ?u8, message: [:0]const u8) NapiError!void {
+pub fn throwTypeError(self: Env, code: [:0]const u8, message: [:0]const u8) NapiError!void {
     try status.check(
-        c.napi_throw_type_error(self.env, @ptrCast(&code), message.ptr),
+        c.napi_throw_type_error(self.env, code, message.ptr),
     );
 }
 
 /// https://nodejs.org/api/n-api.html#napi_throw_range_error
-pub fn throwRangeError(self: Env, code: ?u8, message: [:0]const u8) NapiError!void {
+pub fn throwRangeError(self: Env, code: [:0]const u8, message: [:0]const u8) NapiError!void {
     try status.check(
-        c.napi_throw_range_error(self.env, @ptrCast(&code), message.ptr),
+        c.napi_throw_range_error(self.env, code, message.ptr),
     );
 }
 
 /// https://nodejs.org/api/n-api.html#node_api_throw_syntax_error
-pub fn throwSyntaxError(self: Env, code: ?u8, message: [:0]const u8) NapiError!void {
+pub fn throwSyntaxError(self: Env, code: [:0]const u8, message: [:0]const u8) NapiError!void {
     try status.check(
-        c.node_api_throw_syntax_error(self.env, @ptrCast(&code), message.ptr),
+        c.node_api_throw_syntax_error(self.env, code, message.ptr),
     );
 }
 
