@@ -89,6 +89,14 @@ pub fn isDetachedArrayBuffer(self: Value) NapiError!bool {
     return is_detached;
 }
 
+pub fn isPromise(self: Value) NapiError!bool {
+    var is_promise: bool = undefined;
+    try status.check(
+        c.napi_is_promise(self.env, self.value, &is_promise),
+    );
+    return is_promise;
+}
+
 //// Functions to convert from Node-API to C types
 //// https://nodejs.org/api/n-api.html#functions-to-convert-from-node-api-to-c-types
 
