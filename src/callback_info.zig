@@ -3,37 +3,38 @@ const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
 const Value = @import("Value.zig");
 
-pub fn CallbackInfo(comptime DataType: type) type {
+pub fn CallbackInfo(comptime argc_cap: usize) type {
     return struct {
         env: c.napi_env,
-        args: []c.napi_value,
+        args: [argc_cap]c.napi_value,
         this_arg: c.napi_value,
-        data: *DataType,
+        argc: usize,
+        data: ?*anyopaque,
 
         const Self = @This();
 
         /// https://nodejs.org/api/n-api.html#napi_get_cb_info
-        pub fn init(env: c.napi_env, cb_info: c.napi_callback_info, args: []c.napi_value) NapiError!Self {
+        pub fn init(env: c.napi_env, cb_info: c.napi_callback_info) NapiError!Self {
             var info = Self{
                 .env = env,
-                .args = args,
+                .args = undefined,
                 .this_arg = undefined,
+                .argc = undefined,
                 .data = undefined,
             };
 
-            var initial_argc = args.len;
+            var initial_argc = argc_cap;
 
             try status.check(
-                c.napi_get_cb_info(env, cb_info, &initial_argc, info.args.ptr, &info.this_arg, @ptrCast(&info.data)),
+                c.napi_get_cb_info(env, cb_info, &initial_argc, &info.args, &info.this_arg, @ptrCast(&info.data)),
             );
-            if (initial_argc != args.len) {
-                // If the number of arguments is different, we need to resize the slice
-                info.args = info.args[0..initial_argc];
-            }
+
+            info.argc = if (initial_argc <= argc_cap) initial_argc else argc_cap;
 
             return info;
         }
 
+        /// Caller must ensure that `index` is less than `argc`.
         pub fn arg(self: Self, index: usize) Value {
             return Value{
                 .env = self.env,
@@ -41,8 +42,12 @@ pub fn CallbackInfo(comptime DataType: type) type {
             };
         }
 
-        pub fn argc(self: Self) usize {
-            return self.args.len;
+        pub fn getArg(self: Self, index: usize) ?Value {
+            if (index >= self.argc) return null;
+            return Value{
+                .env = self.env,
+                .value = self.args[index],
+            };
         }
 
         pub fn this(self: Self) Value {

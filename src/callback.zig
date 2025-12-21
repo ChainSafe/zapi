@@ -4,14 +4,13 @@ const CallbackInfo = @import("callback_info.zig").CallbackInfo;
 const Value = @import("Value.zig");
 
 // User function in a typesafe form for NAPI consumption
-pub fn Callback(comptime DataType: type) type {
-    return *const fn (Env, CallbackInfo(DataType)) Value;
+pub fn Callback(comptime argc_cap: usize) type {
+    return *const fn (Env, CallbackInfo(argc_cap)) Value;
 }
 
 pub fn wrapCallback(
-    comptime argc: usize,
-    comptime DataType: type,
-    comptime cb: Callback(DataType),
+    comptime argc_cap: usize,
+    comptime cb: Callback(argc_cap),
 ) c.napi_callback {
     // Compute argc by inspecting the function signature.
     // We're counting the number of napi values to allocate for the callback.
@@ -33,8 +32,7 @@ pub fn wrapCallback(
             info: c.napi_callback_info,
         ) callconv(.C) c.napi_value {
             const e = Env{ .env = env };
-            var args: [argc]c.napi_value = undefined;
-            const cb_info = CallbackInfo(DataType).init(env, info, &args) catch |err| {
+            const cb_info = CallbackInfo(argc_cap).init(env, info) catch |err| {
                 e.throwError(@errorName(err), "CallbackInfo initialization failed") catch unreachable;
                 return null;
             };

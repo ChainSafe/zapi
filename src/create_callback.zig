@@ -7,10 +7,10 @@ const toValue = @import("to_from_value.zig").toValue;
 const fromValue = @import("to_from_value.zig").fromValue;
 
 pub fn createCallback(
-    comptime DataType: type,
+    comptime argc_cap: usize,
     comptime func: anytype,
     comptime options: anytype,
-) Callback(DataType) {
+) Callback(argc_cap) {
     const fn_type = @TypeOf(func);
     const fn_type_info = @typeInfo(fn_type);
     comptime {
@@ -25,7 +25,7 @@ pub fn createCallback(
     return struct {
         pub fn f(
             env: Env,
-            info: CallbackInfo(DataType),
+            info: CallbackInfo(argc_cap),
         ) Value {
             var args: Args = undefined;
 
@@ -33,7 +33,7 @@ pub fn createCallback(
             inline for (0..fn_info.params.len) |i| {
                 const arg_hint = comptime getArgsHint(options, i);
                 if (arg_hint == .data) {
-                    args[i] = info.data;
+                    args[i] = @alignCast(@ptrCast(info.data));
                 } else if (arg_hint == .env) {
                     args[i] = env;
                 } else if (arg_hint == .value) {

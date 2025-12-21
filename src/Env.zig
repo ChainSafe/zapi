@@ -615,11 +615,11 @@ pub fn callFunction(self: Env, function: Value, recv: Value, args: Values) NapiE
     };
 }
 
-pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, comptime DataType: type, comptime cb: Callback(DataType), data: ?*DataType) NapiError!Value {
+pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, comptime cb: Callback(argc), data: ?*anyopaque) NapiError!Value {
     var value: c.napi_value = undefined;
-    const callback = wrapCallback(argc, DataType, cb);
+    const callback = wrapCallback(argc, cb);
     try status.check(
-        c.napi_create_function(self.env, utf8_name.ptr, utf8_name.len, callback, @ptrCast(data), &value),
+        c.napi_create_function(self.env, utf8_name.ptr, utf8_name.len, callback, data, &value),
     );
     return Value{
         .env = self.env,
@@ -689,12 +689,11 @@ pub fn defineClass(
     self: Env,
     utf8_name: []const u8,
     comptime argc: usize,
-    comptime DataType: type,
-    comptime constructor: Callback(DataType),
-    data: ?*DataType,
+    comptime constructor: Callback(argc),
+    data: ?*anyopaque,
     properties: []const c.napi_property_descriptor,
 ) NapiError!Value {
-    const cb = wrapCallback(argc, DataType, constructor);
+    const cb = wrapCallback(argc, constructor);
     var value: c.napi_value = undefined;
     try status.check(
         c.napi_define_class(self.env, utf8_name.ptr, utf8_name.len, cb, data, properties.len, properties.ptr, &value),

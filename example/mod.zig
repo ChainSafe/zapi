@@ -25,15 +25,13 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("add", try env.createFunction(
         "add",
         2,
-        void,
-        napi.createCallback(void, add, .{}),
+        napi.createCallback(2, add, .{}),
         null,
     ));
     try module.setNamedProperty("add_semimanual", try env.createFunction(
         "add_semimanual",
         2,
-        void,
-        napi.createCallback(void, add_semimanual, .{
+        napi.createCallback(2, add_semimanual, .{
             .args = .{ .env, .auto, .value },
             .returns = .value,
         }),
@@ -42,8 +40,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("surprise", try env.createFunction(
         "surprise",
         0,
-        void,
-        napi.createCallback(void, surprise, .{
+        napi.createCallback(0, surprise, .{
             .returns = .string,
         }),
         null,
@@ -51,8 +48,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("update", try env.createFunction(
         "update",
         1,
-        S,
-        napi.createCallback(S, S.update, .{
+        napi.createCallback(1, S.update, .{
             .args = .{ .data, .auto },
         }),
         &s,
@@ -63,18 +59,17 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         try env.defineClass(
             "Timer",
             0,
-            void,
             Timer_ctor,
             null,
             &[_]napi.c.napi_property_descriptor{ .{
                 .utf8name = "reset",
-                .method = napi.wrapCallback(0, void, Timer_reset),
+                .method = napi.wrapCallback(0, Timer_reset),
             }, .{
                 .utf8name = "read",
-                .method = napi.wrapCallback(0, void, Timer_read),
+                .method = napi.wrapCallback(0, Timer_read),
             }, .{
                 .utf8name = "lap",
-                .method = napi.wrapCallback(0, void, Timer_lap),
+                .method = napi.wrapCallback(0, Timer_lap),
             } },
         ),
     );
@@ -116,10 +111,10 @@ const hello_world = "Hello, world!";
 const std = @import("std");
 
 comptime {
-    std.debug.assert(@TypeOf(&add_manual) == napi.Callback(void));
+    std.debug.assert(@TypeOf(&add_manual) == napi.Callback(2));
 }
 
-fn add_manual(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+fn add_manual(env: napi.Env, cb: napi.CallbackInfo(2)) napi.Value {
     const a = cb.arg(0).getValueBool() catch |err| {
         env.throwError(@errorName(err), "MsgB") catch {};
         return napi.Value.nullptr;
@@ -152,7 +147,7 @@ fn Timer_finalize(_: napi.Env, timer: *std.time.Timer, _: ?*void) void {
     allocator.destroy(timer);
 }
 
-fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(0)) napi.Value {
     const timer = allocator.create(std.time.Timer) catch unreachable;
     timer.* = std.time.Timer.start() catch unreachable;
     _ = env.wrap(
@@ -166,18 +161,18 @@ fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
     return cb.this();
 }
 
-fn Timer_reset(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+fn Timer_reset(env: napi.Env, cb: napi.CallbackInfo(0)) napi.Value {
     const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
     timer.reset();
     return env.getUndefined() catch unreachable;
 }
 
-fn Timer_read(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+fn Timer_read(env: napi.Env, cb: napi.CallbackInfo(0)) napi.Value {
     const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
     return env.createInt64(@bitCast(timer.read())) catch unreachable;
 }
 
-fn Timer_lap(env: napi.Env, cb: napi.CallbackInfo(void)) napi.Value {
+fn Timer_lap(env: napi.Env, cb: napi.CallbackInfo(0)) napi.Value {
     const timer = env.unwrap(std.time.Timer, cb.this()) catch unreachable;
     return env.createInt64(@bitCast(timer.lap())) catch unreachable;
 }
