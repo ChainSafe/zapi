@@ -12,20 +12,6 @@ pub fn wrapCallback(
     comptime argc_cap: usize,
     comptime cb: Callback(argc_cap),
 ) c.napi_callback {
-    // Compute argc by inspecting the function signature.
-    // We're counting the number of napi values to allocate for the callback.
-    // We need to remove any `Env` or `DataType` parameters.
-    // const ptr_info = @typeInfo(@TypeOf(cb));
-    // const fn_type_info = @typeInfo(ptr_info.pointer.child);
-    // comptime var argc = 0;
-    // inline for (fn_type_info.@"fn".params) |param| {
-    //     if (param.type.? == Env or param.type.? == DataType) {
-    //         // If the parameter is Env or DataType, we don't count it towards argc
-    //         continue;
-    //     }
-    //     argc += 1;
-    // }
-
     const wrapper = struct {
         pub fn f(
             env: c.napi_env,
