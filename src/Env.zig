@@ -708,10 +708,9 @@ pub fn wrap(
     self: Env,
     object: Value,
     comptime Data: type,
-    comptime Hint: type,
-    comptime finalize_cb: FinalizeCallback(Data, Hint),
     native_object: *Data,
-    finalize_hint: ?*Hint,
+    comptime finalize_cb: ?FinalizeCallback(Data),
+    finalize_hint: ?*anyopaque,
 ) NapiError!Ref {
     var ref_: c.napi_ref = undefined;
     try status.check(
@@ -719,7 +718,7 @@ pub fn wrap(
             self.env,
             object.value,
             native_object,
-            wrapFinalizeCallback(Data, Hint, finalize_cb),
+            if (finalize_cb) |f| wrapFinalizeCallback(Data, f) else null,
             finalize_hint,
             &ref_,
         ),
