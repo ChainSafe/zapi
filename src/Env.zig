@@ -615,7 +615,7 @@ pub fn getUndefined(self: Env) NapiError!Value {
 pub fn callFunction(self: Env, function: Value, recv: Value, args: Values) NapiError!Value {
     var result: c.napi_value = undefined;
     try status.check(
-        c.napi_call_function(self.env, function.value, recv.value, args.values.len, args.values.ptr, &result),
+        c.napi_call_function(self.env, recv.value, function.value, args.values.len, args.values.ptr, &result),
     );
     return Value{
         .env = self.env,
