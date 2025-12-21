@@ -28,6 +28,12 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         napi.createCallback(2, add, .{}),
         null,
     ));
+    try module.setNamedProperty("add_manual", try env.createFunction(
+        "add",
+        2,
+        add_manual,
+        null,
+    ));
     try module.setNamedProperty("add_semimanual", try env.createFunction(
         "add_semimanual",
         2,
@@ -115,8 +121,8 @@ comptime {
 }
 
 fn add_manual(env: napi.Env, cb: napi.CallbackInfo(2)) napi.Value {
-    const a = cb.arg(0).getValueBool() catch |err| {
-        env.throwError(@errorName(err), "MsgB") catch {};
+    const a = cb.arg(0).getValueBool() catch {
+        env.throwLastErrorInfo() catch {};
         return napi.Value.nullptr;
     };
 

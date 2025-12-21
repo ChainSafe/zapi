@@ -27,12 +27,20 @@ pub const Env = @This();
 //// https://nodejs.org/api/n-api.html#error-handling
 
 /// https://nodejs.org/api/n-api.html#napi_get_last_error_info
-pub fn getLastErrorInfo(self: Env) NapiError!c.napi_extended_error_info {
-    var error_info: c.napi_extended_error_info = undefined;
+pub fn getLastErrorInfo(self: Env) NapiError!*c.napi_extended_error_info {
+    var error_info: *c.napi_extended_error_info = undefined;
     try status.check(
         c.napi_get_last_error_info(self.env, @ptrCast(&error_info)),
     );
     return error_info;
+}
+
+pub fn throwLastErrorInfo(self: Env) NapiError!void {
+    const error_info = try self.getLastErrorInfo();
+    try self.throwError(
+        @tagName(@as(status.Status, @enumFromInt(error_info.error_code))),
+        std.mem.span(error_info.error_message),
+    );
 }
 
 //// Exceptions
@@ -48,7 +56,7 @@ pub fn throw(self: Env, value: Value) NapiError!void {
 /// https://nodejs.org/api/n-api.html#napi_throw_error
 pub fn throwError(self: Env, code: [:0]const u8, message: [:0]const u8) NapiError!void {
     try status.check(
-        c.napi_throw_error(self.env, code, message.ptr),
+        c.napi_throw_error(self.env, code, message),
     );
 }
 
