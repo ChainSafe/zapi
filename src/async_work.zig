@@ -62,7 +62,7 @@ pub fn AsyncWork(comptime Data: type) type {
         pub fn create(
             raw_env: Env,
             async_resource: ?Value,
-            async_resource_name: ?Value,
+            async_resource_name: Value,
             comptime execute_cb: AsyncExecuteCallback(Data),
             comptime complete_cb: AsyncCompleteCallback(Data),
             data: *Data,
@@ -72,7 +72,7 @@ pub fn AsyncWork(comptime Data: type) type {
                 c.napi_create_async_work(
                     raw_env.env,
                     if (async_resource) |r| r.value else null,
-                    if (async_resource_name) |n| n.value else null,
+                    async_resource_name.value,
                     wrapAsyncExecuteCallback(Data, execute_cb),
                     wrapAsyncCompleteCallback(Data, complete_cb),
                     data,

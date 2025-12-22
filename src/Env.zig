@@ -30,28 +30,13 @@ pub const Env = @This();
 //// https://nodejs.org/api/n-api.html#error-handling
 
 /// https://nodejs.org/api/n-api.html#napi_get_last_error_info
-pub fn getLastErrorInfo(self: Env) NapiError!*c.napi_extended_error_info {
+pub fn getLastErrorInfo(self: Env) NapiError!?*c.napi_extended_error_info {
     var error_info: *c.napi_extended_error_info = undefined;
     try status.check(
         c.napi_get_last_error_info(self.env, @ptrCast(&error_info)),
     );
+    if (error_info.error_code == 0) return null;
     return error_info;
-}
-
-pub fn throwLastErrorInfo(self: Env) NapiError!void {
-    const error_info = try self.getLastErrorInfo();
-    try self.throwError(
-        @tagName(@as(status.Status, @enumFromInt(error_info.error_code))),
-        std.mem.span(error_info.error_message),
-    );
-}
-
-pub fn createLastErrorInfoError(self: Env) NapiError!Value {
-    const error_info = try self.getLastErrorInfo();
-    return try self.createError(
-        try self.createStringUtf8(@tagName(@as(status.Status, @enumFromInt(error_info.error_code)))),
-        try self.createStringUtf8(std.mem.span(error_info.error_message)),
-    );
 }
 
 //// Exceptions
@@ -793,7 +778,7 @@ pub fn createAsyncWork(
     self: Env,
     comptime Data: type,
     async_resource: ?Value,
-    async_resource_name: ?Value,
+    async_resource_name: Value,
     comptime execute_cb: AsyncExecuteCallback(Data),
     comptime complete_cb: AsyncCompleteCallback(Data),
     data: *Data,

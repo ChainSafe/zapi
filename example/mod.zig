@@ -195,11 +195,16 @@ fn asyncAddExecute(_: napi.Env, data: *AsyncAddData) void {
 }
 
 fn asyncAddComplete(env: napi.Env, status: napi.status.Status, data: *AsyncAddData) void {
-    defer data.work.delete() catch undefined;
-    defer allocator.destroy(data);
+    defer {
+        data.work.delete() catch undefined;
+        allocator.destroy(data);
+    }
 
     if (status != .ok) {
-        data.deferred.reject(env.createLastErrorInfoError() catch unreachable) catch unreachable;
+        data.deferred.reject(env.createError(
+            env.createStringUtf8(@tagName(status)) catch unreachable,
+            env.createStringUtf8(@tagName(status)) catch unreachable,
+        ) catch unreachable) catch unreachable;
         return;
     }
 
@@ -221,7 +226,7 @@ fn asyncAdd(env: napi.Env, cb: napi.CallbackInfo(2)) !napi.Value {
     const work = try env.createAsyncWork(
         AsyncAddData,
         null,
-        null,
+        try env.createStringUtf8("asyncAdd"),
         asyncAddExecute,
         asyncAddComplete,
         data,
