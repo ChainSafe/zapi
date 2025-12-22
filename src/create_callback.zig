@@ -26,7 +26,7 @@ pub fn createCallback(
         pub fn f(
             env: Env,
             info: CallbackInfo(argc_cap),
-        ) Value {
+        ) anyerror!Value {
             var args: Args = undefined;
 
             var cb_arg_i: usize = 0;
@@ -40,10 +40,7 @@ pub fn createCallback(
                     args[i] = info.arg(cb_arg_i);
                     cb_arg_i += 1;
                 } else {
-                    args[i] = fromValue(fn_info.params[i].type.?, info.arg(cb_arg_i), arg_hint) catch |err| {
-                        env.throwError(@errorName(err), "Failed to get argument at index " ++ std.fmt.comptimePrint("{d}", .{i})) catch {};
-                        return Value.nullptr;
-                    };
+                    args[i] = try fromValue(fn_info.params[i].type.?, info.arg(cb_arg_i), arg_hint);
                     cb_arg_i += 1;
                 }
             }
@@ -52,10 +49,7 @@ pub fn createCallback(
             if (returns_hint == .value) {
                 return result;
             }
-            return toValue(fn_info.return_type.?, result, env, returns_hint) catch |err| {
-                env.throwError(@errorName(err), "Failed to convert return value") catch {};
-                return Value.nullptr;
-            };
+            return try toValue(fn_info.return_type.?, result, env, returns_hint);
         }
     }.f;
 }

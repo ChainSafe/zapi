@@ -90,3 +90,11 @@ pub fn exec(comptime napi_func: anytype, napi_args: std.meta.ArgsTuple(@TypeOf(n
         @call(.auto, napi_func, napi_args),
     );
 }
+
+/// Returns true if the error is an instance of NapiError.
+pub fn isNapiError(err: anyerror) bool {
+    inline for (comptime std.meta.fields(NapiError)) |field| {
+        if (err == @field(NapiError, field.name)) return true;
+    }
+    return false;
+}

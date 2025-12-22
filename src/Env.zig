@@ -18,6 +18,9 @@ const NodeVersion = @import("NodeVersion.zig");
 const AsyncContext = @import("AsyncContext.zig");
 const FinalizeCallback = @import("finalize_callback.zig").FinalizeCallback;
 const wrapFinalizeCallback = @import("finalize_callback.zig").wrapFinalizeCallback;
+const AsyncWork = @import("async_work.zig").AsyncWork;
+const AsyncExecuteCallback = @import("async_work.zig").AsyncExecuteCallback;
+const AsyncCompleteCallback = @import("async_work.zig").AsyncCompleteCallback;
 
 env: c.napi_env,
 
@@ -40,6 +43,14 @@ pub fn throwLastErrorInfo(self: Env) NapiError!void {
     try self.throwError(
         @tagName(@as(status.Status, @enumFromInt(error_info.error_code))),
         std.mem.span(error_info.error_message),
+    );
+}
+
+pub fn createLastErrorInfoError(self: Env) NapiError!Value {
+    const error_info = try self.getLastErrorInfo();
+    return try self.createError(
+        try self.createStringUtf8(@tagName(@as(status.Status, @enumFromInt(error_info.error_code)))),
+        try self.createStringUtf8(std.mem.span(error_info.error_message)),
     );
 }
 
@@ -776,6 +787,25 @@ pub fn addFinalizer(self: Env, object: Value, finalize_data: *anyopaque, finaliz
         .env = self.env,
         .ref_ = ref_,
     };
+}
+
+pub fn createAsyncWork(
+    self: Env,
+    comptime Data: type,
+    async_resource: ?Value,
+    async_resource_name: ?Value,
+    comptime execute_cb: AsyncExecuteCallback(Data),
+    comptime complete_cb: AsyncCompleteCallback(Data),
+    data: *Data,
+) NapiError!AsyncWork(Data) {
+    return try AsyncWork(Data).create(
+        self,
+        async_resource,
+        async_resource_name,
+        execute_cb,
+        complete_cb,
+        data,
+    );
 }
 
 //// Custom asynchronous operations

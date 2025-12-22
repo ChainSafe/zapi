@@ -35,3 +35,10 @@ pub fn reject(self: Deferred, value: Value) NapiError!void {
         c.napi_reject_deferred(self.env, self.deferred, value.value),
     );
 }
+
+pub fn getPromise(self: Deferred) Value {
+    return Value{
+        .env = self.env,
+        .value = self.promise,
+    };
+}

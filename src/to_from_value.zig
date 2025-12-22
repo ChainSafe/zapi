@@ -99,11 +99,7 @@ pub fn toValue(
             return error.GenericFailure; // Unsupported pointer type
         },
         .error_union => |eu| {
-            const non_error_v = v catch |err| {
-                env.throwError(@errorName(err), @errorName(err)) catch {};
-                return Value.nullptr;
-            };
-            return try toValue(eu.payload, non_error_v, env, hint);
+            return try toValue(eu.payload, try v, env, hint);
         },
         .void => {
             return try env.getUndefined();

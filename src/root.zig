@@ -19,3 +19,5 @@ pub const createCallback = @import("create_callback.zig").createCallback;
 pub const registerDecls = @import("register_decls.zig").registerDecls;
 pub const wrapFinalizeCallback = @import("finalize_callback.zig").wrapFinalizeCallback;
 pub const wrapCallback = @import("callback.zig").wrapCallback;
+
+pub const AsyncWork = @import("async_work.zig").AsyncWork;
