@@ -5,7 +5,6 @@ const NapiError = status.NapiError;
 const TypedarrayType = @import("value_types.zig").TypedarrayType;
 const TypeTag = @import("value_types.zig").TypeTag;
 const Value = @import("Value.zig");
-const Values = @import("Values.zig");
 
 const CallbackInfo = @import("callback_info.zig").CallbackInfo;
 const Callback = @import("callback.zig").Callback;
@@ -672,42 +671,6 @@ pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, co
         .env = self.env,
         .value = value,
     };
-}
-
-pub const CbInfo = struct {
-    env: c.napi_env,
-    args: []c.napi_value,
-    this_arg: c.napi_value,
-    data: ?*anyopaque,
-
-    pub fn this(self: CbInfo) Value {
-        return Value{
-            .env = self.env,
-            .value = self.this_arg,
-        };
-    }
-
-    pub fn getArgs(self: CbInfo) Values {
-        return Values{
-            .env = self.env,
-            .values = self.args,
-        };
-    }
-};
-
-pub fn getCbInfo(self: Env, cb_info: c.napi_callback_info, args: Values) NapiError!CbInfo {
-    var info: CbInfo = .{
-        .env = self.env,
-        .args = args.values,
-        .this_arg = undefined,
-        .data = undefined,
-    };
-    var argc: usize = args.values.len;
-    try status.check(
-        c.napi_get_cb_info(self.env, cb_info, &argc, @ptrCast(&info.args), &info.this_arg, &info.data),
-    );
-    info.args = info.args[0..argc];
-    return info;
 }
 
 pub fn getNewTarget(self: Env, cb_info: c.napi_callback_info) NapiError!Value {

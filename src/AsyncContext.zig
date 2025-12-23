@@ -2,7 +2,6 @@ const c = @import("c.zig");
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
 const Value = @import("Value.zig");
-const Values = @import("Values.zig");
 const argsTupleToRaw = @import("args.zig").tupleToRaw;
 
 env: c.napi_env,

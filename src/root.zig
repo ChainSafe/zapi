@@ -4,7 +4,6 @@ pub const c = @import("c.zig");
 pub const AsyncContext = @import("AsyncContext.zig");
 pub const Env = @import("Env.zig");
 pub const Value = @import("Value.zig");
-pub const Values = @import("Values.zig");
 pub const Deferred = @import("Deferred.zig");
 pub const EscapableHandleScope = @import("EscapableHandleScope.zig");
 pub const HandleScope = @import("HandleScope.zig");
