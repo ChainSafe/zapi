@@ -9,6 +9,7 @@ promise: c.napi_value,
 
 const Deferred = @This();
 
+/// https://nodejs.org/api/n-api.html#napi_create_promise
 pub fn create(env: c.napi_env) NapiError!Deferred {
     var deferred: c.napi_deferred = undefined;
     var promise: c.napi_value = undefined;
@@ -24,12 +25,14 @@ pub fn create(env: c.napi_env) NapiError!Deferred {
     };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_resolve_deferred
 pub fn resolve(self: Deferred, value: Value) NapiError!void {
     try status.check(
         c.napi_resolve_deferred(self.env, self.deferred, value.value),
     );
 }
 
+/// https://nodejs.org/api/n-api.html#napi_reject_deferred
 pub fn reject(self: Deferred, value: Value) NapiError!void {
     try status.check(
         c.napi_reject_deferred(self.env, self.deferred, value.value),

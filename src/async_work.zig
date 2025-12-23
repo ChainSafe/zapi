@@ -59,6 +59,7 @@ pub fn AsyncWork(comptime Data: type) type {
 
         const Self = @This();
 
+        /// https://nodejs.org/api/n-api.html#napi_create_async_work
         pub fn create(
             raw_env: Env,
             async_resource: ?Value,
@@ -85,21 +86,24 @@ pub fn AsyncWork(comptime Data: type) type {
             };
         }
 
+        /// https://nodejs.org/api/n-api.html#napi_delete_async_work
+        pub fn delete(self: Self) NapiError!void {
+            try status.check(
+                c.napi_delete_async_work(self.env, self.work),
+            );
+        }
+
+        /// https://nodejs.org/api/n-api.html#napi_queue_async_work
         pub fn queue(self: Self) NapiError!void {
             try status.check(
                 c.napi_queue_async_work(self.env, self.work),
             );
         }
 
+        /// https://nodejs.org/api/n-api.html#napi_cancel_async_work
         pub fn cancel(self: Self) NapiError!void {
             try status.check(
                 c.napi_cancel_async_work(self.env, self.work),
-            );
-        }
-
-        pub fn delete(self: Self) NapiError!void {
-            try status.check(
-                c.napi_delete_async_work(self.env, self.work),
             );
         }
     };

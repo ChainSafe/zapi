@@ -9,6 +9,7 @@ async_context: c.napi_async_context,
 
 const AsyncContext = @This();
 
+/// https://nodejs.org/api/n-api.html#napi_async_init
 pub fn init(env: c.napi_env, async_resource: Value, async_resource_name: Value) NapiError!AsyncContext {
     var async_context: c.napi_async_context = undefined;
     try status.check(
@@ -17,6 +18,7 @@ pub fn init(env: c.napi_env, async_resource: Value, async_resource_name: Value) 
     return AsyncContext{ .env = env, .async_context = async_context };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_async_destroy
 pub fn destroy(self: AsyncContext) NapiError!void {
     try status.check(
         c.napi_async_destroy(self.env, self.async_context),
@@ -24,6 +26,7 @@ pub fn destroy(self: AsyncContext) NapiError!void {
 }
 
 /// `args` must be a tuple containing only `napi.Value` objects.
+/// https://nodejs.org/api/n-api.html#napi_make_callback
 pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype) NapiError!Value {
     var argv = argsTupleToRaw(args);
     var result: c.napi_value = undefined;
@@ -48,6 +51,7 @@ pub const CallbackScope = struct {
     env: c.napi_env,
     scope: c.napi_callback_scope,
 
+    /// https://nodejs.org/api/n-api.html#napi_open_callback_scope
     pub fn open(env: c.napi_env, async_context: c.napi_async_context) NapiError!CallbackScope {
         var scope: c.napi_callback_scope = undefined;
         try status.check(
@@ -56,6 +60,7 @@ pub const CallbackScope = struct {
         return CallbackScope{ .env = env, .scope = scope };
     }
 
+    /// https://nodejs.org/api/n-api.html#napi_close_callback_scope
     pub fn close(self: CallbackScope) NapiError!void {
         try status.check(
             c.napi_close_callback_scope(self.env, self.scope),
@@ -63,6 +68,7 @@ pub const CallbackScope = struct {
     }
 };
 
+/// https://nodejs.org/api/n-api.html#napi_open_callback_scope
 pub fn openCallbackScope(self: AsyncContext) NapiError!CallbackScope {
     return try CallbackScope.open(self.env, self.async_context);
 }

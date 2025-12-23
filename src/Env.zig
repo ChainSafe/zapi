@@ -639,6 +639,7 @@ pub fn getUndefined(self: Env) NapiError!Value {
 
 /// Calls a JavaScript function.
 /// `args` must be a tuple containing only `napi.Value` objects.
+/// https://nodejs.org/api/n-api.html#napi_call_function
 pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) NapiError!Value {
     var argv = argsTupleToRaw(args);
     var result: c.napi_value = undefined;
@@ -658,6 +659,7 @@ pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) Napi
     };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_create_function
 pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, comptime cb: Callback(argc), data: ?*anyopaque) NapiError!Value {
     var value: c.napi_value = undefined;
     const callback = wrapCallback(argc, cb);
@@ -670,6 +672,7 @@ pub fn createFunction(self: Env, utf8_name: []const u8, comptime argc: usize, co
     };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_get_new_target
 pub fn getNewTarget(self: Env, cb_info: c.napi_callback_info) NapiError!Value {
     var new_target: c.napi_value = undefined;
     try status.check(
@@ -682,6 +685,7 @@ pub fn getNewTarget(self: Env, cb_info: c.napi_callback_info) NapiError!Value {
 }
 
 /// `args` must be a tuple containing only `napi.Value` objects.
+/// https://nodejs.org/api/n-api.html#napi_new_instance
 pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value {
     var argv = argsTupleToRaw(args);
     var instance: c.napi_value = undefined;
@@ -700,6 +704,10 @@ pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value
     };
 }
 
+//// Object wrap
+//// https://nodejs.org/api/n-api.html#object-wrap
+
+/// https://nodejs.org/api/n-api.html#napi_define_class
 pub fn defineClass(
     self: Env,
     utf8_name: []const u8,
@@ -719,6 +727,7 @@ pub fn defineClass(
     };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_wrap
 pub fn wrap(
     self: Env,
     object: Value,
@@ -744,6 +753,7 @@ pub fn wrap(
     };
 }
 
+/// https://nodejs.org/api/n-api.html#napi_unwrap
 pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     var native_object: *Data = undefined;
     try status.check(
@@ -752,6 +762,7 @@ pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     return native_object;
 }
 
+/// https://nodejs.org/api/n-api.html#napi_remove_wrap
 pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     var native_object: *Data = undefined;
     try status.check(
@@ -760,12 +771,14 @@ pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data
     return native_object;
 }
 
+/// https://nodejs.org/api/n-api.html#napi_type_tag_object
 pub fn typeTagObject(self: Env, value: Value, type_tag: c.napi_type_tag) NapiError!void {
     try status.check(
         c.napi_type_tag_object(self.env, value.value, &type_tag),
     );
 }
 
+/// https://nodejs.org/api/n-api.html#napi_check_object_type_tag
 pub fn checkObjectTypeTag(self: Env, value: Value, type_tag: c.napi_type_tag) NapiError!bool {
     var result: bool = undefined;
     try status.check(
@@ -774,6 +787,7 @@ pub fn checkObjectTypeTag(self: Env, value: Value, type_tag: c.napi_type_tag) Na
     return result;
 }
 
+/// https://nodejs.org/api/n-api.html#napi_add_finalizer
 pub fn addFinalizer(self: Env, object: Value, finalize_data: *anyopaque, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Ref {
     var ref_: c.napi_ref = undefined;
     try status.check(
@@ -785,6 +799,10 @@ pub fn addFinalizer(self: Env, object: Value, finalize_data: *anyopaque, finaliz
     };
 }
 
+//// Simple asynchronous operations
+//// https://nodejs.org/api/n-api.html#simple-asynchronous-operations
+
+/// https://nodejs.org/api/n-api.html#napi_create_async_work
 pub fn createAsyncWork(
     self: Env,
     comptime Data: type,
