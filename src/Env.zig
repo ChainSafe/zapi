@@ -25,10 +25,39 @@ const ThreadSafeFunction = @import("threadsafe_function.zig").ThreadSafeFunction
 const ThreadSafeCallJsCallback = @import("threadsafe_function.zig").ThreadSafeCallJsCallback;
 const ThreadSafeFinalizeCallback = @import("threadsafe_function.zig").FinalizeCallback;
 const argsTupleToRaw = @import("args.zig").tupleToRaw;
+const CleanupHookCallback = @import("cleanup_hook.zig").CleanupHookCallback;
+const wrapCleanupHook = @import("cleanup_hook.zig").wrapCleanupHook;
 
 env: c.napi_env,
 
 pub const Env = @This();
+
+//// Environment lifecycle APIs
+//// https://nodejs.org/api/n-api.html#environment-life-cycle-apis
+
+/// https://nodejs.org/api/n-api.html#napi_set_instance_data
+pub fn setInstanceData(
+    self: Env,
+    comptime Data: type,
+    data: *Data,
+    comptime finalize_cb: ?FinalizeCallback(Data),
+    finalize_hint: ?*anyopaque,
+) NapiError!void {
+    try status.check(c.napi_set_instance_data(
+        self.env,
+        data,
+        if (finalize_cb) |f| wrapFinalizeCallback(Data, f) else null,
+        finalize_hint,
+    ));
+}
+
+/// https://nodejs.org/api/n-api.html#napi_get_instance_data
+pub fn getInstanceData(self: Env, comptime Data: type) NapiError!?*Data {
+    var data: ?*anyopaque = undefined;
+    try status.check(c.napi_get_instance_data(self.env, &data));
+    if (data == null) return null;
+    return @ptrCast(@alignCast(data));
+}
 
 //// Error handling
 //// https://nodejs.org/api/n-api.html#error-handling
@@ -867,6 +896,37 @@ pub fn getVersion(self: Env) NapiError!u32 {
         c.napi_get_version(self.env, &version),
     );
     return version;
+}
+
+//// Cleanup on exit of the current Node.js environment
+//// https://nodejs.org/api/n-api.html#cleanup-on-exit-of-the-current-nodejs-environment
+
+/// https://nodejs.org/api/n-api.html#napi_add_env_cleanup_hook
+pub fn addEnvCleanupHook(
+    self: Env,
+    comptime Data: type,
+    data: *Data,
+    comptime cb: CleanupHookCallback(Data),
+) NapiError!void {
+    try status.check(c.napi_add_env_cleanup_hook(
+        self.env,
+        wrapCleanupHook(Data, cb),
+        data,
+    ));
+}
+
+/// https://nodejs.org/api/n-api.html#napi_remove_env_cleanup_hook
+pub fn removeEnvCleanupHook(
+    self: Env,
+    comptime Data: type,
+    data: *Data,
+    comptime cb: CleanupHookCallback(Data),
+) NapiError!void {
+    try status.check(c.napi_remove_env_cleanup_hook(
+        self.env,
+        wrapCleanupHook(Data, cb),
+        data,
+    ));
 }
 
 //// Memory management
