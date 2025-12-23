@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("example/mod.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
     b.modules.put(b.dupe("example"), module_example) catch @panic("OOM");
 

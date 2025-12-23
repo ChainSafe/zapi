@@ -21,6 +21,10 @@ const wrapFinalizeCallback = @import("finalize_callback.zig").wrapFinalizeCallba
 const AsyncWork = @import("async_work.zig").AsyncWork;
 const AsyncExecuteCallback = @import("async_work.zig").AsyncExecuteCallback;
 const AsyncCompleteCallback = @import("async_work.zig").AsyncCompleteCallback;
+const ThreadSafeFunction = @import("threadsafe_function.zig").ThreadSafeFunction;
+const ThreadSafeCallJsCallback = @import("threadsafe_function.zig").ThreadSafeCallJsCallback;
+const ThreadSafeFinalizeCallback = @import("threadsafe_function.zig").FinalizeCallback;
+const argsTupleToRaw = @import("args.zig").tupleToRaw;
 
 env: c.napi_env,
 
@@ -608,10 +612,20 @@ pub fn getUndefined(self: Env) NapiError!Value {
 //// Working with JavaScript functions
 //// https://nodejs.org/api/n-api.html#working-with-javascript-functions
 
-pub fn callFunction(self: Env, function: Value, recv: Value, args: Values) NapiError!Value {
+/// Calls a JavaScript function.
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
     var result: c.napi_value = undefined;
     try status.check(
-        c.napi_call_function(self.env, recv.value, function.value, args.values.len, args.values.ptr, &result),
+        c.napi_call_function(
+            self.env,
+            recv.value,
+            function.value,
+            argv.len,
+            if (argv.len > 0) &argv else null,
+            &result,
+        ),
     );
     return Value{
         .env = self.env,
@@ -678,10 +692,18 @@ pub fn getNewTarget(self: Env, cb_info: c.napi_callback_info) NapiError!Value {
     };
 }
 
-pub fn newInstance(self: Env, constructor: Value, args: Values) NapiError!Value {
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
     var instance: c.napi_value = undefined;
     try status.check(
-        c.napi_new_instance(self.env, constructor.value, args.values.len, args.values.ptr, &instance),
+        c.napi_new_instance(
+            self.env,
+            constructor.value,
+            argv.len,
+            if (argv.len > 0) &argv else null,
+            &instance,
+        ),
     );
     return Value{
         .env = self.env,
@@ -790,6 +812,32 @@ pub fn createAsyncWork(
         execute_cb,
         complete_cb,
         data,
+    );
+}
+
+pub fn createThreadSafeFunction(
+    self: Env,
+    comptime Context: type,
+    comptime CallData: type,
+    func: ?Value,
+    async_resource: ?Value,
+    async_resource_name: Value,
+    max_queue_size: usize,
+    initial_thread_count: usize,
+    context: *Context,
+    comptime finalize_cb: ?ThreadSafeFinalizeCallback(Context),
+    comptime call_js_cb: ?ThreadSafeCallJsCallback(Context, CallData),
+) NapiError!ThreadSafeFunction(Context, CallData) {
+    return try ThreadSafeFunction(Context, CallData).create(
+        self,
+        func,
+        async_resource,
+        async_resource_name,
+        max_queue_size,
+        initial_thread_count,
+        context,
+        finalize_cb,
+        call_js_cb,
     );
 }
 

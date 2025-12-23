@@ -21,3 +21,6 @@ pub const wrapFinalizeCallback = @import("finalize_callback.zig").wrapFinalizeCa
 pub const wrapCallback = @import("callback.zig").wrapCallback;
 
 pub const AsyncWork = @import("async_work.zig").AsyncWork;
+pub const ThreadSafeFunction = @import("threadsafe_function.zig").ThreadSafeFunction;
+pub const CallMode = @import("threadsafe_function.zig").CallMode;
+pub const ReleaseMode = @import("threadsafe_function.zig").ReleaseMode;

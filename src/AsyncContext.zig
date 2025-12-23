@@ -3,6 +3,7 @@ const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
 const Value = @import("Value.zig");
 const Values = @import("Values.zig");
+const argsTupleToRaw = @import("args.zig").tupleToRaw;
 
 env: c.napi_env,
 async_context: c.napi_async_context,
@@ -23,10 +24,20 @@ pub fn destroy(self: AsyncContext) NapiError!void {
     );
 }
 
-pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: Values) NapiError!Value {
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
     var result: c.napi_value = undefined;
     try status.check(
-        c.napi_make_callback(self.env, self.async_context, recv.value, func.value, args.values.len, args.values.ptr, &result),
+        c.napi_make_callback(
+            self.env,
+            self.async_context,
+            recv.value,
+            func.value,
+            argv.len,
+            if (argv.len > 0) &argv else null,
+            &result,
+        ),
     );
     return Value{
         .env = self.env,

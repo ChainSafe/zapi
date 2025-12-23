@@ -87,11 +87,19 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
         ),
     );
 
-    // Example of an async function
+    // Example of using async work + promise
     try module.setNamedProperty("asyncAdd", try env.createFunction(
         "asyncAdd",
         2,
         asyncAdd,
+        null,
+    ));
+
+    // Example of using threadsafe function
+    try module.setNamedProperty("startThread", try env.createFunction(
+        "startThread",
+        1,
+        startThread,
         null,
     ));
 }
@@ -235,4 +243,72 @@ fn asyncAdd(env: napi.Env, cb: napi.CallbackInfo(2)) !napi.Value {
     try work.queue();
 
     return data.deferred.getPromise();
+}
+
+// Threadsafe function example
+
+const TsfnContext = struct {
+    thread: std.Thread,
+};
+
+const TsfnData = struct {
+    count: i32,
+};
+
+fn startThread(env: napi.Env, cb: napi.CallbackInfo(1)) !napi.Value {
+    const context = try allocator.create(TsfnContext);
+
+    // Create the thread-safe function
+    const tsfn = try env.createThreadSafeFunction(
+        TsfnContext,
+        TsfnData,
+        cb.arg(0),
+        null,
+        try env.createStringUtf8("TsfnResource"),
+        0,
+        1,
+        context,
+        finalizeTsfn,
+        callJs,
+    );
+
+    // Start a thread
+    context.thread = try std.Thread.spawn(.{}, threadMain, .{tsfn});
+
+    return try env.getUndefined();
+}
+
+fn threadMain(tsfn: napi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
+    var i: i32 = 0;
+    while (i < 5) : (i += 1) {
+        const data = allocator.create(TsfnData) catch return;
+        data.count = i;
+
+        // Call into JS
+        tsfn.call(data, .blocking) catch {};
+
+        std.time.sleep(100 * std.time.ns_per_ms);
+    }
+
+    // Release the thread-safe function
+    tsfn.release(.release) catch {};
+}
+
+fn callJs(env: napi.Env, cb: napi.Value, _: *TsfnContext, data: *TsfnData) void {
+    defer allocator.destroy(data);
+
+    _ = env.callFunction(
+        cb,
+        cb,
+        .{env.createInt32(data.count) catch unreachable},
+    ) catch {};
+}
+
+fn finalizeTsfn(_: napi.Env, context: *TsfnContext) void {
+    defer {
+        context.thread.join();
+        allocator.destroy(context);
+    }
+
+    std.debug.print("TSFN Finalized\n", .{});
 }
