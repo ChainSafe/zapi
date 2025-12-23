@@ -131,11 +131,12 @@ pub fn getBufferInfo(self: Value) NapiError![]u8 {
 
 /// https://nodejs.org/api/n-api.html#napi_get_prototype
 pub fn getPrototype(self: Value) NapiError!Value {
-    var prototype: Value = undefined;
-    try status.check(
-        c.napi_get_prototype(self.env, self.value, @ptrCast(&prototype)),
-    );
-    return prototype;
+    var val: c.napi_value = undefined;
+    try status.check(c.napi_get_prototype(self.env, self.value, &val));
+    return .{
+        .env = self.env,
+        .value = val,
+    };
 }
 
 pub const TypedarrayInfo = struct {

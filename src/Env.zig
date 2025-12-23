@@ -62,12 +62,9 @@ pub fn getInstanceData(self: Env, comptime Data: type) NapiError!?*Data {
 //// https://nodejs.org/api/n-api.html#error-handling
 
 /// https://nodejs.org/api/n-api.html#napi_get_last_error_info
-pub fn getLastErrorInfo(self: Env) NapiError!?*c.napi_extended_error_info {
-    var error_info: *c.napi_extended_error_info = undefined;
-    try status.check(
-        c.napi_get_last_error_info(self.env, @ptrCast(&error_info)),
-    );
-    if (error_info.error_code == 0) return null;
+pub fn getLastErrorInfo(self: Env) NapiError!?*const c.napi_extended_error_info {
+    var error_info: ?*const c.napi_extended_error_info = null;
+    try status.check(c.napi_get_last_error_info(self.env, &error_info));
     return error_info;
 }
 

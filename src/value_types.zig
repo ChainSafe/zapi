@@ -50,7 +50,7 @@ pub const TypedarrayType = enum(c.napi_typedarray_type) {
     bigint64 = c.napi_bigint64_array,
     biguint64 = c.napi_biguint64_array,
 
-    pub fn elementSize(self: TypedarrayType) u8 {
+    pub fn elementSize(self: TypedarrayType) usize {
         switch (self) {
             .int8, .uint8, .uint8_clamped => return 1,
             .int16, .uint16 => return 2,

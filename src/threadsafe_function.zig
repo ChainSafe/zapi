@@ -76,7 +76,7 @@ pub const CallMode = enum(c.napi_threadsafe_function_call_mode) {
 
 pub const ReleaseMode = enum(c.napi_threadsafe_function_release_mode) {
     release = c.napi_tsfn_release,
-    block = c.napi_tsfn_abort,
+    abort = c.napi_tsfn_abort,
 };
 
 pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type {
