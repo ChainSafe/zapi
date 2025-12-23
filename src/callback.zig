@@ -45,7 +45,7 @@ pub fn wrapCallback(
                         ) catch {};
                     }
                 } else {
-                    e.throwError(@errorName(err), "ZigError") catch {};
+                    e.throwError(@errorName(err), @errorName(err)) catch {};
                 }
                 return null;
             };
