@@ -12,11 +12,6 @@ value: c.napi_value,
 
 const Value = @This();
 
-pub const nullptr = Value{
-    .env = null,
-    .value = null,
-};
-
 /// https://nodejs.org/api/n-api.html#napi_is_array
 pub fn isArray(self: Value) NapiError!bool {
     var is_array: bool = undefined;
