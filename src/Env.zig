@@ -186,11 +186,9 @@ pub fn fatalException(self: Env, value: Value) NapiError!void {
 //// https://nodejs.org/api/n-api.html#fatal-errors
 
 /// https://nodejs.org/api/n-api.html#napi_fatal_error
-pub fn fatalError(self: Env, location: []const u8, message: []const u8) NapiError!noreturn {
+pub fn fatalError(self: Env, location: []const u8, message: []const u8) noreturn {
     _ = self;
-    try status.check(
-        c.napi_fatal_error(location.ptr, location.len, message.ptr, message.len),
-    );
+    c.napi_fatal_error(location.ptr, location.len, message.ptr, message.len);
 }
 
 //// Object lifetime management
