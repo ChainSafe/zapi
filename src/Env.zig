@@ -26,6 +26,8 @@ const ThreadSafeFinalizeCallback = @import("threadsafe_function.zig").FinalizeCa
 const argsTupleToRaw = @import("args.zig").tupleToRaw;
 const CleanupHookCallback = @import("cleanup_hook.zig").CleanupHookCallback;
 const wrapCleanupHook = @import("cleanup_hook.zig").wrapCleanupHook;
+const AsyncCleanupHookCallback = @import("async_cleanup_hook.zig").AsyncCleanupHookCallback;
+const wrapAsyncCleanupHook = @import("async_cleanup_hook.zig").wrapAsyncCleanupHook;
 
 env: c.napi_env,
 
@@ -887,6 +889,31 @@ pub fn removeEnvCleanupHook(
     ));
 }
 
+/// https://nodejs.org/api/n-api.html#napi_add_async_cleanup_hook
+pub fn addAsyncCleanupHook(
+    self: Env,
+    comptime Data: type,
+    data: *Data,
+    comptime cb: AsyncCleanupHookCallback(Data),
+) NapiError!c.napi_async_cleanup_hook_handle {
+    var remove_handle: c.napi_async_cleanup_hook_handle = undefined;
+    try status.check(c.napi_add_async_cleanup_hook(
+        self.env,
+        wrapAsyncCleanupHook(Data, cb),
+        data,
+        &remove_handle,
+    ));
+    return remove_handle;
+}
+
+/// https://nodejs.org/api/n-api.html#napi_remove_async_cleanup_hook
+pub fn removeAsyncCleanupHook(
+    _: Env,
+    handle: c.napi_async_cleanup_hook_handle,
+) NapiError!void {
+    try status.check(c.napi_remove_async_cleanup_hook(handle));
+}
+
 //// Memory management
 //// https://nodejs.org/api/n-api.html#memory-management
 
@@ -905,4 +932,44 @@ pub fn adjustExternalMemory(self: Env, delta: i64) NapiError!i64 {
 /// https://nodejs.org/api/n-api.html#napi_create_promise
 pub fn createPromise(self: Env) NapiError!Deferred {
     return try Deferred.create(self.env);
+}
+
+//// Script execution
+//// https://nodejs.org/api/n-api.html#script-execution
+
+/// https://nodejs.org/api/n-api.html#napi_run_script
+pub fn runScript(self: Env, script: Value) NapiError!Value {
+    var result: c.napi_value = undefined;
+    try status.check(
+        c.napi_run_script(self.env, script.value, &result),
+    );
+    return Value{
+        .env = self.env,
+        .value = result,
+    };
+}
+
+//// Libuv event loop
+//// https://nodejs.org/api/n-api.html#libuv-event-loop
+
+/// https://nodejs.org/api/n-api.html#napi_get_uv_event_loop
+pub fn getUvEventLoop(self: Env) NapiError!*c.uv_loop_s {
+    var loop: *c.uv_loop_s = undefined;
+    try status.check(
+        c.napi_get_uv_event_loop(self.env, @ptrCast(&loop)),
+    );
+    return loop;
+}
+
+//// Miscellaneous utilities
+//// https://nodejs.org/api/n-api.html#miscellaneous-utilities
+
+/// The return value is owned by env and must thus not be modified or freed.
+/// https://nodejs.org/api/n-api.html#node_api_get_module_file_name
+pub fn getModuleFileName(self: Env) NapiError![:0]const u8 {
+    var result: [*]const u8 = undefined;
+    try status.check(
+        c.node_api_get_module_file_name(self.env, &result),
+    );
+    return std.mem.span(result);
 }
