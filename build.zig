@@ -6,6 +6,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const options_build_options = b.addOptions();
+    const option_napi_version = b.option([]const u8, "napi_version", "") orelse "10";
+    options_build_options.addOption([]const u8, "napi_version", option_napi_version);
+    const options_module_build_options = options_build_options.createModule();
+
     const module_napi = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -66,6 +71,8 @@ pub fn build(b: *std.Build) void {
     const tls_run_test_example = b.step("test:example", "Run the example test");
     tls_run_test_example.dependOn(&run_test_example.step);
     tls_run_test.dependOn(&run_test_example.step);
+
+    module_napi.addImport("build_options", options_module_build_options);
 
     module_example.addImport("napi", module_napi);
 }

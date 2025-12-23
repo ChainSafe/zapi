@@ -5,10 +5,19 @@
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
+    .options_modules = .{
+        .build_options = .{
+            .napi_version = .{
+                .type = "string",
+                .default = "10",
+            },
+        },
+    },
     .modules = .{
         .napi = .{
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
+            .imports = .{.build_options},
         },
     },
     .libraries = .{
