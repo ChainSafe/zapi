@@ -58,6 +58,22 @@ pub const TypedarrayType = enum(c.napi_typedarray_type) {
             .float64, .bigint64, .biguint64 => return 8,
         }
     }
+
+    pub fn elementType(self: TypedarrayType) type {
+        switch (self) {
+            .int8 => return i8,
+            .uint8 => return u8,
+            .uint8_clamped => return u8,
+            .int16 => return i16,
+            .uint16 => return u16,
+            .int32 => return i32,
+            .uint32 => return u32,
+            .float32 => return f32,
+            .float64 => return f64,
+            .bigint64 => return i64,
+            .biguint64 => return u64,
+        }
+    }
 };
 
 /// https://nodejs.org/api/n-api.html#napi_property_attributes
