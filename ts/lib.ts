@@ -1,9 +1,90 @@
 import { existsSync, readFileSync } from "node:fs";
-import { parsePkgJson, Target } from "./config.js";
+import { parsePkgJson } from "./config.js";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
+
+export const TARGETS = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "x86_64-pc-windows-msvc"
+] as const;
+
+export type Target = typeof TARGETS[number];
+
+export enum Optimize {
+  Debug = "Debug",
+  ReleaseSmall = "ReleaseSmall",
+  ReleaseFast = "ReleaseFast",
+  ReleaseSafe = "ReleaseSafe",
+};
+
+/**
+ * Validate and parse the --optimize flag value.
+ * @returns The validated Optimize value, or undefined if not provided.
+ * @throws Error if the value is invalid.
+ */
+export function validateOptimize(value: string | undefined): Optimize | undefined {
+  if (value == null) return undefined;
+  if (Object.values(Optimize).includes(value as Optimize)) {
+    return value as Optimize;
+  }
+  const valid = Object.values(Optimize).join(", ");
+  throw new Error(`Invalid optimize "${value}". Valid values: ${valid}`);
+}
+
+/**
+ * Validate and parse the --target flag value.
+ * @param value - The target value from CLI args
+ * @param defaultToCurrentPlatform - If true and value is undefined, detect current platform
+ * @returns The validated Target value.
+ * @throws Error if the value is invalid or platform is unsupported.
+ */
+export function validateTarget(value: string | undefined, defaultToCurrentPlatform = true): Target {
+  if (value == null) {
+    if (defaultToCurrentPlatform) {
+      return getTarget(process.platform, process.arch);
+    }
+    throw new Error("--target is required");
+  }
+  if (TARGETS.includes(value as Target)) {
+    return value as Target;
+  }
+  throw new Error(`Invalid target "${value}". Valid values: ${TARGETS.join(", ")}`);
+}
+
+/**
+ * Validate that a required string option is provided.
+ * @throws Error if the value is undefined or empty.
+ */
+export function requireOption(name: string, value: string | undefined): string {
+  if (value == null || value === "") {
+    throw new Error(`--${name} is required`);
+  }
+  return value;
+}
+
+export function getZigTriple(target: Target): string {
+  switch (target) {
+    case 'x86_64-unknown-linux-gnu':
+      return 'x86_64-linux-gnu';
+    case 'x86_64-unknown-linux-musl':
+      return 'x86_64-linux-musl';
+    case 'aarch64-unknown-linux-gnu':
+      return 'aarch64-linux-gnu';
+    case 'x86_64-apple-darwin':
+      return 'x86_64-macos-none';
+    case 'aarch64-apple-darwin':
+      return 'aarch64-macos-none';
+    case 'x86_64-pc-windows-msvc':
+      return 'x86_64-windows-msvc';
+  }
+}
+
 
 // from napi-rs
 const isMusl = () => {
@@ -59,7 +140,7 @@ const isMuslFromChildProcess = () => {
   }
 }
 
-function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture): Target {
+export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture): Target {
   if (platform === "darwin") {
     if (arch === "arm64") {
       return "aarch64-apple-darwin";

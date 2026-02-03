@@ -1,5 +1,5 @@
 {
-  "name": "@chainsafe/napi-z",
+  "name": "@chainsafe/zapi",
   "license": "MIT",
   "version": "0.1.1",
   "description": "A tool for managing and publishing Zig NAPI packages.",
@@ -16,7 +16,6 @@
     ".": "./js/lib.js"
   },
   "types": "js/lib.d.ts",
-  "packageManager": "yarn@4.9.2",
   "devDependencies": {
     "@types/node": "^24.1.0",
     "typescript": "^5.8.3"
