@@ -1,17 +1,17 @@
-import { join } from "node:path";
-import { loadConfig } from "./config.js";
-import { spawn } from "node:child_process";
-import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
-import { logStep, logInfo, logSuccess, logDetail } from "./log.js";
+import {spawn} from "node:child_process";
+import {join} from "node:path";
+import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
+import {loadConfig} from "./config.js";
+import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
 const publishOptions = {
-  "npm-dir": {
-    type: "string",
-    default: "npm",
-  },
   "dry-run": {
-    type: "boolean",
     default: false,
+    type: "boolean",
+  },
+  "npm-dir": {
+    default: "npm",
+    type: "string",
   },
 } satisfies ParseArgsOptionsConfig;
 
@@ -21,7 +21,7 @@ export type PublishOpts = {
 };
 
 function extraPublishArgs(): string[] {
-  const publishIx = process.argv.findIndex((arg) => arg === "publish");
+  const publishIx = process.argv.indexOf("publish");
   // Find where our options end and npm args begin (after --)
   const dashDashIx = process.argv.indexOf("--", publishIx + 1);
   if (dashDashIx !== -1) {
@@ -56,23 +56,23 @@ export async function publish(opts: PublishOpts): Promise<void> {
   const extraArgs = extraPublishArgs();
   const publishArgv = ["publish", ...extraArgs];
 
-  const { config } = await loadConfig();
+  const {config} = await loadConfig();
   const total = config.targets.length + 1; // +1 for main package
 
   if (opts["dry-run"]) {
     logInfo(`[DRY RUN] Would publish ${config.targets.length} target package(s) + main package`);
     logDetail(`Extra npm args: ${extraArgs.length > 0 ? extraArgs.join(" ") : "(none)"}`);
-    
+
     for (let i = 0; i < config.targets.length; i++) {
       const target = config.targets[i];
       const cwd = join(process.cwd(), opts["npm-dir"], target);
       logStep(i + 1, total, `Would publish ${target}`);
       logDetail(`Directory: ${cwd}`);
     }
-    
+
     logStep(total, total, "Would publish main package");
     logDetail(`Directory: ${process.cwd()}`);
-    
+
     logSuccess(`[DRY RUN] ${total} package(s) would be published`);
     return;
   }
@@ -93,14 +93,14 @@ export async function publish(opts: PublishOpts): Promise<void> {
 }
 
 export async function publishCli(): Promise<void> {
-  const { values } = parseArgs({
-    options: publishOptions,
+  const {values} = parseArgs({
     allowPositionals: true,
+    options: publishOptions,
     strict: false,
   });
 
   await publish({
-    "npm-dir": values["npm-dir"] as string,
     "dry-run": values["dry-run"] as boolean,
+    "npm-dir": values["npm-dir"] as string,
   });
 }

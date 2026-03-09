@@ -6,4 +6,4 @@ test/spec/static_tests.zig
 *.ssz
 .yarn
 node_modules/
-js/
+lib/

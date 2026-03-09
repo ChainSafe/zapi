@@ -1,6 +1,6 @@
-import { promises as fs } from "node:fs";
-import { join } from "node:path";
-import { Target, TARGETS } from "./lib.js";
+import {promises as fs} from "node:fs";
+import {join} from "node:path";
+import {TARGETS, type Target} from "./lib.js";
 
 export type Config = {
   binaryName: string;
@@ -12,7 +12,7 @@ export type PkgJson = {
   name: string;
   version: string;
   license?: string;
-  repository?: string | { type?: string; url?: string };
+  repository?: string | {type?: string; url?: string};
   zapi?: {
     binaryName: string;
     targets: string[];
@@ -30,14 +30,14 @@ export type LoadedConfig = {
  * Load and parse package.json and zapi config from a directory.
  * @param cwd - Directory containing package.json (default: current directory)
  */
-export async function loadConfig(cwd: string = "."): Promise<LoadedConfig> {
+export async function loadConfig(cwd = "."): Promise<LoadedConfig> {
   const pkgJsonPath = join(cwd, "package.json");
   const pkgJson = JSON.parse(await fs.readFile(pkgJsonPath, "utf-8")) as PkgJson;
   const config = parsePkgJson(pkgJson);
-  return { pkgJson, config };
+  return {config, pkgJson};
 }
 
-export function parsePkgJson(pkgJson: any): Config {
+export function parsePkgJson(pkgJson: PkgJson): Config {
   const napi = pkgJson.zapi;
   if (typeof napi !== "object" || napi === null) {
     throw new Error("zapi field is missing in package.json");
@@ -66,11 +66,11 @@ export function parsePkgJson(pkgJson: any): Config {
   return {
     binaryName,
     step,
-    targets: targets as Target[]
+    targets: targets as Target[],
   };
 }
 
-export function getTargetParts(target: Target): {platform: NodeJS.Platform, arch: NodeJS.Architecture, abi?: string} {
+export function getTargetParts(target: Target): {platform: NodeJS.Platform; arch: NodeJS.Architecture; abi?: string} {
   let platform: NodeJS.Platform;
   let arch: NodeJS.Architecture;
   let abi: string | undefined;
@@ -104,5 +104,5 @@ export function getTargetParts(target: Target): {platform: NodeJS.Platform, arch
       abi = "msvc";
       break;
   }
-  return {platform, arch, abi};
+  return {abi, arch, platform};
 }

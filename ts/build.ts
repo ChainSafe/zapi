@@ -1,8 +1,8 @@
-import {parseArgs, type ParseArgsOptionsConfig} from "node:util";
-import {getZigTriple, Optimize, type Target, validateOptimize, validateTarget, requireOption} from "./lib.js";
-import { spawn } from "node:child_process";
-import { logInfo, logSuccess } from "./log.js";
-import { loadConfig } from "./config.js";
+import {spawn} from "node:child_process";
+import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
+import {loadConfig} from "./config.js";
+import {type Optimize, type Target, getZigTriple, validateOptimize, validateTarget} from "./lib.js";
+import {logInfo, logSuccess} from "./log.js";
 
 export type BuildOptions = {
   target: Target;
@@ -52,29 +52,28 @@ export async function build(opts: BuildOptions): Promise<void> {
 }
 
 const buildCliOptions = {
+  optimize: {
+    type: "string",
+  },
+  step: {
+    type: "string",
+  },
+  target: {
+    type: "string",
+  },
   "zig-cwd": {
-    type: "string",
     default: ".",
-  },
-  "step": {
-    type: "string",
-  },
-  "optimize": {
-    type: "string",
-  },
-  "target": {
     type: "string",
   },
 } satisfies ParseArgsOptionsConfig;
 
-
 export async function buildCli(): Promise<void> {
   const {values} = parseArgs({
-    options: buildCliOptions,
     allowPositionals: true,
+    options: buildCliOptions,
   });
 
-  const { config } = await loadConfig();
+  const {config} = await loadConfig();
   const step = values.step ?? config.step;
   if (!step) {
     throw new Error("--step is required (or set zapi.step in package.json)");
@@ -83,10 +82,10 @@ export async function buildCli(): Promise<void> {
   const optimize = validateOptimize(values.optimize as string | undefined);
 
   const buildOptions: BuildOptions = {
-    target,
     optimize,
-    zigCwd: values["zig-cwd"],
     step,
+    target,
+    zigCwd: values["zig-cwd"],
   };
 
   await build(buildOptions);

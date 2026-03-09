@@ -1,6 +1,6 @@
 ///! This is an example napi module that exercises various napi features.
 const std = @import("std");
-const napi = @import("napi");
+const napi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
 comptime {

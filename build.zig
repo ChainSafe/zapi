@@ -11,68 +11,68 @@ pub fn build(b: *std.Build) void {
     options_build_options.addOption([]const u8, "napi_version", option_napi_version);
     const options_module_build_options = options_build_options.createModule();
 
-    const module_napi = b.createModule(.{
+    const module_zapi = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    module_napi.addIncludePath(b.path("include"));
-    b.modules.put(b.dupe("napi"), module_napi) catch @panic("OOM");
+    module_zapi.addIncludePath(b.path("include"));
+    b.modules.put(b.dupe("zapi"), module_zapi) catch @panic("OOM");
+    b.modules.put(b.dupe("napi"), module_zapi) catch @panic("OOM");
 
-    const module_example = b.createModule(.{
-        .root_source_file = b.path("example/mod.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
+    module_zapi.addImport("build_options", options_module_build_options);
+
+    const test_zapi = b.addTest(.{
+        .name = "zapi",
+        .root_module = module_zapi,
     });
-    b.modules.put(b.dupe("example"), module_example) catch @panic("OOM");
+    const run_test = b.addRunArtifact(test_zapi);
+    const tls_test = b.step("test", "Run all tests");
+    tls_test.dependOn(&run_test.step);
 
-    const lib_example = b.addLibrary(.{
-        .name = "example",
-        .root_module = module_example,
-        .linkage = .dynamic,
-    });
+    buildExamples(b, target, optimize, module_zapi);
+}
 
-    lib_example.linker_allow_shlib_undefined = true;
-    const install_lib_example = b.addInstallArtifact(lib_example, .{
-        .dest_sub_path = "example.node",
-    });
+pub fn buildExamples(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, napi: *std.Build.Module) void {
+    // Build all examples from examples/<name>/mod.zig
+    const tls_build_examples = b.step("examples", "Build all examples");
 
-    const tls_install_lib_example = b.step("build-lib:example", "Install the example library");
-    tls_install_lib_example.dependOn(&install_lib_example.step);
-    b.getInstallStep().dependOn(&install_lib_example.step);
+    var examples_dir = std.fs.openDirAbsolute(b.pathFromRoot("examples"), .{ .iterate = true }) catch |err| {
+        std.debug.print("Warning: could not open examples directory: {}\n", .{err});
+        return;
+    };
+    defer examples_dir.close();
 
-    const tls_run_test = b.step("test", "Run all tests");
+    var it = examples_dir.iterate();
+    while (it.next() catch @panic("Failed to iterate examples directory")) |entry| {
+        if (entry.kind != .directory) continue;
+        const name = b.dupe(entry.name);
 
-    const test_napi = b.addTest(.{
-        .name = "napi",
-        .root_module = module_napi,
-        .filters = b.option([][]const u8, "napi.filters", "napi test filters") orelse &[_][]const u8{},
-    });
-    const install_test_napi = b.addInstallArtifact(test_napi, .{});
-    const tls_install_test_napi = b.step("build-test:napi", "Install the napi test");
-    tls_install_test_napi.dependOn(&install_test_napi.step);
+        const mod = b.createModule(.{
+            .root_source_file = b.path(b.fmt("examples/{s}/mod.zig", .{name})),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        mod.addImport("zapi", napi);
+        mod.addImport("napi", napi);
 
-    const run_test_napi = b.addRunArtifact(test_napi);
-    const tls_run_test_napi = b.step("test:napi", "Run the napi test");
-    tls_run_test_napi.dependOn(&run_test_napi.step);
-    tls_run_test.dependOn(&run_test_napi.step);
+        const lib = b.addLibrary(.{
+            .name = name,
+            .root_module = mod,
+            .linkage = .dynamic,
+        });
+        lib.linker_allow_shlib_undefined = true;
 
-    const test_example = b.addTest(.{
-        .name = "example",
-        .root_module = module_example,
-        .filters = b.option([][]const u8, "example.filters", "example test filters") orelse &[_][]const u8{},
-    });
-    const install_test_example = b.addInstallArtifact(test_example, .{});
-    const tls_install_test_example = b.step("build-test:example", "Install the example test");
-    tls_install_test_example.dependOn(&install_test_example.step);
+        const install_lib = b.addInstallArtifact(lib, .{
+            .dest_sub_path = b.fmt("{s}.node", .{name}),
+        });
 
-    const run_test_example = b.addRunArtifact(test_example);
-    const tls_run_test_example = b.step("test:example", "Run the example test");
-    tls_run_test_example.dependOn(&run_test_example.step);
-    tls_run_test.dependOn(&run_test_example.step);
-
-    module_napi.addImport("build_options", options_module_build_options);
-
-    module_example.addImport("napi", module_napi);
+        const tls_build_example = b.step(
+            b.fmt("build:examples:{s}", .{name}),
+            b.fmt("Build the {s} example", .{name}),
+        );
+        tls_build_example.dependOn(&install_lib.step);
+        tls_build_examples.dependOn(&install_lib.step);
+    }
 }
