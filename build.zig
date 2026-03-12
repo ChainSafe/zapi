@@ -19,28 +19,28 @@ pub fn build(b: *std.Build) void {
     module_napi.addIncludePath(b.path("include"));
     b.modules.put(b.dupe("napi"), module_napi) catch @panic("OOM");
 
-    const module_example = b.createModule(.{
-        .root_source_file = b.path("example/mod.zig"),
+    const module_example_hello_world = b.createModule(.{
+        .root_source_file = b.path("examples/hello_world/mod.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    b.modules.put(b.dupe("example"), module_example) catch @panic("OOM");
+    b.modules.put(b.dupe("example_hello_world"), module_example_hello_world) catch @panic("OOM");
 
-    const lib_example = b.addLibrary(.{
-        .name = "example",
-        .root_module = module_example,
+    const lib_example_hello_world = b.addLibrary(.{
+        .name = "example_hello_world",
+        .root_module = module_example_hello_world,
         .linkage = .dynamic,
     });
 
-    lib_example.linker_allow_shlib_undefined = true;
-    const install_lib_example = b.addInstallArtifact(lib_example, .{
-        .dest_sub_path = "example.node",
+    lib_example_hello_world.linker_allow_shlib_undefined = true;
+    const install_lib_example_hello_world = b.addInstallArtifact(lib_example_hello_world, .{
+        .dest_sub_path = "example_hello_world.node",
     });
 
-    const tls_install_lib_example = b.step("build-lib:example", "Install the example library");
-    tls_install_lib_example.dependOn(&install_lib_example.step);
-    b.getInstallStep().dependOn(&install_lib_example.step);
+    const tls_install_lib_example_hello_world = b.step("build-lib:example_hello_world", "Install the example_hello_world library");
+    tls_install_lib_example_hello_world.dependOn(&install_lib_example_hello_world.step);
+    b.getInstallStep().dependOn(&install_lib_example_hello_world.step);
 
     const tls_run_test = b.step("test", "Run all tests");
 
@@ -58,21 +58,21 @@ pub fn build(b: *std.Build) void {
     tls_run_test_napi.dependOn(&run_test_napi.step);
     tls_run_test.dependOn(&run_test_napi.step);
 
-    const test_example = b.addTest(.{
-        .name = "example",
-        .root_module = module_example,
-        .filters = b.option([][]const u8, "example.filters", "example test filters") orelse &[_][]const u8{},
+    const test_example_hello_world = b.addTest(.{
+        .name = "example_hello_world",
+        .root_module = module_example_hello_world,
+        .filters = b.option([][]const u8, "example_hello_world.filters", "example_hello_world test filters") orelse &[_][]const u8{},
     });
-    const install_test_example = b.addInstallArtifact(test_example, .{});
-    const tls_install_test_example = b.step("build-test:example", "Install the example test");
-    tls_install_test_example.dependOn(&install_test_example.step);
+    const install_test_example_hello_world = b.addInstallArtifact(test_example_hello_world, .{});
+    const tls_install_test_example_hello_world = b.step("build-test:example_hello_world", "Install the example_hello_world test");
+    tls_install_test_example_hello_world.dependOn(&install_test_example_hello_world.step);
 
-    const run_test_example = b.addRunArtifact(test_example);
-    const tls_run_test_example = b.step("test:example", "Run the example test");
-    tls_run_test_example.dependOn(&run_test_example.step);
-    tls_run_test.dependOn(&run_test_example.step);
+    const run_test_example_hello_world = b.addRunArtifact(test_example_hello_world);
+    const tls_run_test_example_hello_world = b.step("test:example_hello_world", "Run the example_hello_world test");
+    tls_run_test_example_hello_world.dependOn(&run_test_example_hello_world.step);
+    tls_run_test.dependOn(&run_test_example_hello_world.step);
 
     module_napi.addImport("build_options", options_module_build_options);
 
-    module_example.addImport("napi", module_napi);
+    module_example_hello_world.addImport("napi", module_napi);
 }

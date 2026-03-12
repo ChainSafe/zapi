@@ -1,15 +1,15 @@
-import { parseArgs } from "node:util";
-import { prepublishCli } from "./prepublish.js";
-import { publishCli } from "./publish.js";
-import { buildCli } from "./build.js";
-import { buildArtifactsCli } from "./buildArtifacts.js";
-import { logError } from "./log.js";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import {readFileSync} from "node:fs";
+import {dirname, join} from "node:path";
+import {fileURLToPath} from "node:url";
+import {parseArgs} from "node:util";
+import {buildCli} from "./build.js";
+import {buildArtifactsCli} from "./buildArtifacts.js";
+import {logError} from "./log.js";
+import {prepublishCli} from "./prepublish.js";
+import {publishCli} from "./publish.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const { version } = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+const {version} = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
 
 const HELP = `
 zapi - Build and publish Zig N-API packages
@@ -55,11 +55,11 @@ Configuration:
 export async function cli(): Promise<void> {
   const {positionals, values} = parseArgs({
     allowPositionals: true,
-    strict: false,
     options: {
-      help: { type: "boolean", short: "h" },
-      version: { type: "boolean", short: "v" },
+      help: {short: "h", type: "boolean"},
+      version: {short: "v", type: "boolean"},
     },
+    strict: false,
   });
 
   if (values.version) {

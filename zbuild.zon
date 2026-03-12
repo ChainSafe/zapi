@@ -21,15 +21,15 @@
         },
     },
     .libraries = .{
-        .example = .{
+        .example_hello_world = .{
             .root_module = .{
-                .root_source_file = "example/mod.zig",
+                .root_source_file = "examples/hello_world/mod.zig",
                 .imports = .{.napi},
                 .link_libc = true,
             },
             .linkage = .dynamic,
             .linker_allow_shlib_undefined = true,
-            .dest_sub_path = "example.node",
+            .dest_sub_path = "example_hello_world.node",
         },
     },
 }

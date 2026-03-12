@@ -23,3 +23,7 @@ pub const AsyncWork = @import("async_work.zig").AsyncWork;
 pub const ThreadSafeFunction = @import("threadsafe_function.zig").ThreadSafeFunction;
 pub const CallMode = @import("threadsafe_function.zig").CallMode;
 pub const ReleaseMode = @import("threadsafe_function.zig").ReleaseMode;
+
+test {
+    @import("std").testing.refAllDecls(@This());
+}

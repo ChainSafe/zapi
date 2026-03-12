@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { parsePkgJson } from "./config.js";
-import { join } from "node:path";
-import { createRequire } from "node:module";
+/** biome-ignore-all lint/suspicious/noExplicitAny: We have usage of dynamic library objects which we can not type-check */
+import {existsSync, readFileSync} from "node:fs";
+import {createRequire} from "node:module";
+import {join} from "node:path";
+import {parsePkgJson} from "./config.js";
 
 const require = createRequire(import.meta.url);
 
@@ -11,17 +12,17 @@ export const TARGETS = [
   "x86_64-apple-darwin",
   "x86_64-unknown-linux-gnu",
   "x86_64-unknown-linux-musl",
-  "x86_64-pc-windows-msvc"
+  "x86_64-pc-windows-msvc",
 ] as const;
 
-export type Target = typeof TARGETS[number];
+export type Target = (typeof TARGETS)[number];
 
 export enum Optimize {
   Debug = "Debug",
   ReleaseSmall = "ReleaseSmall",
   ReleaseFast = "ReleaseFast",
   ReleaseSafe = "ReleaseSafe",
-};
+}
 
 /**
  * Validate and parse the --optimize flag value.
@@ -70,75 +71,72 @@ export function requireOption(name: string, value: string | undefined): string {
 
 export function getZigTriple(target: Target): string {
   switch (target) {
-    case 'x86_64-unknown-linux-gnu':
-      return 'x86_64-linux-gnu';
-    case 'x86_64-unknown-linux-musl':
-      return 'x86_64-linux-musl';
-    case 'aarch64-unknown-linux-gnu':
-      return 'aarch64-linux-gnu';
-    case 'x86_64-apple-darwin':
-      return 'x86_64-macos-none';
-    case 'aarch64-apple-darwin':
-      return 'aarch64-macos-none';
-    case 'x86_64-pc-windows-msvc':
-      return 'x86_64-windows-msvc';
+    case "x86_64-unknown-linux-gnu":
+      return "x86_64-linux-gnu";
+    case "x86_64-unknown-linux-musl":
+      return "x86_64-linux-musl";
+    case "aarch64-unknown-linux-gnu":
+      return "aarch64-linux-gnu";
+    case "x86_64-apple-darwin":
+      return "x86_64-macos-none";
+    case "aarch64-apple-darwin":
+      return "aarch64-macos-none";
+    case "x86_64-pc-windows-msvc":
+      return "x86_64-windows-msvc";
   }
 }
-
 
 // from napi-rs
 const isMusl = () => {
-  let musl: boolean | null = false
-  if (process.platform === 'linux') {
-    musl = isMuslFromFilesystem()
+  let musl: boolean | null = false;
+  if (process.platform === "linux") {
+    musl = isMuslFromFilesystem();
     if (musl === null) {
-      musl = isMuslFromReport()
+      musl = isMuslFromReport();
     }
     if (musl === null) {
-      musl = isMuslFromChildProcess()
+      musl = isMuslFromChildProcess();
     }
   }
-  return musl
-}
+  return musl;
+};
 
-const isFileMusl = (f: string) => f.includes('libc.musl-') || f.includes('ld-musl-')
+const isFileMusl = (f: string) => f.includes("libc.musl-") || f.includes("ld-musl-");
 
 const isMuslFromFilesystem = () => {
   try {
-    return readFileSync('/usr/bin/ldd', 'utf-8').includes('musl')
+    return readFileSync("/usr/bin/ldd", "utf-8").includes("musl");
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 const isMuslFromReport = () => {
-  let report = null
-  if (typeof process.report?.getReport === 'function') {
-    (process.report as any).excludeNetwork = true
-    report = process.report.getReport()
+  let report = null;
+  if (typeof process.report?.getReport === "function") {
+    (process.report as any).excludeNetwork = true;
+    report = process.report.getReport();
   }
   if (!report) {
-    return null
+    return null;
   }
-  if ((report as any).header && (report as any).header.glibcVersionRuntime) {
-    return false
+  if ((report as any).header?.glibcVersionRuntime) {
+    return false;
   }
-  if (Array.isArray((report as any).sharedObjects)) {
-    if ((report as any).sharedObjects.some(isFileMusl)) {
-      return true
-    }
+  if (Array.isArray((report as any).sharedObjects) && (report as any).sharedObjects.some(isFileMusl)) {
+    return true;
   }
-  return false
-}
+  return false;
+};
 
 const isMuslFromChildProcess = () => {
   try {
-    return require('child_process').execSync('ldd --version', { encoding: 'utf8' }).includes('musl')
-  } catch (e) {
+    return require("node:child_process").execSync("ldd --version", {encoding: "utf8"}).includes("musl");
+  } catch (_e) {
     // If we reach this case, we don't know if the system is musl or not, so is better to just fallback to false
-    return false
+    return false;
   }
-}
+};
 
 export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture): Target {
   if (platform === "darwin") {
@@ -156,10 +154,8 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
     if (arch === "x64") {
       return `x86_64-unknown-linux-${abi}`;
     }
-  } else if (platform === "win32") {
-    if (arch === "x64") {
-      return "x86_64-pc-windows-msvc";
-    }
+  } else if (platform === "win32" && arch === "x64") {
+    return "x86_64-pc-windows-msvc";
   }
   throw new Error(`Unsupported platform: ${platform} or architecture: ${arch}`);
 }
@@ -175,17 +171,16 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
  * - built locally, `zig-out/lib/${binaryName}.node`
  * - published, `${targetPackageName}`
  */
-export function requireNapiLibrary(packageDir: string): any {
+export function requireNapiLibrary(packageDir: string): unknown {
   const pkgJson = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf-8"));
   const config = parsePkgJson(pkgJson);
   const localPath = join(packageDir, `zig-out/lib/${config.binaryName}.node`);
   if (existsSync(localPath)) {
     return require(localPath);
-  } else {
-    const platform = process.platform;
-    const arch = process.arch;
-    const target = getTarget(platform, arch);
-    const targetPkgName = `${pkgJson.name}-${target}`;
-    return require(targetPkgName);
   }
+  const platform = process.platform;
+  const arch = process.arch;
+  const target = getTarget(platform, arch);
+  const targetPkgName = `${pkgJson.name}-${target}`;
+  return require(targetPkgName);
 }

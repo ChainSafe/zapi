@@ -1,23 +1,35 @@
 {
-  "name": "@chainsafe/zapi",
-  "license": "MIT",
-  "version": "0.1.1",
-  "description": "A tool for managing and publishing Zig NAPI packages.",
-  "type": "module",
-  "scripts": {
-    "build": "tsc --outDir js"
-  },
-  "files": [
-    "ts",
-    "js"
-  ],
-  "bin": "js/cli.js",
-  "exports": {
-    ".": "./js/lib.js"
-  },
-  "types": "js/lib.d.ts",
-  "devDependencies": {
-    "@types/node": "^24.1.0",
-    "typescript": "^5.8.3"
-  }
+	"name": "@chainsafe/zapi",
+	"license": "MIT",
+	"version": "0.1.1",
+	"description": "A tool for managing and publishing Zig NAPI packages.",
+	"type": "module",
+	"scripts": {
+		"build": "pnpm build:js && pnpm build:zig",
+		"build:js": "tsc --outDir lib",
+		"build:zig": "zig build",
+		"test:napi": "zig build test:napi",
+		"test:examples": "vitest run examples/**/*.test.ts",
+		"test": "pnpm test:napi && pnpm test:examples",
+		"lint:zapi": "zig fmt src",
+		"lint:ts": "pnpm biome check",
+		"lint": "pnpm lint:zapi && pnpm lint:ts",
+		"lint:fix": "pnpm biome check --write"
+	},
+	"files": [
+		"ts",
+		"js"
+	],
+	"bin": "lib/cli.js",
+	"exports": {
+		".": "./lib/lib.js"
+	},
+	"types": "lib/lib.d.ts",
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.6",
+		"@chainsafe/biomejs-config": "^1.0.0",
+		"@types/node": "^24.1.0",
+		"typescript": "^5.8.3",
+		"vitest": "^4.0.18"
+	}
 }

@@ -98,3 +98,17 @@ pub fn isNapiError(err: anyerror) bool {
     }
     return false;
 }
+
+test "check returns void on ok" {
+    try check(@intFromEnum(Status.ok));
+}
+
+test "check returns error on non-ok status" {
+    const result = check(@intFromEnum(Status.invalid_arg));
+    try std.testing.expectError(error.InvalidArg, result);
+}
+
+test "isNapiError identifies napi errors" {
+    try std.testing.expect(isNapiError(error.GenericFailure));
+    try std.testing.expect(!isNapiError(error.OutOfMemory));
+}
