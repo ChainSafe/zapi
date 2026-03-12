@@ -5,9 +5,9 @@
 	"description": "A tool for managing and publishing Zig NAPI packages.",
 	"type": "module",
 	"scripts": {
-		"build": "pnpm build:js && pnpm build:examples",
+		"build": "pnpm build:js && pnpm build:zig",
 		"build:js": "tsc --outDir lib",
-		"build:examples": "zig build examples",
+		"build:zig": "zig build",
 		"test:napi": "zig build test:napi",
 		"test:examples": "vitest run examples/**/*.test.ts",
 		"test": "pnpm test:napi && pnpm test:examples",

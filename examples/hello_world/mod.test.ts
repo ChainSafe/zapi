@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const example = require("../../zig-out/lib/hello_world.node");
+const example = require("../../zig-out/lib/example_hello_world.node");
 
 describe("example mod", () => {
 	it("addon parameters", () => {
