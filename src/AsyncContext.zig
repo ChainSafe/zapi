@@ -25,10 +25,8 @@ pub fn destroy(self: AsyncContext) NapiError!void {
     );
 }
 
-/// `args` must be a tuple containing only `napi.Value` objects.
 /// https://nodejs.org/api/n-api.html#napi_make_callback
-pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype) NapiError!Value {
-    var argv = argsTupleToRaw(args);
+pub fn makeCallbackRaw(self: AsyncContext, recv: Value, func: Value, args: []const c.napi_value) NapiError!Value {
     var result: c.napi_value = undefined;
     try status.check(
         c.napi_make_callback(
@@ -36,8 +34,8 @@ pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype)
             self.async_context,
             recv.value,
             func.value,
-            argv.len,
-            if (argv.len > 0) &argv else null,
+            args.len,
+            if (args.len > 0) args.ptr else null,
             &result,
         ),
     );
@@ -45,6 +43,12 @@ pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype)
         .env = self.env,
         .value = result,
     };
+}
+
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn makeCallback(self: AsyncContext, recv: Value, func: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
+    return try self.makeCallbackRaw(recv, func, argv[0..]);
 }
 
 pub const CallbackScope = struct {
