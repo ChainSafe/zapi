@@ -761,8 +761,23 @@ pub fn wrap(
     };
 }
 
-/// https://nodejs.org/api/n-api.html#napi_unwrap
-pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+fn dataTypeTagFor(comptime Data: type) ?c.napi_type_tag {
+    if (!@hasDecl(Data, "type_tag")) return null;
+
+    const raw_tag = @field(Data, "type_tag");
+    const raw_tag_type = @TypeOf(raw_tag);
+
+    if (raw_tag_type == c.napi_type_tag) {
+        return raw_tag;
+    }
+    if (raw_tag_type == TypeTag) {
+        return .{ .lower = raw_tag.lower, .upper = raw_tag.upper };
+    }
+
+    @compileError("Data.type_tag must be c.napi_type_tag or napi.TypeTag");
+}
+
+fn unwrapUnchecked(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     var native_object: *Data = undefined;
     try status.check(
         c.napi_unwrap(self.env, object.value, @ptrCast(&native_object)),
@@ -770,13 +785,46 @@ pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     return native_object;
 }
 
-/// https://nodejs.org/api/n-api.html#napi_remove_wrap
-pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+fn removeWrapUnchecked(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     var native_object: *Data = undefined;
     try status.check(
         c.napi_remove_wrap(self.env, object.value, @ptrCast(&native_object)),
     );
     return native_object;
+}
+
+/// https://nodejs.org/api/n-api.html#napi_unwrap
+pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+    const maybe_type_tag = comptime dataTypeTagFor(Data);
+    if (maybe_type_tag) |type_tag| {
+        return try self.unwrapChecked(Data, object, type_tag);
+    }
+    return try self.unwrapUnchecked(Data, object);
+}
+
+/// https://nodejs.org/api/n-api.html#napi_unwrap
+pub fn unwrapChecked(self: Env, comptime Data: type, object: Value, expected_type_tag: c.napi_type_tag) NapiError!*Data {
+    if (!(try self.checkObjectTypeTag(object, expected_type_tag))) {
+        return error.InvalidArg;
+    }
+    return try self.unwrapUnchecked(Data, object);
+}
+
+/// https://nodejs.org/api/n-api.html#napi_remove_wrap
+pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
+    const maybe_type_tag = comptime dataTypeTagFor(Data);
+    if (maybe_type_tag) |type_tag| {
+        return try self.removeWrapChecked(Data, object, type_tag);
+    }
+    return try self.removeWrapUnchecked(Data, object);
+}
+
+/// https://nodejs.org/api/n-api.html#napi_remove_wrap
+pub fn removeWrapChecked(self: Env, comptime Data: type, object: Value, expected_type_tag: c.napi_type_tag) NapiError!*Data {
+    if (!(try self.checkObjectTypeTag(object, expected_type_tag))) {
+        return error.InvalidArg;
+    }
+    return try self.removeWrapUnchecked(Data, object);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_type_tag_object
