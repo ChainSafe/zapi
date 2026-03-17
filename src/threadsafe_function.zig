@@ -79,6 +79,8 @@ pub const ReleaseMode = enum(c.napi_threadsafe_function_release_mode) {
     abort = c.napi_tsfn_abort,
 };
 
+pub const default_max_queue_size: usize = 1024;
+
 pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type {
     return struct {
         tsfn: c.napi_threadsafe_function,
@@ -96,6 +98,13 @@ pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type 
             comptime finalize_cb: ?FinalizeCallback(Context),
             comptime call_js_cb: ?ThreadSafeCallJsCallback(Context, CallData),
         ) NapiError!Self {
+            if (initial_thread_count == 0) return error.InvalidArg;
+
+            const queue_size = if (max_queue_size == 0)
+                default_max_queue_size
+            else
+                max_queue_size;
+
             var tsfn: c.napi_threadsafe_function = undefined;
 
             try status.check(c.napi_create_threadsafe_function(
@@ -103,7 +112,7 @@ pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type 
                 if (func) |f| f.value else null,
                 if (async_resource) |r| r.value else null,
                 async_resource_name.value,
-                max_queue_size,
+                queue_size,
                 initial_thread_count,
                 context, // finalize_data
                 if (finalize_cb) |cb| wrapFinalizeCallback(Context, cb) else null,
