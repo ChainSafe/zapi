@@ -24,18 +24,21 @@ Commands:
       --zig-cwd     Working directory for zig build (default: .)
 
   build-artifacts   Build for all configured targets
-      --optimize    Optimization level
-      --step        Zig build step (required)
-      --zig-cwd     Working directory for zig build (default: .)
+      --optimize       Optimization level
+      --step           Zig build step (required)
+      --zig-cwd        Working directory for zig build (default: .)
       --artifacts-dir  Output directory for artifacts (default: artifacts)
+      --concurrency    Parallel target builds (default: min(cpu, 4))
 
   prepublish        Prepare npm packages for publishing
       --artifacts-dir  Directory containing built artifacts (default: artifacts)
       --npm-dir        Directory for npm packages (default: npm)
+      --concurrency    Parallel filesystem prep jobs (default: min(cpu, 4))
 
   publish           Publish all packages to npm
       --npm-dir        Directory containing npm packages (default: npm)
       --dry-run        Preview what would be published without publishing
+      --concurrency    Parallel target publishes (default: 1)
       [-- <npm-args>]  Additional arguments passed to npm publish
 
 Options:

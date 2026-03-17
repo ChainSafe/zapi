@@ -9,6 +9,9 @@ export type BuildOptions = {
   optimize?: Optimize;
   zigCwd: string;
   step: string;
+  prefix?: string;
+  cacheDir?: string;
+  globalCacheDir?: string;
   /** Skip logging (useful when called from buildArtifacts which has its own logging) */
   quiet?: boolean;
 };
@@ -21,6 +24,18 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   if (opts.optimize) {
     args.push(`-Doptimize=${opts.optimize}`);
+  }
+
+  if (opts.prefix) {
+    args.push(`--prefix`, opts.prefix);
+  }
+
+  if (opts.cacheDir) {
+    args.push(`--cache-dir`, opts.cacheDir);
+  }
+
+  if (opts.globalCacheDir) {
+    args.push(`--global-cache-dir`, opts.globalCacheDir);
   }
 
   if (!opts.quiet) {
