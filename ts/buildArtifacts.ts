@@ -14,6 +14,10 @@ const buildArtifactsCliOptions = {
     default: "artifacts",
     type: "string",
   },
+  concurrency: {
+    default: defaultConcurrency,
+    type: "string",
+  },
   optimize: {
     type: "string",
   },
@@ -23,10 +27,6 @@ const buildArtifactsCliOptions = {
   "zig-cwd": {
     default: ".",
     type: "string",
-  },
-  "concurrency": {
-    type: "string",
-    default: defaultConcurrency,
   },
 } satisfies ParseArgsOptionsConfig;
 
@@ -42,14 +42,9 @@ export async function moveArtifact(opts: MoveArtifactOpts): Promise<void> {
   const destDir = join(opts.artifactsDir, opts.target);
   await fs.mkdir(destDir, {recursive: true});
 
-  const outputLibDir = opts.buildPrefix
-    ? join(opts.buildPrefix, "lib")
-    : join(opts.zigCwd, "zig-out", "lib");
+  const outputLibDir = opts.buildPrefix ? join(opts.buildPrefix, "lib") : join(opts.zigCwd, "zig-out", "lib");
 
-  await fs.rename(
-    join(outputLibDir, `${opts.binaryName}.node`),
-    join(destDir, `${opts.binaryName}.node`)
-  );
+  await fs.rename(join(outputLibDir, `${opts.binaryName}.node`), join(destDir, `${opts.binaryName}.node`));
 }
 
 export async function buildArtifactsCli(): Promise<void> {
@@ -66,7 +61,11 @@ export async function buildArtifactsCli(): Promise<void> {
     throw new Error("--step is required (or set zapi.step in package.json)");
   }
 
-  const concurrency = parsePositiveIntOption("concurrency", values.concurrency as string | undefined, Number(defaultConcurrency));
+  const concurrency = parsePositiveIntOption(
+    "concurrency",
+    values.concurrency as string | undefined,
+    Number(defaultConcurrency)
+  );
   const total = config.targets.length;
   const artifactsDir = values["artifacts-dir"];
   const buildRoot = join(artifactsDir, ".zapi-build");

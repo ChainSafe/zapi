@@ -27,15 +27,15 @@ export async function build(opts: BuildOptions): Promise<void> {
   }
 
   if (opts.prefix) {
-    args.push(`--prefix`, opts.prefix);
+    args.push("--prefix", opts.prefix);
   }
 
   if (opts.cacheDir) {
-    args.push(`--cache-dir`, opts.cacheDir);
+    args.push("--cache-dir", opts.cacheDir);
   }
 
   if (opts.globalCacheDir) {
-    args.push(`--global-cache-dir`, opts.globalCacheDir);
+    args.push("--global-cache-dir", opts.globalCacheDir);
   }
 
   if (!opts.quiet) {

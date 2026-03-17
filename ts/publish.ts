@@ -6,6 +6,10 @@ import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
 const publishOptions = {
+  concurrency: {
+    default: "1",
+    type: "string",
+  },
   "dry-run": {
     default: false,
     type: "boolean",
@@ -13,10 +17,6 @@ const publishOptions = {
   "npm-dir": {
     default: "npm",
     type: "string",
-  },
-  "concurrency": {
-    type: "string",
-    default: "1",
   },
 } satisfies ParseArgsOptionsConfig;
 
@@ -66,7 +66,9 @@ export async function publish(opts: PublishOpts): Promise<void> {
   const total = config.targets.length + 1; // +1 for main package
 
   if (opts["dry-run"]) {
-    logInfo(`[DRY RUN] Would publish ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}`);
+    logInfo(
+      `[DRY RUN] Would publish ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}`
+    );
     logDetail(`Extra npm args: ${extraArgs.length > 0 ? extraArgs.join(" ") : "(none)"}`);
 
     for (let i = 0; i < config.targets.length; i++) {
@@ -83,7 +85,9 @@ export async function publish(opts: PublishOpts): Promise<void> {
     return;
   }
 
-  logInfo(`Publishing ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}...`);
+  logInfo(
+    `Publishing ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}...`
+  );
 
   let started = 0;
   await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
@@ -106,8 +110,8 @@ export async function publishCli(): Promise<void> {
   });
 
   await publish({
+    concurrency: parsePositiveIntOption("concurrency", values["concurrency"] as string | undefined, 1),
     "dry-run": values["dry-run"] as boolean,
     "npm-dir": values["npm-dir"] as string,
-    concurrency: parsePositiveIntOption("concurrency", values["concurrency"] as string | undefined, 1),
   });
 }

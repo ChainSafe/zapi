@@ -87,7 +87,7 @@ const prepublishOptions = {
     default: "artifacts",
     type: "string",
   },
-  "concurrency": {
+  concurrency: {
     default: defaultConcurrency,
     type: "string",
   },
@@ -104,14 +104,18 @@ export async function prepublishCli(): Promise<void> {
   });
 
   const {pkgJson, config} = await loadConfig();
-  const concurrency = parsePositiveIntOption("concurrency", values.concurrency as string | undefined, Number(defaultConcurrency));
+  const concurrency = parsePositiveIntOption(
+    "concurrency",
+    values.concurrency as string | undefined,
+    Number(defaultConcurrency)
+  );
 
   logInfo(`Preparing ${pkgJson.name}@${pkgJson.version} for publishing with concurrency ${concurrency}...`);
 
   const opts: PrepublishOpts = {
     "artifacts-dir": values["artifacts-dir"],
-    "npm-dir": values["npm-dir"],
     concurrency,
+    "npm-dir": values["npm-dir"],
   };
 
   await createNpmDirs(config, opts);

@@ -100,7 +100,7 @@ export async function runWithConcurrency<T>(
   let nextIndex = 0;
 
   await Promise.all(
-    Array.from({ length: limit }, async () => {
+    Array.from({length: limit}, async () => {
       while (true) {
         const index = nextIndex;
         nextIndex += 1;
