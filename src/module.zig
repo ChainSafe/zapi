@@ -15,7 +15,7 @@ pub fn register(comptime f: fn (Env, Value) anyerror!void) void {
                 .value = module,
             };
             f(e, v) catch |err| {
-                e.throwError(@errorName(err), "Error in module registration") catch unreachable;
+                e.throwError(@errorName(err), "Error in module registration") catch {};
             };
             return module;
         }

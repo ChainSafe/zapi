@@ -1,3 +1,4 @@
+const std = @import("std");
 const c = @import("c.zig");
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
@@ -17,10 +18,10 @@ pub fn CallbackInfo(comptime argc_cap: usize) type {
         pub fn init(env: c.napi_env, cb_info: c.napi_callback_info) NapiError!Self {
             var info = Self{
                 .env = env,
-                .args = undefined,
-                .this_arg = undefined,
-                .argc = undefined,
-                .data = undefined,
+                .args = std.mem.zeroes([argc_cap]c.napi_value),
+                .this_arg = std.mem.zeroes(c.napi_value),
+                .argc = 0,
+                .data = null,
             };
 
             var initial_argc = argc_cap;
