@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
 const Env = @import("Env.zig");
@@ -18,7 +18,7 @@ pub fn wrapAsyncExecuteCallback(
         pub fn f(
             raw_env: c.napi_env,
             raw_data: ?*anyopaque,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             if (raw_data == null) return;
             const env = Env{ .env = raw_env };
             const data: *Data = @ptrCast(@alignCast(raw_data));
@@ -41,7 +41,7 @@ pub fn wrapAsyncCompleteCallback(
             raw_env: c.napi_env,
             raw_status: c.napi_status,
             raw_data: ?*anyopaque,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             if (raw_data == null) return;
             const env = Env{ .env = raw_env };
             const stat: Status = @enumFromInt(raw_status);

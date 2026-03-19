@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 
 /// https://nodejs.org/api/n-api.html#napi_key_collection_mode
 pub const KeyCollectionMode = enum(c.napi_key_collection_mode) {
