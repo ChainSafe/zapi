@@ -32,15 +32,28 @@ pub fn createCallback(
             var cb_arg_i: usize = 0;
             inline for (0..fn_info.params.len) |i| {
                 const arg_hint = comptime getArgsHint(options, i);
+                const param_type = fn_info.params[i].type.?;
+
+                const is_env_arg = arg_hint == .env or (arg_hint == .auto and param_type == Env);
+                const is_value_arg = arg_hint == .value or (arg_hint == .auto and param_type == Value);
+
                 if (arg_hint == .data) {
                     args[i] = @alignCast(@ptrCast(info.data));
-                } else if (arg_hint == .env) {
+                } else if (is_env_arg) {
                     args[i] = env;
-                } else if (arg_hint == .value) {
-                    args[i] = info.arg(cb_arg_i);
+                } else if (is_value_arg) {
+                    const value_arg = info.getArg(cb_arg_i) orelse {
+                        try env.throwError("ERR_INVALID_ARG_COUNT", "Invalid callback argument count");
+                        return error.PendingException;
+                    };
+                    args[i] = value_arg;
                     cb_arg_i += 1;
                 } else {
-                    args[i] = try fromValue(fn_info.params[i].type.?, info.arg(cb_arg_i), arg_hint);
+                    const value_arg = info.getArg(cb_arg_i) orelse {
+                        try env.throwError("ERR_INVALID_ARG_COUNT", "Invalid callback argument count");
+                        return error.PendingException;
+                    };
+                    args[i] = try fromValue(param_type, value_arg, arg_hint);
                     cb_arg_i += 1;
                 }
             }
@@ -73,6 +86,7 @@ pub const ArgHint = enum {
 pub const ReturnsHint = enum {
     auto,
     buffer,
+    external_buffer,
     string,
 
     /// napi.Value

@@ -39,10 +39,8 @@ pub fn wrapCallback(
                     if (error_info_status == .ok) {
                         e.throwError(@errorName(err), "NapiError") catch {};
                     } else {
-                        e.throwError(
-                            @tagName(error_info_status),
-                            std.mem.span(error_info.error_message),
-                        ) catch {};
+                        const message: [:0]const u8 = "Native callback failed";
+                        e.throwError(@tagName(error_info_status), message) catch {};
                     }
                 } else {
                     e.throwError(@errorName(err), @errorName(err)) catch {};
