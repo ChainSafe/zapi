@@ -638,18 +638,16 @@ pub fn getUndefined(self: Env) NapiError!Value {
 //// https://nodejs.org/api/n-api.html#working-with-javascript-functions
 
 /// Calls a JavaScript function.
-/// `args` must be a tuple containing only `napi.Value` objects.
 /// https://nodejs.org/api/n-api.html#napi_call_function
-pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) NapiError!Value {
-    var argv = argsTupleToRaw(args);
+pub fn callFunctionRaw(self: Env, function: Value, recv: Value, args: []const c.napi_value) NapiError!Value {
     var result: c.napi_value = undefined;
     try status.check(
         c.napi_call_function(
             self.env,
             recv.value,
             function.value,
-            argv.len,
-            if (argv.len > 0) &argv else null,
+            args.len,
+            if (args.len > 0) args.ptr else null,
             &result,
         ),
     );
@@ -657,6 +655,12 @@ pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) Napi
         .env = self.env,
         .value = result,
     };
+}
+
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn callFunction(self: Env, function: Value, recv: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
+    return try self.callFunctionRaw(function, recv, argv[0..]);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_create_function
@@ -684,17 +688,15 @@ pub fn getNewTarget(self: Env, cb_info: c.napi_callback_info) NapiError!Value {
     };
 }
 
-/// `args` must be a tuple containing only `napi.Value` objects.
 /// https://nodejs.org/api/n-api.html#napi_new_instance
-pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value {
-    var argv = argsTupleToRaw(args);
+pub fn newInstanceRaw(self: Env, constructor: Value, args: []const c.napi_value) NapiError!Value {
     var instance: c.napi_value = undefined;
     try status.check(
         c.napi_new_instance(
             self.env,
             constructor.value,
-            argv.len,
-            if (argv.len > 0) &argv else null,
+            args.len,
+            if (args.len > 0) args.ptr else null,
             &instance,
         ),
     );
@@ -702,6 +704,12 @@ pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value
         .env = self.env,
         .value = instance,
     };
+}
+
+/// `args` must be a tuple containing only `napi.Value` objects.
+pub fn newInstance(self: Env, constructor: Value, args: anytype) NapiError!Value {
+    var argv = argsTupleToRaw(args);
+    return try self.newInstanceRaw(constructor, argv[0..]);
 }
 
 //// Object wrap
