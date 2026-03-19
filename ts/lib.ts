@@ -69,6 +69,50 @@ export function requireOption(name: string, value: string | undefined): string {
   return value;
 }
 
+/**
+ * Parse a positive integer CLI option.
+ */
+export function parsePositiveIntOption(name: string, value: string | undefined, defaultValue = 1): number {
+  if (value == null || value === "") {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`--${name} must be a positive integer`);
+  }
+  return parsed;
+}
+
+/**
+ * Run async jobs with bounded concurrency.
+ */
+export async function runWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({length: limit}, async () => {
+      while (true) {
+        const index = nextIndex;
+        nextIndex += 1;
+        if (index >= items.length) {
+          return;
+        }
+        await worker(items[index], index);
+      }
+    })
+  );
+}
+
 export function getZigTriple(target: Target): string {
   switch (target) {
     case "x86_64-unknown-linux-gnu":
@@ -87,18 +131,24 @@ export function getZigTriple(target: Target): string {
 }
 
 // from napi-rs
+let isMuslCache: boolean | null = null;
+
 const isMusl = () => {
-  let musl: boolean | null = false;
-  if (process.platform === "linux") {
-    musl = isMuslFromFilesystem();
-    if (musl === null) {
-      musl = isMuslFromReport();
-    }
-    if (musl === null) {
-      musl = isMuslFromChildProcess();
-    }
+  if (process.platform !== "linux") {
+    return false;
   }
-  return musl;
+
+  if (isMuslCache !== null) {
+    return isMuslCache;
+  }
+
+  let musl = isMuslFromFilesystem();
+  if (musl === null) {
+    musl = isMuslFromReport();
+  }
+
+  isMuslCache = musl ?? false;
+  return isMuslCache;
 };
 
 const isFileMusl = (f: string) => f.includes("libc.musl-") || f.includes("ld-musl-");
@@ -127,15 +177,6 @@ const isMuslFromReport = () => {
     return true;
   }
   return false;
-};
-
-const isMuslFromChildProcess = () => {
-  try {
-    return require("node:child_process").execSync("ldd --version", {encoding: "utf8"}).includes("musl");
-  } catch (_e) {
-    // If we reach this case, we don't know if the system is musl or not, so is better to just fallback to false
-    return false;
-  }
 };
 
 export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture): Target {

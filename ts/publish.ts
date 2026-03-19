@@ -2,9 +2,14 @@ import {spawn} from "node:child_process";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
 import {loadConfig} from "./config.js";
+import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
 const publishOptions = {
+  concurrency: {
+    default: "1",
+    type: "string",
+  },
   "dry-run": {
     default: false,
     type: "boolean",
@@ -18,6 +23,7 @@ const publishOptions = {
 export type PublishOpts = {
   "npm-dir": string;
   "dry-run": boolean;
+  concurrency: number;
 };
 
 function extraPublishArgs(): string[] {
@@ -60,7 +66,9 @@ export async function publish(opts: PublishOpts): Promise<void> {
   const total = config.targets.length + 1; // +1 for main package
 
   if (opts["dry-run"]) {
-    logInfo(`[DRY RUN] Would publish ${config.targets.length} target package(s) + main package`);
+    logInfo(
+      `[DRY RUN] Would publish ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}`
+    );
     logDetail(`Extra npm args: ${extraArgs.length > 0 ? extraArgs.join(" ") : "(none)"}`);
 
     for (let i = 0; i < config.targets.length; i++) {
@@ -77,14 +85,16 @@ export async function publish(opts: PublishOpts): Promise<void> {
     return;
   }
 
-  logInfo(`Publishing ${config.targets.length} target package(s) + main package...`);
+  logInfo(
+    `Publishing ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}...`
+  );
 
-  for (let i = 0; i < config.targets.length; i++) {
-    const target = config.targets[i];
-    logStep(i + 1, total, `Publishing ${target}...`);
-
+  let started = 0;
+  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
+    started += 1;
+    logStep(started, total, `Publishing ${target}...`);
     await runNpm(publishArgv, join(process.cwd(), opts["npm-dir"], target));
-  }
+  });
 
   logStep(total, total, "Publishing main package...");
   await runNpm(publishArgv, process.cwd());
@@ -100,6 +110,7 @@ export async function publishCli(): Promise<void> {
   });
 
   await publish({
+    concurrency: parsePositiveIntOption("concurrency", values["concurrency"] as string | undefined, 1),
     "dry-run": values["dry-run"] as boolean,
     "npm-dir": values["npm-dir"] as string,
   });

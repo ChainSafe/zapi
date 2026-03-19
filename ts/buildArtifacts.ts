@@ -1,14 +1,21 @@
 import {promises as fs} from "node:fs";
+import {availableParallelism} from "node:os";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
 import {build} from "./build.js";
 import {loadConfig} from "./config.js";
-import {type Target, validateOptimize} from "./lib.js";
+import {type Target, parsePositiveIntOption, runWithConcurrency, validateOptimize} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
+
+const defaultConcurrency = String(Math.max(1, Math.min(availableParallelism(), 4)));
 
 const buildArtifactsCliOptions = {
   "artifacts-dir": {
     default: "artifacts",
+    type: "string",
+  },
+  concurrency: {
+    default: defaultConcurrency,
     type: "string",
   },
   optimize: {
@@ -28,15 +35,16 @@ type MoveArtifactOpts = {
   artifactsDir: string;
   target: Target;
   binaryName: string;
+  buildPrefix?: string;
 };
 
 export async function moveArtifact(opts: MoveArtifactOpts): Promise<void> {
   const destDir = join(opts.artifactsDir, opts.target);
   await fs.mkdir(destDir, {recursive: true});
-  await fs.rename(
-    join(opts.zigCwd, "zig-out", "lib", `${opts.binaryName}.node`),
-    join(destDir, `${opts.binaryName}.node`)
-  );
+
+  const outputLibDir = opts.buildPrefix ? join(opts.buildPrefix, "lib") : join(opts.zigCwd, "zig-out", "lib");
+
+  await fs.rename(join(outputLibDir, `${opts.binaryName}.node`), join(destDir, `${opts.binaryName}.node`));
 }
 
 export async function buildArtifactsCli(): Promise<void> {
@@ -52,30 +60,46 @@ export async function buildArtifactsCli(): Promise<void> {
   if (!step) {
     throw new Error("--step is required (or set zapi.step in package.json)");
   }
+
+  const concurrency = parsePositiveIntOption(
+    "concurrency",
+    values.concurrency as string | undefined,
+    Number(defaultConcurrency)
+  );
   const total = config.targets.length;
+  const artifactsDir = values["artifacts-dir"];
+  const buildRoot = join(artifactsDir, ".zapi-build");
 
-  logInfo(`Building ${config.binaryName} for ${total} target(s)...`);
+  logInfo(`Building ${config.binaryName} for ${total} target(s) with concurrency ${concurrency}...`);
 
-  for (let i = 0; i < config.targets.length; i++) {
-    const target = config.targets[i];
-    logStep(i + 1, total, `Building for ${target}...`);
+  await runWithConcurrency(config.targets, concurrency, async (target, index) => {
+    const targetBuildDir = join(buildRoot, target);
+    const prefix = join(targetBuildDir, "prefix");
+    const cacheDir = join(targetBuildDir, "cache");
+    const globalCacheDir = join(targetBuildDir, "global-cache");
+
+    logStep(index + 1, total, `Building for ${target}...`);
 
     await build({
+      cacheDir,
+      globalCacheDir,
       optimize,
+      prefix,
       quiet: true,
       step,
       target,
       zigCwd: values["zig-cwd"],
     });
 
-    logDetail(`Moving artifact to ${join(values["artifacts-dir"], target)}`);
+    logDetail(`Moving artifact to ${join(artifactsDir, target)}`);
     await moveArtifact({
-      artifactsDir: values["artifacts-dir"],
+      artifactsDir,
       binaryName: config.binaryName,
+      buildPrefix: prefix,
       target,
       zigCwd: values["zig-cwd"],
     });
-  }
+  });
 
-  logSuccess(`Built ${total} artifact(s) to ${values["artifacts-dir"]}/`);
+  logSuccess(`Built ${total} artifact(s) to ${artifactsDir}/`);
 }

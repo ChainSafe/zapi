@@ -1,6 +1,8 @@
 import {promises as fs} from "node:fs";
-import {join} from "node:path";
+import {basename, join} from "node:path";
 import {TARGETS, type Target} from "./lib.js";
+
+const BINARY_NAME_RE = /^[A-Za-z0-9._-]+$/;
 
 export type Config = {
   binaryName: string;
@@ -37,6 +39,18 @@ export async function loadConfig(cwd = "."): Promise<LoadedConfig> {
   return {config, pkgJson};
 }
 
+function validateBinaryName(binaryName: string): void {
+  if (!BINARY_NAME_RE.test(binaryName)) {
+    throw new Error("zapi.binaryName must match /^[A-Za-z0-9._-]+$/");
+  }
+  if (binaryName !== basename(binaryName)) {
+    throw new Error("zapi.binaryName must not include path segments");
+  }
+  if (binaryName.includes("/") || binaryName.includes("\\") || binaryName.includes("..")) {
+    throw new Error("zapi.binaryName must not contain path separators or '..'");
+  }
+}
+
 export function parsePkgJson(pkgJson: PkgJson): Config {
   const napi = pkgJson.zapi;
   if (typeof napi !== "object" || napi === null) {
@@ -46,6 +60,8 @@ export function parsePkgJson(pkgJson: PkgJson): Config {
   if (typeof binaryName !== "string") {
     throw new Error("zapi.binaryName must be a string");
   }
+  validateBinaryName(binaryName);
+
   const targets = napi.targets;
   if (!Array.isArray(targets) || targets.length === 0) {
     throw new Error("zapi.targets must be a non-empty array");
