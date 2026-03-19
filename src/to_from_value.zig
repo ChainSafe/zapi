@@ -13,20 +13,19 @@ pub fn fromValue(
             return try value.getValueBool();
         },
         .int => |i| {
-            if (T == i32) {
-                return try value.getValueInt32();
+            if (i.signedness == .signed) {
+                const n: i64 = if (i.bits <= 32)
+                    try value.getValueInt32()
+                else
+                    try value.getValueInt64();
+                return std.math.cast(T, n) orelse error.InvalidArg;
             }
-            if (T == u32) {
-                return try value.getValueUint32();
-            }
-            if (i.bits < 32) {
-                if (i.signedness == .signed) {
-                    return @intCast(try value.getValueInt32());
-                } else {
-                    return @intCast(try value.getValueUint32());
-                }
-            }
-            return @intCast(try value.getValueInt64());
+
+            const n: i64 = if (i.bits <= 32)
+                @as(i64, try value.getValueUint32())
+            else
+                try value.getValueInt64();
+            return std.math.cast(T, n) orelse error.InvalidArg;
         },
         .float => {
             if (T == f64) {
@@ -61,20 +60,19 @@ pub fn toValue(
             return try env.getBoolean(v);
         },
         .int => |i| {
-            if (T == i32) {
-                return try env.createInt32(v);
-            }
-            if (T == u32) {
-                return try env.createUint32(v);
-            }
-            if (i.bits < 32) {
-                if (i.signedness == .signed) {
-                    return try env.createInt32(v);
-                } else {
-                    return try env.createUint32(v);
+            if (i.signedness == .signed) {
+                const n = std.math.cast(i64, v) orelse return error.InvalidArg;
+                if (i.bits <= 32) {
+                    return try env.createInt32(std.math.cast(i32, n) orelse return error.InvalidArg);
                 }
+                return try env.createInt64(n);
             }
-            return try env.createInt64(@intCast(v));
+
+            const n = std.math.cast(u64, v) orelse return error.InvalidArg;
+            if (i.bits <= 32) {
+                return try env.createUint32(std.math.cast(u32, n) orelse return error.InvalidArg);
+            }
+            return try env.createInt64(std.math.cast(i64, n) orelse return error.InvalidArg);
         },
         .float => {
             if (T == f64) {
@@ -86,10 +84,13 @@ pub fn toValue(
         .pointer => |p| {
             const h = hint;
             if (p.child == u8 and p.size == .slice) {
+                const bytes: []const u8 = @ptrCast(v);
                 if (h == .string) {
-                    return try env.createStringUtf8(@ptrCast(v));
+                    return try env.createStringUtf8(bytes);
+                } else if (h == .external_buffer) {
+                    return try env.createExternalBuffer(bytes, null, null);
                 } else if (h == .buffer or h == .auto) {
-                    return try env.createBufferCopy(@ptrCast(v), null);
+                    return try env.createBufferCopy(bytes, null);
                 }
             }
             const child_type_info = @typeInfo(p.child);
