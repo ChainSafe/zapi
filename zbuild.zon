@@ -31,5 +31,15 @@
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_hello_world.node",
         },
+        .example_type_tag = .{
+            .root_module = .{
+                .root_source_file = "examples/type_tag/mod.zig",
+                .imports = .{.napi},
+                .link_libc = true,
+            },
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "example_type_tag.node",
+        },
     },
 }
