@@ -61,18 +61,16 @@ pub fn toValue(
         },
         .int => |i| {
             if (i.signedness == .signed) {
-                const n = std.math.cast(i64, v) orelse return error.InvalidArg;
                 if (i.bits <= 32) {
-                    return try env.createInt32(std.math.cast(i32, n) orelse return error.InvalidArg);
+                    return try env.createInt32(std.math.cast(i32, v) orelse return error.InvalidArg);
                 }
-                return try env.createInt64(n);
+                return try env.createInt64(std.math.cast(i64, v) orelse return error.InvalidArg);
             }
 
-            const n = std.math.cast(u64, v) orelse return error.InvalidArg;
             if (i.bits <= 32) {
-                return try env.createUint32(std.math.cast(u32, n) orelse return error.InvalidArg);
+                return try env.createUint32(std.math.cast(u32, v) orelse return error.InvalidArg);
             }
-            return try env.createInt64(std.math.cast(i64, n) orelse return error.InvalidArg);
+            return try env.createInt64(std.math.cast(i64, v) orelse return error.InvalidArg);
         },
         .float => {
             if (T == f64) {
