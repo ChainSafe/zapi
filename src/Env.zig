@@ -770,6 +770,15 @@ pub fn unwrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     return native_object;
 }
 
+/// https://nodejs.org/api/n-api.html#napi_unwrap
+/// Checks the object's type tag before unwrapping. Returns `error.InvalidArg` on mismatch.
+pub fn unwrapChecked(self: Env, comptime Data: type, object: Value, expected_type_tag: c.napi_type_tag) NapiError!*Data {
+    if (!(try self.checkObjectTypeTag(object, expected_type_tag))) {
+        return error.InvalidArg;
+    }
+    return try self.unwrap(Data, object);
+}
+
 /// https://nodejs.org/api/n-api.html#napi_remove_wrap
 pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data {
     var native_object: *Data = undefined;
@@ -777,6 +786,15 @@ pub fn removeWrap(self: Env, comptime Data: type, object: Value) NapiError!*Data
         c.napi_remove_wrap(self.env, object.value, @ptrCast(&native_object)),
     );
     return native_object;
+}
+
+/// https://nodejs.org/api/n-api.html#napi_remove_wrap
+/// Checks the object's type tag before removing the wrap. Returns `error.InvalidArg` on mismatch.
+pub fn removeWrapChecked(self: Env, comptime Data: type, object: Value, expected_type_tag: c.napi_type_tag) NapiError!*Data {
+    if (!(try self.checkObjectTypeTag(object, expected_type_tag))) {
+        return error.InvalidArg;
+    }
+    return try self.removeWrap(Data, object);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_type_tag_object
