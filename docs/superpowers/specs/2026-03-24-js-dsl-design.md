@@ -47,7 +47,8 @@ pub const Number = struct {
     pub fn assertI32(self: Number) i32 { ... }
     pub fn assertF64(self: Number) f64 { ... }
 
-    // Construction
+    // Construction — accepts integer types (i8..i64, u8..u64), float types (f32, f64),
+    // and comptime_int/comptime_float. Does not accept u128/i128/f128 (use BigInt for those).
     pub fn from(value: anytype) Number { ... }
 };
 ```
@@ -58,6 +59,8 @@ pub const Number = struct {
 pub const String = struct {
     val: napi.Value,
 
+    /// Copies string into caller-provided buffer. Returns error.BufferTooSmall
+    /// if buf is smaller than the string. Use len() to check size first.
     pub fn toSlice(self: String, buf: []u8) ![]const u8 { ... }
     pub fn toOwnedSlice(self: String, allocator: Allocator) ![]const u8 { ... }
     pub fn len(self: String) !usize { ... }
@@ -125,9 +128,23 @@ pub fn Object(comptime T: type) type {
     return struct {
         val: napi.Value,
 
+        /// Extract all fields into a Zig struct at once.
         pub fn get(self: @This()) !T { ... }
+
+        /// Set all fields from a Zig struct at once.
         pub fn set(self: @This(), value: T) !void { ... }
-        // + per-field accessors generated at comptime
+
+        // Per-field accessors are generated at comptime for each field in T.
+        // For a struct like: struct { host: String, port: Number }
+        // The following are generated:
+        //   pub fn getHost(self: @This()) !String { ... }
+        //   pub fn getPort(self: @This()) !Number { ... }
+        //   pub fn setHost(self: @This(), value: String) !void { ... }
+        //   pub fn setPort(self: @This(), value: Number) !void { ... }
+        //
+        // Pattern: get<FieldName> / set<FieldName> with PascalCase field names.
+        // Only flat struct fields are supported — nested structs are not
+        // recursively mapped. Use Object(InnerStruct) for nested objects.
     };
 }
 ```
@@ -161,6 +178,9 @@ pub const Float64Array = struct {
 
 // Same pattern for: Int8Array, Uint8ClampedArray, Int16Array, Uint16Array,
 // Int32Array, Uint32Array, Float32Array, BigInt64Array, BigUint64Array
+//
+// Note: ArrayBuffer is intentionally not exposed as a DSL type. Users who need
+// raw ArrayBuffer access should use TypedArray types or drop to the napi layer.
 ```
 
 ### Promise(T)
@@ -179,6 +199,10 @@ pub fn Promise(comptime T: type) type {
 }
 ```
 
+**Async execution model:** `Promise(T)` is a thin wrapper around N-API's deferred/promise mechanism. It does **not** provide built-in thread dispatching. The DSL creates the JS Promise and gives the user the `resolve`/`reject` handles. The user is responsible for dispatching work — either by dropping to the existing `napi.AsyncWork` / `napi.ThreadSafeFunction` APIs, or by using Zig's `std.Thread`. This keeps the Promise type simple and composable without hiding concurrency decisions.
+
+**Construction:** Use `js.createPromise(T)` to create a new Promise. This calls N-API's `create_promise` and returns the typed wrapper.
+
 ### Value (untyped escape hatch)
 
 For dynamic or unknown types.
@@ -187,12 +211,31 @@ For dynamic or unknown types.
 pub const Value = struct {
     val: napi.Value,
 
-    pub fn asNumber(self: Value) !Number { ... }
-    pub fn asString(self: Value) !String { ... }
-    pub fn asArray(self: Value) !Array { ... }
+    // Type checking
     pub fn isNumber(self: Value) bool { ... }
     pub fn isString(self: Value) bool { ... }
-    // ...
+    pub fn isBigInt(self: Value) bool { ... }
+    pub fn isBoolean(self: Value) bool { ... }
+    pub fn isArray(self: Value) bool { ... }
+    pub fn isObject(self: Value) bool { ... }
+    pub fn isFunction(self: Value) bool { ... }
+    pub fn isDate(self: Value) bool { ... }
+    pub fn isTypedArray(self: Value) bool { ... }
+    pub fn isNull(self: Value) bool { ... }
+    pub fn isUndefined(self: Value) bool { ... }
+
+    // Type narrowing — returns error if type does not match
+    pub fn asNumber(self: Value) !Number { ... }
+    pub fn asString(self: Value) !String { ... }
+    pub fn asBigInt(self: Value) !BigInt { ... }
+    pub fn asBoolean(self: Value) !Boolean { ... }
+    pub fn asArray(self: Value) !Array { ... }
+    pub fn asObject(self: Value, comptime T: type) !Object(T) { ... }
+    pub fn asFunction(self: Value) !Function { ... }
+    pub fn asDate(self: Value) !Date { ... }
+    pub fn asUint8Array(self: Value) !Uint8Array { ... }
+    pub fn asFloat64Array(self: Value) !Float64Array { ... }
+    // ... same pattern for all TypedArray variants
 };
 ```
 
@@ -211,6 +254,7 @@ pub fn env() napi.Env {
 - All `from` constructors and conversion methods use `js.env()` internally
 - Users can call `js.env()` explicitly for low-level access
 - Safe because N-API callbacks always run on the JS main thread
+- **Not safe** to call from `AsyncWork` execute callbacks or other non-JS threads — those must use `napi.ThreadSafeFunction` to call back into JS
 - `defer` restores previous env for nested/re-entrant call safety
 
 ## Allocator
@@ -286,9 +330,12 @@ fn wrapFunction(comptime func: anytype) napi.CallbackFn {
             defer current_env = prev;
 
             // comptime: inspect @typeInfo(@TypeOf(func)).@"fn"
-            // comptime: generate arg extraction + type conversion
+            // comptime: generate arg extraction + type conversion per parameter
             // comptime: call func with converted args
-            // comptime: convert return value back to napi.Value
+            // if func returns !T: catch |err| { napi_throw_error(err name); return null; }
+            // if func returns ?T: map null to napi undefined
+            // if func returns !?T: catch first, then map null
+            // convert return value back to napi.Value
         }
     }.callback;
 }
@@ -313,7 +360,7 @@ pub const Counter = struct {
 ```
 
 **Method resolution rules:**
-- `pub fn init(...)` → JS constructor
+- `pub fn init(...)` → JS constructor. Must return `T` or `!T` (the struct itself). A `js_class` struct without `init` is a compile error — all JS classes must be constructable.
 - `pub fn method(self: *T, ...)` → mutable instance method
 - `pub fn method(self: T, ...)` → immutable instance method
 - `pub fn method(...)` (no self) → static method
@@ -325,7 +372,7 @@ pub const Counter = struct {
 ## Error Handling
 
 - `!T` return → Zig error becomes a thrown JS exception. Error name becomes the message (e.g., `error.InvalidNumber` → `Error("InvalidNumber")`). The JS user sees a normal thrown error — never `undefined`.
-- `?T` return → `null` in Zig maps to `undefined` in JS
+- `?T` return → Zig `null` maps to JS `undefined` (not JS `null`). This uses `napi_get_undefined`, not `napi_get_null`.
 - `!?T` → error throws, `null` returns `undefined`
 - Zig panics (e.g., `assertI32` on a float) → caught by wrapper, thrown as JS `TypeError`
 - Custom messages: `js.throwError("custom message")` for explicit control
