@@ -46,39 +46,40 @@ pub fn wrapClass(comptime T: type) type {
 
             if (count == 0) return &[0]napi.c.napi_property_descriptor{};
 
-            comptime var descriptors: [count]napi.c.napi_property_descriptor = undefined;
-            comptime var idx: usize = 0;
-            inline for (decls) |decl| {
-                if (comptime shouldSkipDecl(decl.name)) continue;
-                const field = @field(T, decl.name);
-                const field_info = @typeInfo(@TypeOf(field));
-                if (field_info != .@"fn") continue;
+            const descriptors = comptime blk: {
+                var descs: [count]napi.c.napi_property_descriptor = undefined;
+                var idx: usize = 0;
+                for (decls) |decl| {
+                    if (shouldSkipDecl(decl.name)) continue;
+                    const field = @field(T, decl.name);
+                    const field_info = @typeInfo(@TypeOf(field));
+                    if (field_info != .@"fn") continue;
 
-                const fn_info = field_info.@"fn";
-                const params = fn_info.params;
+                    const fn_info = field_info.@"fn";
+                    const params = fn_info.params;
 
-                var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
-                desc.utf8name = decl.name.ptr;
+                    var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
+                    desc.utf8name = decl.name.ptr;
 
-                if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
-                    // Instance method
-                    // *T → mutable pointer, *const T → const pointer, T → by value
-                    const is_by_value = params[0].type.? == T;
-                    desc.method = wrapMethod(T, field, is_by_value);
-                    desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
-                } else {
-                    // Static method
-                    desc.method = wrap_function.wrapFunction(field);
-                    desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
-                        @intFromEnum(napi.value_types.PropertyAttributes.static);
+                    if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
+                        // Instance method
+                        const is_by_value = params[0].type.? == T;
+                        desc.method = wrapMethod(T, field, is_by_value);
+                        desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
+                    } else {
+                        // Static method
+                        desc.method = wrap_function.wrapFunction(field);
+                        desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
+                            @intFromEnum(napi.value_types.PropertyAttributes.static);
+                    }
+
+                    descs[idx] = desc;
+                    idx += 1;
                 }
+                break :blk descs;
+            };
 
-                descriptors[idx] = desc;
-                idx += 1;
-            }
-
-            const result = descriptors;
-            return &result;
+            return &descriptors;
         }
 
         fn isClassSelfParam(comptime ParamType: type) bool {
