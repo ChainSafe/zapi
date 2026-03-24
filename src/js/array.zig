@@ -7,9 +7,10 @@ const Boolean = @import("boolean.zig").Boolean;
 pub const Array = struct {
     val: napi.Value,
 
-    /// Returns the element at `index` as an untyped napi.Value.
-    pub fn get(self: Array, index: u32) !napi.Value {
-        return self.val.getElement(index);
+    /// Returns the element at `index` as an untyped Value.
+    pub fn get(self: Array, index: u32) !@import("value.zig").Value {
+        const element = try self.val.getElement(index);
+        return .{ .val = element };
     }
 
     /// Returns the element at `index` narrowed to a Number.

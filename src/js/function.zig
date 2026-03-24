@@ -7,7 +7,7 @@ pub const Function = struct {
     /// Calls the function with `undefined` as the receiver.
     /// `args` is a tuple where each element is either a DSL wrapper type
     /// (has `.val` field) or a raw `napi.Value`.
-    pub fn call(self: Function, args: anytype) !napi.Value {
+    pub fn call(self: Function, args: anytype) !@import("value.zig").Value {
         const e = context.env();
         const recv = try e.getUndefined();
         const ArgsType = @TypeOf(args);
@@ -25,7 +25,8 @@ pub const Function = struct {
             raw_args[i] = toRawValue(arg);
         }
 
-        return e.callFunctionRaw(self.val, recv, raw_args[0..]);
+        const result = try e.callFunctionRaw(self.val, recv, raw_args[0..]);
+        return .{ .val = result };
     }
 
     pub fn toValue(self: Function) napi.Value {

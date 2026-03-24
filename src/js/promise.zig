@@ -6,6 +6,7 @@ const String = @import("string.zig").String;
 /// `T` must be a DSL wrapper type (has `.val` field) or `napi.Value`.
 pub fn Promise(comptime T: type) type {
     return struct {
+        val: napi.Value,
         deferred: napi.Deferred,
 
         const Self = @This();
@@ -23,17 +24,18 @@ pub fn Promise(comptime T: type) type {
 
         /// Returns the underlying JS promise value (to return to JS callers).
         pub fn toValue(self: Self) napi.Value {
-            return self.deferred.getPromise();
+            return self.val;
         }
     };
 }
 
 /// Creates a new Promise(T) and returns it. The caller should return
 /// `promise.toValue()` to JS and later call `promise.resolve()` or `promise.reject()`.
-pub fn createPromise(comptime T: type) Promise(T) {
+pub fn createPromise(comptime T: type) !Promise(T) {
     const e = context.env();
-    const deferred = e.createPromise() catch @panic("createPromise failed");
-    return .{ .deferred = deferred };
+    const deferred = try e.createPromise();
+    const val = deferred.getPromise();
+    return .{ .val = val, .deferred = deferred };
 }
 
 fn toNapiValue(item: anytype) napi.Value {
