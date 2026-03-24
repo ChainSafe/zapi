@@ -62,8 +62,9 @@ pub fn wrapClass(comptime T: type) type {
 
                 if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
                     // Instance method
-                    const is_mutable = params[0].type.? == *T;
-                    desc.method = wrapMethod(T, field, is_mutable);
+                    // *T → mutable pointer, *const T → const pointer, T → by value
+                    const is_by_value = params[0].type.? == T;
+                    desc.method = wrapMethod(T, field, is_by_value);
                     desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
                 } else {
                     // Static method
@@ -185,7 +186,7 @@ pub fn wrapClass(comptime T: type) type {
 
         /// Generates a C callback for an instance method of class `Class`.
         /// Extracts `this`, unwraps the native object, and prepends self to the args.
-        fn wrapMethod(comptime Class: type, comptime method: anytype, comptime is_mutable: bool) napi.c.napi_callback {
+        fn wrapMethod(comptime Class: type, comptime method: anytype, comptime is_by_value: bool) napi.c.napi_callback {
             const MethodFnType = @TypeOf(method);
             const method_info = @typeInfo(MethodFnType).@"fn";
             const method_params = method_info.params;
@@ -223,10 +224,10 @@ pub fn wrapClass(comptime T: type) type {
 
                     // Build full args tuple (self + JS args)
                     var args: std.meta.ArgsTuple(MethodFnType) = undefined;
-                    if (is_mutable) {
-                        args[0] = self_ptr;
+                    if (is_by_value) {
+                        args[0] = self_ptr.*;  // T (by value) for immutable methods
                     } else {
-                        args[0] = self_ptr;
+                        args[0] = self_ptr;    // *T or *const T for pointer methods
                     }
 
                     inline for (0..js_argc) |i| {
