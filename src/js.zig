@@ -39,6 +39,17 @@ pub const BigUint64Array = typed_arrays.BigUint64Array;
 pub const Promise = @import("js/promise.zig").Promise;
 pub const createPromise = @import("js/promise.zig").createPromise;
 
+// Comptime machinery
+pub const wrapFunction = @import("js/wrap_function.zig").wrapFunction;
+pub const wrapClass = @import("js/wrap_class.zig").wrapClass;
+pub const exportModule = @import("js/export_module.zig").exportModule;
+
+// Comptime helpers (public for advanced use)
+pub const isDslType = @import("js/wrap_function.zig").isDslType;
+pub const convertArg = @import("js/wrap_function.zig").convertArg;
+pub const convertReturn = @import("js/wrap_function.zig").convertReturn;
+pub const callAndConvert = @import("js/wrap_function.zig").callAndConvert;
+
 /// Throws a JS Error with the given message.
 pub fn throwError(message: [:0]const u8) void {
     const e = context.env();
@@ -61,4 +72,7 @@ test {
     _ = @import("js/typed_arrays.zig");
     _ = @import("js/promise.zig");
     _ = @import("js/value.zig");
+    _ = @import("js/wrap_function.zig");
+    _ = @import("js/wrap_class.zig");
+    _ = @import("js/export_module.zig");
 }
