@@ -2,11 +2,9 @@
 
 A Zig N-API wrapper library and CLI for building and publishing cross-platform Node.js native addons.
 
-## Overview
-
 zapi provides two main components:
 
-1. **Zig Library** (`src/`) - Idiomatic Zig bindings for the Node.js N-API, making it easy to write native addons in Zig
+1. **Zig Library** (`src/`) - Write Node.js native addons in Zig with a high-level DSL that mirrors JavaScript's type system
 2. **CLI Tool** (`ts/`) - Build tooling for cross-compiling and publishing multi-platform npm packages
 
 ## Installation
@@ -28,29 +26,204 @@ Add the Zig dependency to your `build.zig.zon`:
 
 ---
 
-## Zig Library
+## Zig Library — Quick Start
 
-### Quick Start
+The DSL is the default approach for writing native addons. Import `js` from zapi and write normal Zig functions — zapi handles all the N-API marshalling automatically.
 
 ```zig
-const napi = @import("napi");
+const js = @import("zapi").js;
 
-comptime {
-    napi.module.register(initModule);
+pub fn add(a: js.Number, b: js.Number) js.Number {
+    return js.Number.from(a.assertI32() + b.assertI32());
 }
 
-fn initModule(env: napi.Env, module: napi.Value) !void {
-    // Export a string
-    try module.setNamedProperty("greeting", try env.createStringUtf8("Hello from Zig!"));
-    
-    // Export a function
-    try module.setNamedProperty("add", try env.createFunction("add", 2, napi.createCallback(2, add, .{}), null));
-}
+pub const Counter = struct {
+    pub const js_class = true;
+    count: i32,
 
-fn add(a: i32, b: i32) i32 {
-    return a + b;
+    pub fn init(start: js.Number) Counter {
+        return .{ .count = start.assertI32() };
+    }
+
+    pub fn increment(self: *Counter) void {
+        self.count += 1;
+    }
+
+    pub fn getCount(self: Counter) js.Number {
+        return js.Number.from(self.count);
+    }
+};
+
+comptime { js.exportModule(@This()); }
+```
+
+**JavaScript usage:**
+
+```js
+const mod = require('./my_module.node');
+mod.add(1, 2); // 3
+const c = new mod.Counter(0);
+c.increment();
+c.getCount(); // 1
+```
+
+`pub` functions are auto-exported, and structs with `js_class = true` become JS classes. One line — `comptime { js.exportModule(@This()); }` — registers everything.
+
+---
+
+## JS Types Reference
+
+| Type | JS Equivalent | Key Methods |
+|------|--------------|-------------|
+| `Number` | `number` | `toI32()`, `toF64()`, `assertI32()`, `from(anytype)` |
+| `String` | `string` | `toSlice(buf)`, `toOwnedSlice(alloc)`, `len()`, `from([]const u8)` |
+| `Boolean` | `boolean` | `toBool()`, `assertBool()`, `from(bool)` |
+| `BigInt` | `bigint` | `toI64()`, `toU64()`, `toI128()`, `from(anytype)` |
+| `Date` | `Date` | `toTimestamp()`, `from(f64)` |
+| `Array` | `Array` | `get(i)`, `getNumber(i)`, `length()`, `set(i, val)` |
+| `Object(T)` | `object` | `get()`, `set(value)` — `T` fields must be DSL types |
+| `Function` | `Function` | `call(args)` |
+| `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
+| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `from(slice)` |
+| `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
+
+---
+
+## Functions
+
+Three patterns for exporting functions:
+
+### Basic — direct mapping
+
+```zig
+pub fn add(a: Number, b: Number) Number {
+    return Number.from(a.assertI32() + b.assertI32());
 }
 ```
+
+### Error handling — `!T` becomes a thrown JS exception
+
+```zig
+pub fn safeDivide(a: Number, b: Number) !Number {
+    const divisor = b.assertI32();
+    if (divisor == 0) return error.DivisionByZero;
+    return Number.from(@divTrunc(a.assertI32(), divisor));
+}
+```
+
+JS: `try { safeDivide(10, 0) } catch (e) { /* "DivisionByZero" */ }`
+
+### Nullable returns — `?T` becomes `undefined`
+
+```zig
+pub fn findValue(arr: Array, target: Number) ?Number {
+    const len = arr.length() catch return null;
+    // ... search, return null if not found
+}
+```
+
+---
+
+## Classes
+
+Structs with `js_class = true` are exported as JavaScript classes:
+
+```zig
+pub const Timer = struct {
+    pub const js_class = true;
+    start: i64,
+
+    pub fn init() Timer {
+        return .{ .start = std.time.milliTimestamp() };
+    }
+
+    pub fn elapsed(self: Timer) js.Number {
+        return js.Number.from(std.time.milliTimestamp() - self.start);
+    }
+
+    pub fn reset(self: *Timer) void {
+        self.start = std.time.milliTimestamp();
+    }
+
+    pub fn deinit(self: *Timer) void {
+        _ = self;
+    }
+};
+```
+
+**Rules:**
+
+- `pub const js_class = true` — marker that identifies the struct as a JS class
+- `pub fn init(...)` — constructor (must return `T` or `!T`)
+- `pub fn method(self: *T, ...)` — mutable instance method
+- `pub fn method(self: T, ...)` — immutable instance method
+- `pub fn method(...)` — static method (no self)
+- `pub fn deinit(self: *T)` — optional GC destructor
+
+---
+
+## Working with Types
+
+### Typed Objects
+
+```zig
+const Config = struct { host: String, port: Number, verbose: Boolean };
+
+pub fn connect(config: Object(Config)) !String {
+    const c = try config.get();
+    // access c.host, c.port, c.verbose
+}
+```
+
+### TypedArrays
+
+```zig
+pub fn sum(data: Uint8Array) !Number {
+    const slice = try data.toSlice();
+    var total: i32 = 0;
+    for (slice) |byte| total += @intCast(byte);
+    return Number.from(total);
+}
+```
+
+### Promises
+
+```zig
+pub fn asyncOp(val: Number) !Promise(Number) {
+    var promise = try js.createPromise(Number);
+    try promise.resolve(val);  // or dispatch async work
+    return promise;
+}
+```
+
+### Callbacks
+
+```zig
+pub fn applyCallback(val: Number, cb: Function) !Value {
+    return try cb.call(.{val});
+}
+```
+
+---
+
+## Mixing DSL and N-API
+
+```zig
+pub fn advanced() !Value {
+    const e = js.env();  // access low-level napi.Env
+    const obj = try e.createObject();
+    // use any napi.Env method...
+    return .{ .val = obj };
+}
+```
+
+`js.env()` gives access to the full N-API when you need it. `js.allocator()` provides the C allocator.
+
+---
+
+## Advanced: Low-Level N-API
+
+The DSL layer handles most use cases. Drop down to the N-API layer when you need full control over handle scopes, async work, thread-safe functions, or other advanced features.
 
 ### Core Types
 
@@ -86,6 +259,8 @@ fn add_manual(env: napi.Env, info: napi.CallbackInfo(2)) !napi.Value {
 Let zapi handle argument/return conversion:
 
 ```zig
+const napi = @import("zapi").napi;
+
 // Arguments and return value are automatically converted
 fn add(a: i32, b: i32) i32 {
     return a + b;
@@ -118,9 +293,11 @@ napi.createCallback(2, myFunc, .{
 ### Creating Classes
 
 ```zig
+const napi = @import("zapi").napi;
+
 const Timer = struct {
     start: i64,
-    
+
     pub fn read(self: *Timer) i64 {
         return std.time.milliTimestamp() - self.start;
     }
@@ -142,6 +319,8 @@ try env.defineClass(
 Run CPU-intensive work off the main thread:
 
 ```zig
+const napi = @import("zapi").napi;
+
 const Work = struct {
     a: i32,
     b: i32,
@@ -170,6 +349,8 @@ try work.queue();
 Call JavaScript from any thread:
 
 ```zig
+const napi = @import("zapi").napi;
+
 const tsfn = try env.createThreadsafeFunction(
     jsCallback,        // JS function to call
     context,           // User context
@@ -190,10 +371,12 @@ try tsfn.call(&data, .blocking);
 All N-API calls return `NapiError` on failure:
 
 ```zig
+const napi = @import("zapi").napi;
+
 fn myFunction(env: napi.Env) !void {
     // Errors propagate naturally
     const value = try env.createStringUtf8("hello");
-    
+
     // Throw JavaScript errors
     try env.throwError("ERR_CODE", "Something went wrong");
     try env.throwTypeError("ERR_TYPE", "Expected a number");
@@ -386,24 +569,15 @@ Resolution order:
 
 ---
 
-## Example
+## Examples
 
-See the [example/](example/) directory for a comprehensive example including:
-- String properties
-- Functions with manual and automatic argument handling
-- Classes with methods
-- Async work with promises
-- Thread-safe functions
-
-```bash
-# Build the example
-zig build
-
-# Test it
-node example/test.js
-```
+See the [examples/](examples/) directory for comprehensive examples including:
+- All DSL types (Number, String, Boolean, BigInt, Date, Array, Object, TypedArrays, Promise)
+- Error handling and nullable returns
+- Classes with lifecycle management
+- Callbacks and mixed DSL/N-API usage
+- Low-level N-API with manual registration
 
 ## License
 
 MIT
-
