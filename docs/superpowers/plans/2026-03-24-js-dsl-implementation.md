@@ -372,20 +372,20 @@ pub const String = struct {
         return self.val.getValueStringUtf8(buf);
     }
 
-    /// Allocates a new slice with the string contents.
+    /// Allocates a new slice with the string contents. Caller owns the memory.
     pub fn toOwnedSlice(self: String, alloc: std.mem.Allocator) ![]const u8 {
         // First get the length
         const str_len = try self.len();
-        // Allocate buffer (+1 for null terminator that N-API writes)
-        const buf = try alloc.alloc(u8, str_len + 1);
+        // Allocate exact size needed
+        const buf = try alloc.alloc(u8, str_len);
         errdefer alloc.free(buf);
-        const result = try self.val.getValueStringUtf8(buf);
-        // Shrink to exact size (N-API returns without null terminator in the slice)
-        if (result.len < buf.len) {
-            // Return a slice of the allocated buffer
-            return buf[0..result.len];
-        }
-        return result;
+        // N-API copies into our buffer. Pass str_len + 1 as N-API expects
+        // space for a null terminator, but we allocated exact — use a temp buffer.
+        var tmp = try alloc.alloc(u8, str_len + 1);
+        defer alloc.free(tmp);
+        const result = try self.val.getValueStringUtf8(tmp);
+        @memcpy(buf, result[0..str_len]);
+        return buf;
     }
 
     /// Returns the UTF-8 byte length of the string.
@@ -1194,7 +1194,7 @@ pub const createPromise = @import("js/promise.zig").createPromise;
 // pub const exportModule = @import("js/export_module.zig").exportModule;
 
 // Error helpers
-pub fn throwError(message: []const u8) void {
+pub fn throwError(message: [:0]const u8) void {
     const e = context.env();
     e.throwError("", message) catch {};
 }
