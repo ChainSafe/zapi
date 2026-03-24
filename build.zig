@@ -65,6 +65,29 @@ pub fn build(b: *std.Build) void {
     tls_install_lib_example_type_tag.dependOn(&install_lib_example_type_tag.step);
     b.getInstallStep().dependOn(&install_lib_example_type_tag.step);
 
+    const module_example_js_dsl = b.createModule(.{
+        .root_source_file = b.path("examples/js_dsl/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    b.modules.put(b.dupe("example_js_dsl"), module_example_js_dsl) catch @panic("OOM");
+
+    const lib_example_js_dsl = b.addLibrary(.{
+        .name = "example_js_dsl",
+        .root_module = module_example_js_dsl,
+        .linkage = .dynamic,
+    });
+
+    lib_example_js_dsl.linker_allow_shlib_undefined = true;
+    const install_lib_example_js_dsl = b.addInstallArtifact(lib_example_js_dsl, .{
+        .dest_sub_path = "example_js_dsl.node",
+    });
+
+    const tls_install_lib_example_js_dsl = b.step("build-lib:example_js_dsl", "Install the example_js_dsl library");
+    tls_install_lib_example_js_dsl.dependOn(&install_lib_example_js_dsl.step);
+    b.getInstallStep().dependOn(&install_lib_example_js_dsl.step);
+
     const tls_run_test = b.step("test", "Run all tests");
 
     const test_napi = b.addTest(.{
@@ -109,9 +132,25 @@ pub fn build(b: *std.Build) void {
     tls_run_test_example_type_tag.dependOn(&run_test_example_type_tag.step);
     tls_run_test.dependOn(&run_test_example_type_tag.step);
 
+    const test_example_js_dsl = b.addTest(.{
+        .name = "example_js_dsl",
+        .root_module = module_example_js_dsl,
+        .filters = b.option([][]const u8, "example_js_dsl.filters", "example_js_dsl test filters") orelse &[_][]const u8{},
+    });
+    const install_test_example_js_dsl = b.addInstallArtifact(test_example_js_dsl, .{});
+    const tls_install_test_example_js_dsl = b.step("build-test:example_js_dsl", "Install the example_js_dsl test");
+    tls_install_test_example_js_dsl.dependOn(&install_test_example_js_dsl.step);
+
+    const run_test_example_js_dsl = b.addRunArtifact(test_example_js_dsl);
+    const tls_run_test_example_js_dsl = b.step("test:example_js_dsl", "Run the example_js_dsl test");
+    tls_run_test_example_js_dsl.dependOn(&run_test_example_js_dsl.step);
+    tls_run_test.dependOn(&run_test_example_js_dsl.step);
+
     module_napi.addImport("build_options", options_module_build_options);
 
     module_example_hello_world.addImport("napi", module_napi);
 
     module_example_type_tag.addImport("napi", module_napi);
+
+    module_example_js_dsl.addImport("zapi", module_napi);
 }
