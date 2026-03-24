@@ -42,7 +42,7 @@ pub const createPromise = @import("js/promise.zig").createPromise;
 /// Throws a JS Error with the given message.
 pub fn throwError(message: [:0]const u8) void {
     const e = context.env();
-    e.throwError("", message) catch @panic("throwError failed");
+    e.throwError("", message) catch {};
 }
 
 test {
