@@ -27,6 +27,19 @@ const napi = @import("zapi").napi;
 
 `zapi.js` is the DSL namespace. `zapi.napi` is the existing low-level namespace. They are fully separate — no cross-contamination. DSL types wrap `napi.Value` internally, so mixing levels is possible when needed.
 
+**Migration strategy:** The current `src/root.zig` is renamed to `src/napi.zig`. A new `src/root.zig` re-exports both namespaces plus backwards-compatible flat exports:
+
+```zig
+// src/root.zig
+pub const napi = @import("napi.zig");
+pub const js = @import("js.zig");
+
+// Backwards-compatible flat re-exports (to be removed in a future release)
+pub usingnamespace @import("napi.zig");
+```
+
+Existing code using `@import("zapi").Env` etc. continues to work unchanged.
+
 ## JS Type System
 
 All types are zero-cost wrappers over `napi.Value`. Each provides typed conversion and assertion methods.
