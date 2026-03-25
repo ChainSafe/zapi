@@ -12,5 +12,7 @@ runs:
       with:
         node-version: 24
         cache: pnpm
+    - run: zig version
+      shell: bash
     - run: pnpm install --frozen-lockfile
       shell: bash
