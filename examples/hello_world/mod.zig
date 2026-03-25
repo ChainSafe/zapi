@@ -167,6 +167,7 @@ fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
         timer,
         Timer_finalize,
         null,
+        null,
     );
     return cb.this();
 }

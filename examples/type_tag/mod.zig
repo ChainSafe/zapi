@@ -63,7 +63,7 @@ fn Cat_ctor(env: napi.Env, cb: napi.CallbackInfo(1)) !napi.Value {
     const cat = try allocator.create(Cat);
     cat.* = Cat{ .name_buf = buf, .len = name.len };
 
-    _ = try env.wrap(cb.this(), Cat, cat, Cat_finalize, null);
+    _ = try env.wrap(cb.this(), Cat, cat, Cat_finalize, null, null);
     try env.typeTagObject(cb.this(), cat_type_tag);
     return cb.this();
 }
@@ -94,7 +94,7 @@ fn Dog_ctor(env: napi.Env, cb: napi.CallbackInfo(1)) !napi.Value {
     const dog = try allocator.create(Dog);
     dog.* = Dog{ .name_buf = buf, .len = name.len };
 
-    _ = try env.wrap(cb.this(), Dog, dog, Dog_finalize, null);
+    _ = try env.wrap(cb.this(), Dog, dog, Dog_finalize, null, null);
     try env.typeTagObject(cb.this(), dog_type_tag);
     return cb.this();
 }
