@@ -13,7 +13,7 @@
 		"test": "pnpm test:zig && pnpm test:js",
 		"lint:zig": "zig fmt src",
 		"lint:js": "pnpm biome check",
-		"lint": "pnpm lint:zapi && pnpm lint:ts",
+		"lint": "pnpm lint:zig && pnpm lint:js",
 		"lint:fix": "pnpm biome check --write"
 	},
 	"files": [
