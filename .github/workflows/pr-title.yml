@@ -1,0 +1,31 @@
+name: PR Title
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize]
+
+jobs:
+  conventional-commit:
+    name: Conventional Commit Title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|chore|docs|refactor|test|ci|perf|build|revert)(\(.+\))?(!)?: .+'
+          if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+            echo "::error::PR title does not follow Conventional Commits format."
+            echo ""
+            echo "Expected: <type>[optional scope][!]: <description>"
+            echo "Got:      $PR_TITLE"
+            echo ""
+            echo "Allowed types: feat, fix, chore, docs, refactor, test, ci, perf, build, revert"
+            echo "Examples:"
+            echo "  feat: add new API endpoint"
+            echo "  fix(parser): handle edge case"
+            echo "  chore!: drop support for Node 18"
+            exit 1
+          fi
+          echo "PR title is valid: $PR_TITLE"
