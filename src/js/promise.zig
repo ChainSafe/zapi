@@ -24,9 +24,22 @@ pub fn Promise(comptime T: type) type {
             try self.deferred.resolve(raw);
         }
 
-        /// Rejects the promise with an error string.
-        pub fn reject(self: Self, err: String) !void {
-            try self.deferred.reject(err.val);
+        /// Rejects the promise with any JS value (typically an Error object).
+        /// Use `rejectWithMessage` for convenience when you only have a string.
+        pub fn reject(self: Self, err: anytype) !void {
+            const raw = toNapiValue(err);
+            try self.deferred.reject(raw);
+        }
+
+        /// Convenience: rejects with a new JS Error object created from a message string.
+        /// This ensures `.message` and `.stack` are available in JS catch blocks.
+        pub fn rejectWithMessage(self: Self, message: String) !void {
+            const e = context.env();
+            const error_obj = try e.createError(
+                try e.createStringUtf8("Error"),
+                message.val,
+            );
+            try self.deferred.reject(error_obj);
         }
 
         /// Returns the underlying JS promise value (to return to JS callers).

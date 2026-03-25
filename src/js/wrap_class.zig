@@ -59,7 +59,8 @@ pub fn wrapClass(comptime T: type) type {
                     const params = fn_info.params;
 
                     var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
-                    desc.utf8name = decl.name.ptr;
+                    const method_name: [:0]const u8 = decl.name ++ "";
+                    desc.utf8name = method_name.ptr;
 
                     if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
                         // Instance method
