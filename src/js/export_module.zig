@@ -24,7 +24,19 @@ pub fn exportModule(comptime Module: type) void {
                 const field_info = @typeInfo(FieldType);
 
                 if (field_info == .@"fn") {
-                    // Public function — wrap and register
+                    // Skip functions whose parameters aren't DSL types
+                    // (catches private helpers that use non-DSL signatures)
+                    const fn_params = field_info.@"fn".params;
+                    const is_dsl_fn = comptime blk: {
+                        for (fn_params) |p| {
+                            const PT = p.type orelse break :blk false;
+                            if (PT != napi.Value and !wrap_function.isDslType(PT)) break :blk false;
+                        }
+                        break :blk true;
+                    };
+                    if (!is_dsl_fn) continue;
+
+                    // DSL function — wrap and register
                     const cb = wrap_function.wrapFunction(field);
                     const name: [:0]const u8 = decl.name ++ "";
 
@@ -42,7 +54,11 @@ pub fn exportModule(comptime Module: type) void {
                     try module.setNamedProperty(name, fn_val);
                 } else if (field_info == .type) {
                     const InnerType = field;
-                    if (@typeInfo(InnerType) == .@"struct" and @hasDecl(InnerType, "js_class")) {
+                    if (@typeInfo(InnerType) == .@"struct" and
+                        @hasDecl(InnerType, "js_class") and
+                        @TypeOf(@field(InnerType, "js_class")) == bool and
+                        @field(InnerType, "js_class") == true)
+                    {
                         // Class with js_class — wrap and register
                         const wrapped = wrap_class.wrapClass(InnerType);
                         const props = wrapped.getPropertyDescriptors();

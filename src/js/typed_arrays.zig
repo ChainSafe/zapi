@@ -9,8 +9,13 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
 
         const Self = @This();
 
-        /// Returns a slice over the typed array's backing buffer.
-        /// The slice is valid as long as the underlying ArrayBuffer is alive.
+        /// Returns a slice pointing directly into the V8 ArrayBuffer backing store.
+        ///
+        /// WARNING: This slice is only valid within the current N-API callback scope.
+        /// The backing store may be moved or freed by the GC after the callback returns
+        /// or after any JS call that could trigger GC. Do NOT store this slice across
+        /// callbacks, async work boundaries, or JS function calls. For data that must
+        /// outlive the callback, copy the slice contents to a heap allocation.
         pub fn toSlice(self: Self) ![]Element {
             const info = try self.val.getTypedarrayInfo();
             const byte_ptr: [*]u8 = info.data.ptr;
