@@ -167,6 +167,7 @@ fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
         timer,
         Timer_finalize,
         null,
+        null,
     );
     return cb.this();
 }
