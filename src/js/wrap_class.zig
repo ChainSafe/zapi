@@ -121,6 +121,12 @@ pub fn wrapClass(comptime T: type) type {
                         return null;
                     };
 
+                    // Validate argument count
+                    if (init_argc > 0 and actual_argc < init_argc) {
+                        e.throwTypeError("", "Constructor expects " ++ std.fmt.comptimePrint("{d}", .{init_argc}) ++ " arguments") catch {};
+                        return null;
+                    }
+
                     // Build args and call init
                     var args: std.meta.ArgsTuple(InitFnType) = undefined;
                     inline for (0..init_argc) |i| {
@@ -215,6 +221,12 @@ pub fn wrapClass(comptime T: type) type {
                         e.throwError("", "Failed to get callback info in method") catch {};
                         return null;
                     };
+
+                    // Validate argument count
+                    if (js_argc > 0 and actual_argc < js_argc) {
+                        e.throwTypeError("", "Method expects " ++ std.fmt.comptimePrint("{d}", .{js_argc}) ++ " arguments") catch {};
+                        return null;
+                    }
 
                     // Unwrap self from this
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
