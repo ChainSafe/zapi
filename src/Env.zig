@@ -743,8 +743,8 @@ pub fn wrap(
     native_object: *Data,
     comptime finalize_cb: ?FinalizeCallback(Data),
     finalize_hint: ?*anyopaque,
-) NapiError!Ref {
-    var ref_: c.napi_ref = undefined;
+    ref: ?*Ref,
+) NapiError!void {
     try status.check(
         c.napi_wrap(
             self.env,
@@ -752,13 +752,9 @@ pub fn wrap(
             native_object,
             if (finalize_cb) |f| wrapFinalizeCallback(Data, f) else null,
             finalize_hint,
-            &ref_,
+            if (ref) |r| &r.ref_ else null,
         ),
     );
-    return Ref{
-        .env = self.env,
-        .ref_ = ref_,
-    };
 }
 
 /// https://nodejs.org/api/n-api.html#napi_unwrap
