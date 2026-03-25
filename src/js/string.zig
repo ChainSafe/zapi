@@ -11,16 +11,14 @@ pub const String = struct {
         return self.val.getValueStringUtf8(buf);
     }
 
-    /// Allocates a new slice and copies the string value into it.
+    /// Allocates a null-terminated string and returns it as a sentinel slice.
     /// Caller owns the returned memory and must free it with the same allocator.
-    pub fn toOwnedSlice(self: String, alloc: std.mem.Allocator) ![]const u8 {
+    pub fn toOwnedSlice(self: String, alloc: std.mem.Allocator) ![:0]u8 {
         const str_len = try self.len();
-        const buf = try alloc.alloc(u8, str_len);
+        // Allocate str_len + 1 for the null terminator that N-API writes.
+        const buf = try alloc.allocSentinel(u8, str_len, 0);
         errdefer alloc.free(buf);
-        const tmp = try alloc.alloc(u8, str_len + 1);
-        defer alloc.free(tmp);
-        const result = try self.val.getValueStringUtf8(tmp);
-        @memcpy(buf, result[0..str_len]);
+        _ = try self.val.getValueStringUtf8(buf[0 .. str_len + 1]);
         return buf;
     }
 

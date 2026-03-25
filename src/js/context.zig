@@ -1,6 +1,12 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
 
+/// Thread-local N-API environment, set by the generated callback wrappers.
+///
+/// SAFETY: DSL types (Number, String, etc.) and `js.env()` are only valid
+/// within the synchronous scope of a JS callback. Do not store DSL types
+/// across callbacks or use them from worker threads. For async work, use
+/// `napi.AsyncWork` or `napi.ThreadSafeFunction` from the low-level API.
 threadlocal var current_env: ?napi.Env = null;
 
 pub fn env() napi.Env {

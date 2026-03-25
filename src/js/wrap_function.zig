@@ -125,6 +125,12 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
                 return null;
             };
 
+            // Validate argument count
+            if (argc > 0 and actual_argc < argc) {
+                e.throwTypeError("", "Expected " ++ std.fmt.comptimePrint("{d}", .{argc}) ++ " arguments") catch {};
+                return null;
+            }
+
             // Build args tuple
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..argc) |i| {

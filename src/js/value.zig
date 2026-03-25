@@ -1,3 +1,4 @@
+const std = @import("std");
 const napi = @import("../napi.zig");
 const ValueType = napi.value_types.ValueType;
 const TypedarrayType = napi.value_types.TypedarrayType;
@@ -10,8 +11,13 @@ const Array = @import("array.zig").Array;
 const Function = @import("function.zig").Function;
 const typed_arrays = @import("typed_arrays.zig");
 
+/// Error returned when a Value narrowing method finds a type mismatch.
+pub const TypeError = error{TypeMismatch};
+
 /// Untyped escape hatch: wraps a raw napi.Value and provides type-checking
 /// and narrowing methods to convert into specific DSL wrapper types.
+/// Narrowing methods validate the JS type at runtime and return
+/// `error.TypeMismatch` if the value is not the expected type.
 pub const Value = struct {
     val: napi.Value,
 
@@ -69,83 +75,111 @@ pub const Value = struct {
         return self.val.isPromise() catch return false;
     }
 
-    // -- Narrowing methods --
+    // -- Narrowing methods (type-checked) --
+
+    fn expectType(self: Value, expected: ValueType) !void {
+        const actual = try self.val.typeof();
+        if (actual != expected) return error.TypeMismatch;
+    }
 
     pub fn asNumber(self: Value) !Number {
+        try self.expectType(.number);
         return .{ .val = self.val };
     }
 
     pub fn asString(self: Value) !String {
+        try self.expectType(.string);
         return .{ .val = self.val };
     }
 
     pub fn asBoolean(self: Value) !Boolean {
+        try self.expectType(.boolean);
         return .{ .val = self.val };
     }
 
     pub fn asBigInt(self: Value) !BigInt {
+        try self.expectType(.bigint);
         return .{ .val = self.val };
     }
 
     pub fn asDate(self: Value) !Date {
+        if (!(self.val.isDate() catch return error.TypeMismatch)) return error.TypeMismatch;
         return .{ .val = self.val };
     }
 
     pub fn asArray(self: Value) !Array {
+        if (!(self.val.isArray() catch return error.TypeMismatch)) return error.TypeMismatch;
         return .{ .val = self.val };
     }
 
     pub fn asFunction(self: Value) !Function {
+        try self.expectType(.function);
         return .{ .val = self.val };
     }
 
     pub fn asObject(self: Value, comptime T: type) !@import("object.zig").Object(T) {
+        try self.expectType(.object);
         return .{ .val = self.val };
     }
 
-    // -- TypedArray narrowing --
+    // -- TypedArray narrowing (validates isTypedArray) --
+
+    fn expectTypedArray(self: Value) !void {
+        if (!(self.val.isTypedarray() catch return error.TypeMismatch)) return error.TypeMismatch;
+    }
 
     pub fn asInt8Array(self: Value) !typed_arrays.Int8Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asUint8Array(self: Value) !typed_arrays.Uint8Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asUint8ClampedArray(self: Value) !typed_arrays.Uint8ClampedArray {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asInt16Array(self: Value) !typed_arrays.Int16Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asUint16Array(self: Value) !typed_arrays.Uint16Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asInt32Array(self: Value) !typed_arrays.Int32Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asUint32Array(self: Value) !typed_arrays.Uint32Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asFloat32Array(self: Value) !typed_arrays.Float32Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asFloat64Array(self: Value) !typed_arrays.Float64Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asBigInt64Array(self: Value) !typed_arrays.BigInt64Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 
     pub fn asBigUint64Array(self: Value) !typed_arrays.BigUint64Array {
+        try self.expectTypedArray();
         return .{ .val = self.val };
     }
 

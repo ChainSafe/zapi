@@ -4,6 +4,13 @@ const String = @import("string.zig").String;
 
 /// A Promise wrapper parameterized on the resolve type `T`.
 /// `T` must be a DSL wrapper type (has `.val` field) or `napi.Value`.
+///
+/// IMPORTANT: When returning `Promise(T)` from a DSL function, the promise must
+/// be resolved or rejected *before* the function returns. The `deferred` handle
+/// is not preserved across the JS boundary — only the `.val` (the JS promise
+/// object) is returned to the caller. For async resolution (e.g., from a worker
+/// thread), store the `Deferred` handle separately and use `napi.AsyncWork` or
+/// `napi.ThreadSafeFunction` from the low-level API layer.
 pub fn Promise(comptime T: type) type {
     return struct {
         val: napi.Value,
