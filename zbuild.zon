@@ -41,5 +41,15 @@
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_type_tag.node",
         },
+        .example_js_dsl = .{
+            .root_module = .{
+                .root_source_file = "examples/js_dsl/mod.zig",
+                .imports = .{.zapi},
+                .link_libc = true,
+            },
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "example_js_dsl.node",
+        },
     },
 }

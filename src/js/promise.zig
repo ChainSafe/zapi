@@ -1,0 +1,66 @@
+const napi = @import("../napi.zig");
+const context = @import("context.zig");
+const String = @import("string.zig").String;
+
+/// A Promise wrapper parameterized on the resolve type `T`.
+/// `T` must be a DSL wrapper type (has `.val` field) or `napi.Value`.
+///
+/// IMPORTANT: When returning `Promise(T)` from a DSL function, the promise must
+/// be resolved or rejected *before* the function returns. The `deferred` handle
+/// is not preserved across the JS boundary — only the `.val` (the JS promise
+/// object) is returned to the caller. For async resolution (e.g., from a worker
+/// thread), store the `Deferred` handle separately and use `napi.AsyncWork` or
+/// `napi.ThreadSafeFunction` from the low-level API layer.
+pub fn Promise(comptime T: type) type {
+    return struct {
+        val: napi.Value,
+        deferred: napi.Deferred,
+
+        const Self = @This();
+
+        /// Resolves the promise with the given value.
+        pub fn resolve(self: Self, value: T) !void {
+            const raw = toNapiValue(value);
+            try self.deferred.resolve(raw);
+        }
+
+        /// Rejects the promise with any JS value (typically an Error object).
+        /// Use `rejectWithMessage` for convenience when you only have a string.
+        pub fn reject(self: Self, err: anytype) !void {
+            const raw = toNapiValue(err);
+            try self.deferred.reject(raw);
+        }
+
+        /// Convenience: rejects with a new JS Error object created from a message string.
+        /// This ensures `.message` and `.stack` are available in JS catch blocks.
+        pub fn rejectWithMessage(self: Self, message: String) !void {
+            const e = context.env();
+            const error_obj = try e.createError(
+                try e.createStringUtf8("Error"),
+                message.val,
+            );
+            try self.deferred.reject(error_obj);
+        }
+
+        /// Returns the underlying JS promise value (to return to JS callers).
+        pub fn toValue(self: Self) napi.Value {
+            return self.val;
+        }
+    };
+}
+
+/// Creates a new Promise(T) and returns it. The caller should return
+/// `promise.toValue()` to JS and later call `promise.resolve()` or `promise.reject()`.
+pub fn createPromise(comptime T: type) !Promise(T) {
+    const e = context.env();
+    const deferred = try e.createPromise();
+    const val = deferred.getPromise();
+    return .{ .val = val, .deferred = deferred };
+}
+
+fn toNapiValue(item: anytype) napi.Value {
+    const T = @TypeOf(item);
+    if (T == napi.Value) return item;
+    if (@hasField(T, "val")) return item.val;
+    @compileError("Expected a DSL wrapper type (with .val field) or napi.Value, got " ++ @typeName(T));
+}
