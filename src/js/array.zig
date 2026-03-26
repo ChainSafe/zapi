@@ -14,18 +14,27 @@ pub const Array = struct {
     }
 
     /// Returns the element at `index` narrowed to a Number.
+    /// Returns error.TypeMismatch if the element is not a number.
     pub fn getNumber(self: Array, index: u32) !Number {
-        return .{ .val = try self.val.getElement(index) };
+        const element = try self.val.getElement(index);
+        if ((try element.typeof()) != .number) return error.TypeMismatch;
+        return .{ .val = element };
     }
 
     /// Returns the element at `index` narrowed to a String.
+    /// Returns error.TypeMismatch if the element is not a string.
     pub fn getString(self: Array, index: u32) !String {
-        return .{ .val = try self.val.getElement(index) };
+        const element = try self.val.getElement(index);
+        if ((try element.typeof()) != .string) return error.TypeMismatch;
+        return .{ .val = element };
     }
 
     /// Returns the element at `index` narrowed to a Boolean.
+    /// Returns error.TypeMismatch if the element is not a boolean.
     pub fn getBoolean(self: Array, index: u32) !Boolean {
-        return .{ .val = try self.val.getElement(index) };
+        const element = try self.val.getElement(index);
+        if ((try element.typeof()) != .boolean) return error.TypeMismatch;
+        return .{ .val = element };
     }
 
     /// Returns the length of the array.

@@ -122,64 +122,66 @@ pub const Value = struct {
         return .{ .val = self.val };
     }
 
-    // -- TypedArray narrowing (validates isTypedArray) --
+    // -- TypedArray narrowing (validates isTypedArray + specific subtype) --
 
-    fn expectTypedArray(self: Value) !void {
+    fn expectTypedArrayOfType(self: Value, expected: TypedarrayType) !void {
         if (!(self.val.isTypedarray() catch return error.TypeMismatch)) return error.TypeMismatch;
+        const info = self.val.getTypedarrayInfo() catch return error.TypeMismatch;
+        if (info.array_type != expected) return error.TypeMismatch;
     }
 
     pub fn asInt8Array(self: Value) !typed_arrays.Int8Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.int8);
         return .{ .val = self.val };
     }
 
     pub fn asUint8Array(self: Value) !typed_arrays.Uint8Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.uint8);
         return .{ .val = self.val };
     }
 
     pub fn asUint8ClampedArray(self: Value) !typed_arrays.Uint8ClampedArray {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.uint8_clamped);
         return .{ .val = self.val };
     }
 
     pub fn asInt16Array(self: Value) !typed_arrays.Int16Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.int16);
         return .{ .val = self.val };
     }
 
     pub fn asUint16Array(self: Value) !typed_arrays.Uint16Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.uint16);
         return .{ .val = self.val };
     }
 
     pub fn asInt32Array(self: Value) !typed_arrays.Int32Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.int32);
         return .{ .val = self.val };
     }
 
     pub fn asUint32Array(self: Value) !typed_arrays.Uint32Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.uint32);
         return .{ .val = self.val };
     }
 
     pub fn asFloat32Array(self: Value) !typed_arrays.Float32Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.float32);
         return .{ .val = self.val };
     }
 
     pub fn asFloat64Array(self: Value) !typed_arrays.Float64Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.float64);
         return .{ .val = self.val };
     }
 
     pub fn asBigInt64Array(self: Value) !typed_arrays.BigInt64Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.bigint64);
         return .{ .val = self.val };
     }
 
     pub fn asBigUint64Array(self: Value) !typed_arrays.BigUint64Array {
-        try self.expectTypedArray();
+        try self.expectTypedArrayOfType(.biguint64);
         return .{ .val = self.val };
     }
 

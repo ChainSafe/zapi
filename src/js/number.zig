@@ -2,6 +2,13 @@ const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
 
+/// Zero-cost wrapper around a JS `number` value.
+///
+/// `from()` panics on N-API failure (e.g. invalid env). This is a deliberate
+/// design choice to keep DSL signatures clean (no `try` on every construction).
+/// N-API creation calls only fail if the environment is invalid, which indicates
+/// a programming error. Use `assert*()` variants for the same panic-on-failure
+/// pattern when extracting values, or `to*()` variants to get error unions.
 pub const Number = struct {
     val: napi.Value,
 
