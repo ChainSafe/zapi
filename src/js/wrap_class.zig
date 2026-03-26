@@ -146,7 +146,7 @@ pub fn wrapClass(comptime T: type) type {
 
                     // Wrap the native object onto the JS this
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, null) catch {
+                    _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, null, null) catch {
                         std.heap.c_allocator.destroy(obj_ptr);
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
@@ -239,9 +239,9 @@ pub fn wrapClass(comptime T: type) type {
                     // Build full args tuple (self + JS args)
                     var args: std.meta.ArgsTuple(MethodFnType) = undefined;
                     if (is_by_value) {
-                        args[0] = self_ptr.*;  // T (by value) for immutable methods
+                        args[0] = self_ptr.*; // T (by value) for immutable methods
                     } else {
-                        args[0] = self_ptr;    // *T or *const T for pointer methods
+                        args[0] = self_ptr; // *T or *const T for pointer methods
                     }
 
                     inline for (0..js_argc) |i| {

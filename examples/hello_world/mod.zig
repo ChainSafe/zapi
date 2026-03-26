@@ -1,16 +1,16 @@
 ///! This is an example napi module that exercises various napi features.
 const std = @import("std");
-const napi = @import("napi");
+const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
 comptime {
     // The module must be registered with napi via `register`
-    napi.module.register(exampleMod);
+    zapi.module.register(exampleMod);
 }
 
 // This is the top-level module registration function for this module.
 // It is called by napi when the module is loaded.
-fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
+fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
     // Example of a string property
     try module.setNamedProperty("helloWorld", try env.createStringUtf8(hello_world));
 
@@ -29,7 +29,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("add", try env.createFunction(
         "add",
         2,
-        napi.createCallback(2, add, .{}),
+        zapi.createCallback(2, add, .{}),
         null,
     ));
 
@@ -40,7 +40,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("add_semimanual", try env.createFunction(
         "add_semimanual",
         2,
-        napi.createCallback(2, add_semimanual, .{
+        zapi.createCallback(2, add_semimanual, .{
             .args = .{ .env, .auto, .value },
             .returns = .value,
         }),
@@ -51,7 +51,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("surprise", try env.createFunction(
         "surprise",
         0,
-        napi.createCallback(0, surprise, .{
+        zapi.createCallback(0, surprise, .{
             .returns = .string,
         }),
         null,
@@ -60,7 +60,7 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
     try module.setNamedProperty("update", try env.createFunction(
         "update",
         1,
-        napi.createCallback(1, S.update, .{
+        zapi.createCallback(1, S.update, .{
             .args = .{ .data, .auto },
         }),
         &s,
@@ -74,15 +74,15 @@ fn exampleMod(env: napi.Env, module: napi.Value) anyerror!void {
             0,
             Timer_ctor,
             null,
-            &[_]napi.c.napi_property_descriptor{ .{
+            &[_]zapi.c.napi_property_descriptor{ .{
                 .utf8name = "reset",
-                .method = napi.wrapCallback(0, Timer_reset),
+                .method = zapi.wrapCallback(0, Timer_reset),
             }, .{
                 .utf8name = "read",
-                .method = napi.wrapCallback(0, Timer_read),
+                .method = zapi.wrapCallback(0, Timer_read),
             }, .{
                 .utf8name = "lap",
-                .method = napi.wrapCallback(0, Timer_lap),
+                .method = zapi.wrapCallback(0, Timer_lap),
             } },
         ),
     );
@@ -110,7 +110,7 @@ comptime {
     // std.debug.assert(@TypeOf(&add_manual) == napi.Callback(2));
 }
 
-fn add_manual(env: napi.Env, cb: napi.CallbackInfo(2)) !napi.Value {
+fn add_manual(env: zapi.Env, cb: zapi.CallbackInfo(2)) !zapi.Value {
     const a = try cb.arg(0).getValueInt32();
     const b = try cb.arg(1).getValueInt32();
 
@@ -123,7 +123,7 @@ fn add(a: i32, b: i32) !i32 {
     return a + b;
 }
 
-fn add_semimanual(env: napi.Env, a: i32, b: napi.Value) !napi.Value {
+fn add_semimanual(env: zapi.Env, a: i32, b: zapi.Value) !zapi.Value {
     const b_int = try b.getValueInt32();
 
     const result = a + b_int;
@@ -153,12 +153,12 @@ var s: S = S{
 
 // Wrapped class example (std.time.Timer)
 
-fn Timer_finalize(_: napi.Env, timer: *std.time.Timer, _: ?*anyopaque) void {
+fn Timer_finalize(_: zapi.Env, timer: *std.time.Timer, _: ?*anyopaque) void {
     std.debug.print("Destroying timer {any}\n", .{timer});
     allocator.destroy(timer);
 }
 
-fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
+fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
     const timer = try allocator.create(std.time.Timer);
     timer.* = try std.time.Timer.start();
     _ = try env.wrap(
@@ -167,22 +167,23 @@ fn Timer_ctor(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
         timer,
         Timer_finalize,
         null,
+        null,
     );
     return cb.this();
 }
 
-fn Timer_reset(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
+fn Timer_reset(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
     const timer = try env.unwrap(std.time.Timer, cb.this());
     timer.reset();
     return try env.getUndefined();
 }
 
-fn Timer_read(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
+fn Timer_read(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
     const timer = try env.unwrap(std.time.Timer, cb.this());
     return try env.createInt64(@intCast(timer.read()));
 }
 
-fn Timer_lap(env: napi.Env, cb: napi.CallbackInfo(0)) !napi.Value {
+fn Timer_lap(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
     const timer = try env.unwrap(std.time.Timer, cb.this());
     return try env.createInt64(@intCast(timer.lap()));
 }
@@ -193,16 +194,16 @@ const AsyncAddData = struct {
     a: i32,
     b: i32,
     result: i32,
-    deferred: napi.Deferred,
-    work: napi.AsyncWork(AsyncAddData),
+    deferred: zapi.Deferred,
+    work: zapi.AsyncWork(AsyncAddData),
 };
 
-fn asyncAddExecute(_: napi.Env, data: *AsyncAddData) void {
+fn asyncAddExecute(_: zapi.Env, data: *AsyncAddData) void {
     std.time.sleep(1_000_000_000); // 1 second
     data.result = data.a + data.b;
 }
 
-fn asyncAddComplete(env: napi.Env, status: napi.status.Status, data: *AsyncAddData) void {
+fn asyncAddComplete(env: zapi.Env, status: zapi.status.Status, data: *AsyncAddData) void {
     defer {
         data.work.delete() catch undefined;
         allocator.destroy(data);
@@ -219,7 +220,7 @@ fn asyncAddComplete(env: napi.Env, status: napi.status.Status, data: *AsyncAddDa
     data.deferred.resolve(env.createInt32(data.result) catch unreachable) catch unreachable;
 }
 
-fn asyncAdd(env: napi.Env, cb: napi.CallbackInfo(2)) !napi.Value {
+fn asyncAdd(env: zapi.Env, cb: zapi.CallbackInfo(2)) !zapi.Value {
     const a = try cb.arg(0).getValueInt32();
     const b = try cb.arg(1).getValueInt32();
 
@@ -255,7 +256,7 @@ const TsfnData = struct {
     count: i32,
 };
 
-fn startThread(env: napi.Env, cb: napi.CallbackInfo(1)) !napi.Value {
+fn startThread(env: zapi.Env, cb: zapi.CallbackInfo(1)) !zapi.Value {
     const context = try allocator.create(TsfnContext);
 
     // Create the thread-safe function
@@ -278,7 +279,7 @@ fn startThread(env: napi.Env, cb: napi.CallbackInfo(1)) !napi.Value {
     return try env.getUndefined();
 }
 
-fn threadMain(tsfn: napi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
+fn threadMain(tsfn: zapi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
     var i: i32 = 0;
     while (i < 5) : (i += 1) {
         const data = allocator.create(TsfnData) catch return;
@@ -294,7 +295,7 @@ fn threadMain(tsfn: napi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
     tsfn.release(.release) catch {};
 }
 
-fn callJs(env: napi.Env, cb: napi.Value, _: *TsfnContext, data: *TsfnData) void {
+fn callJs(env: zapi.Env, cb: zapi.Value, _: *TsfnContext, data: *TsfnData) void {
     defer allocator.destroy(data);
 
     _ = env.callFunction(
@@ -304,7 +305,7 @@ fn callJs(env: napi.Env, cb: napi.Value, _: *TsfnContext, data: *TsfnData) void 
     ) catch {};
 }
 
-fn finalizeTsfn(_: napi.Env, context: *TsfnContext) void {
+fn finalizeTsfn(_: zapi.Env, context: *TsfnContext) void {
     defer {
         context.thread.join();
         allocator.destroy(context);
