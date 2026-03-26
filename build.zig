@@ -11,13 +11,13 @@ pub fn build(b: *std.Build) void {
     options_build_options.addOption([]const u8, "napi_version", option_napi_version);
     const options_module_build_options = options_build_options.createModule();
 
-    const module_napi = b.createModule(.{
+    const module_zapi = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    module_napi.addIncludePath(b.path("include"));
-    b.modules.put(b.dupe("napi"), module_napi) catch @panic("OOM");
+    module_zapi.addIncludePath(b.path("include"));
+    b.modules.put(b.dupe("zapi"), module_zapi) catch @panic("OOM");
 
     const module_example_hello_world = b.createModule(.{
         .root_source_file = b.path("examples/hello_world/mod.zig"),
@@ -67,19 +67,19 @@ pub fn build(b: *std.Build) void {
 
     const tls_run_test = b.step("test", "Run all tests");
 
-    const test_napi = b.addTest(.{
-        .name = "napi",
-        .root_module = module_napi,
-        .filters = b.option([][]const u8, "napi.filters", "napi test filters") orelse &[_][]const u8{},
+    const test_zapi = b.addTest(.{
+        .name = "zapi",
+        .root_module = module_zapi,
+        .filters = b.option([][]const u8, "zapi.filters", "zapi test filters") orelse &[_][]const u8{},
     });
-    const install_test_napi = b.addInstallArtifact(test_napi, .{});
-    const tls_install_test_napi = b.step("build-test:napi", "Install the napi test");
-    tls_install_test_napi.dependOn(&install_test_napi.step);
+    const install_test_zapi = b.addInstallArtifact(test_zapi, .{});
+    const tls_install_test_zapi = b.step("build-test:zapi", "Install the zapi test");
+    tls_install_test_zapi.dependOn(&install_test_zapi.step);
 
-    const run_test_napi = b.addRunArtifact(test_napi);
-    const tls_run_test_napi = b.step("test:napi", "Run the napi test");
-    tls_run_test_napi.dependOn(&run_test_napi.step);
-    tls_run_test.dependOn(&run_test_napi.step);
+    const run_test_zapi = b.addRunArtifact(test_zapi);
+    const tls_run_test_zapi = b.step("test:zapi", "Run the zapi test");
+    tls_run_test_zapi.dependOn(&run_test_zapi.step);
+    tls_run_test.dependOn(&run_test_zapi.step);
 
     const test_example_hello_world = b.addTest(.{
         .name = "example_hello_world",
@@ -109,9 +109,9 @@ pub fn build(b: *std.Build) void {
     tls_run_test_example_type_tag.dependOn(&run_test_example_type_tag.step);
     tls_run_test.dependOn(&run_test_example_type_tag.step);
 
-    module_napi.addImport("build_options", options_module_build_options);
+    module_zapi.addImport("build_options", options_module_build_options);
 
-    module_example_hello_world.addImport("napi", module_napi);
+    module_example_hello_world.addImport("zapi", module_zapi);
 
-    module_example_type_tag.addImport("napi", module_napi);
+    module_example_type_tag.addImport("zapi", module_zapi);
 }

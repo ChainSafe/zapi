@@ -5,7 +5,7 @@
 ///! method) silently reinterprets memory. With unwrapChecked the mismatch is
 ///! caught and returns error.InvalidArg instead.
 const std = @import("std");
-const napi = @import("napi");
+const napi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
 comptime {

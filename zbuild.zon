@@ -1,7 +1,7 @@
 .{
-    .name = .napi_z,
+    .name = .zapi,
     .version = "0.1.0",
-    .fingerprint = 0x86a418feef5ba28a,
+    .fingerprint = 0x77829ef951b38aac,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
@@ -14,7 +14,7 @@
         },
     },
     .modules = .{
-        .napi = .{
+        .zapi = .{
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
             .imports = .{.build_options},
@@ -24,7 +24,7 @@
         .example_hello_world = .{
             .root_module = .{
                 .root_source_file = "examples/hello_world/mod.zig",
-                .imports = .{.napi},
+                .imports = .{.zapi},
                 .link_libc = true,
             },
             .linkage = .dynamic,
@@ -34,7 +34,7 @@
         .example_type_tag = .{
             .root_module = .{
                 .root_source_file = "examples/type_tag/mod.zig",
-                .imports = .{.napi},
+                .imports = .{.zapi},
                 .link_libc = true,
             },
             .linkage = .dynamic,
