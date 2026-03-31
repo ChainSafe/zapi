@@ -4,24 +4,22 @@ const context = @import("context.zig");
 const wrap_function = @import("wrap_function.zig");
 const wrap_class = @import("wrap_class.zig");
 
-/// Simple module export — scans pub decls and registers them.
-/// No lifecycle hooks or env refcounting.
+/// Scans pub decls of `Module` and registers them as JS exports.
 ///
-/// Usage: `comptime { js.exportModule(@This()); }`
-pub fn exportModule(comptime Module: type) void {
-    exportModuleWithOptions(Module, .{});
-}
-
-/// Module export with optional lifecycle hooks and env refcounting.
-///
-/// Options fields (all optional):
-///   .init    = fn (refcount: u32) !void  — called during registration
-///   .cleanup = fn (refcount: u32) void   — called on env exit
+/// Optional second argument for lifecycle hooks:
+///   js.exportModule(@This(), .{
+///       .init    = fn (refcount: u32) !void,  — called during registration
+///       .cleanup = fn (refcount: u32) void,   — called on env exit
+///   })
 ///
 /// The DSL manages an atomic refcount internally:
 ///   - .init receives the refcount BEFORE increment (0 = first env)
 ///   - .cleanup receives the refcount AFTER decrement (0 = last env)
-pub fn exportModuleWithOptions(comptime Module: type, comptime options: anytype) void {
+///
+/// Usage:
+///   comptime { js.exportModule(@This()); }
+///   comptime { js.exportModule(@This(), .{ .init = ..., .cleanup = ... }); }
+pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_lifecycle = has_init or has_cleanup;

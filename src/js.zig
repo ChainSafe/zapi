@@ -43,7 +43,6 @@ pub const createPromise = @import("js/promise.zig").createPromise;
 pub const wrapFunction = @import("js/wrap_function.zig").wrapFunction;
 pub const wrapClass = @import("js/wrap_class.zig").wrapClass;
 pub const exportModule = @import("js/export_module.zig").exportModule;
-pub const exportModuleWithOptions = @import("js/export_module.zig").exportModuleWithOptions;
 
 // Comptime helpers (public for advanced use)
 pub const isDslType = @import("js/wrap_function.zig").isDslType;
