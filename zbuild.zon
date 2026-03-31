@@ -23,6 +23,7 @@
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
             .imports = .{.build_options},
+            .link_libc = true,
         },
     },
     .libraries = .{
