@@ -306,7 +306,7 @@ pub fn getEnvRefcount() Number {
 // ============================================================================
 
 comptime {
-    js.exportModuleWithOptions(@This(), .{
+    js.exportModule(@This(), .{
         .init = struct {
             fn f(refcount: u32) !void {
                 const count = module_init_count.fetchAdd(1, .monotonic);
