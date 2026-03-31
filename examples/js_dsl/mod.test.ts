@@ -177,3 +177,60 @@ describe("mixed DSL + N-API", () => {
 		expect(obj).toEqual({ x: 10 });
 	});
 });
+
+// Section 11: Module Lifecycle
+describe("module lifecycle", () => {
+	it("init was called at least once", () => {
+		expect(mod.getInitCount()).toBeGreaterThanOrEqual(1);
+	});
+
+	it("first init received refcount 0", () => {
+		expect(mod.getFirstRefcount()).toEqual(0);
+	});
+
+	it("current refcount is at least 1", () => {
+		expect(mod.getEnvRefcount()).toBeGreaterThanOrEqual(1);
+	});
+});
+
+describe("module lifecycle - worker threads", () => {
+	it("worker thread increments refcount and cleanup decrements it", async () => {
+		const { Worker } = await import("node:worker_threads");
+		const { resolve } = await import("node:path");
+		const { fileURLToPath } = await import("node:url");
+
+		const refcountBefore = mod.getEnvRefcount();
+
+		// Build an absolute path to the .node file so the worker can load it
+		const thisDir = fileURLToPath(new URL(".", import.meta.url));
+		const nativePath = resolve(thisDir, "../../zig-out/lib/example_js_dsl.node");
+
+		// Spawn a worker that loads the same native module
+		const worker = new Worker(
+			`
+			const { parentPort, workerData } = require("node:worker_threads");
+			const m = require(workerData.nativePath);
+			parentPort.postMessage({ refcount: m.getEnvRefcount() });
+			`,
+			{ eval: true, workerData: { nativePath } },
+		);
+
+		// Worker should see an incremented refcount
+		const workerRefcount = await new Promise((resolve) => {
+			worker.on("message", (msg) => {
+				resolve(msg.refcount);
+			});
+		});
+		expect(workerRefcount).toBeGreaterThan(refcountBefore);
+
+		// Wait for worker to exit (triggers cleanup hook)
+		await new Promise((resolve) => {
+			worker.on("exit", () => resolve(undefined));
+		});
+
+		// After worker exits, refcount should be back to what it was
+		// Give a small delay for cleanup hook to fire
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
+	});
+});

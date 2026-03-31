@@ -274,9 +274,52 @@ pub fn makeObject(key: String, value: Number) !Value {
 }
 
 // ============================================================================
+// Section 11: Module Lifecycle (init/cleanup with env refcounting)
+// ============================================================================
+
+/// Tracks how many env registrations have occurred.
+var module_init_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+/// Captures the refcount value passed to init on the very first call.
+var first_init_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(999);
+
+/// Tracks the current env refcount as seen by the DSL (exposed for testing).
+var current_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+/// Returns how many times init has been called.
+pub fn getInitCount() Number {
+    return Number.from(@as(i32, @intCast(module_init_count.load(.acquire))));
+}
+
+/// Returns the refcount value that was passed to init on the first call.
+pub fn getFirstRefcount() Number {
+    return Number.from(@as(i32, @intCast(first_init_refcount.load(.acquire))));
+}
+
+/// Returns the current env refcount.
+pub fn getEnvRefcount() Number {
+    return Number.from(@as(i32, @intCast(current_refcount.load(.acquire))));
+}
+
+// ============================================================================
 // Module Export
 // ============================================================================
 
 comptime {
-    js.exportModule(@This());
+    js.exportModuleWithOptions(@This(), .{
+        .init = struct {
+            fn f(refcount: u32) !void {
+                const count = module_init_count.fetchAdd(1, .monotonic);
+                if (count == 0) {
+                    first_init_refcount.store(refcount, .release);
+                }
+                current_refcount.store(refcount + 1, .release);
+            }
+        }.f,
+        .cleanup = struct {
+            fn f(refcount: u32) void {
+                current_refcount.store(refcount, .release);
+            }
+        }.f,
+    });
 }
