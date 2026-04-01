@@ -15,6 +15,9 @@ const Uint8Array = js.Uint8Array;
 const Float64Array = js.Float64Array;
 const Promise = js.Promise;
 
+/// Sub-module demonstrating nested namespaces.
+pub const math = @import("math.zig");
+
 // ============================================================================
 // Section 1: Basic Functions
 // ============================================================================
