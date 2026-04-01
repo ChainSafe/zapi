@@ -353,6 +353,60 @@ pub const Point = struct {
 // Module Export
 // ============================================================================
 
+// ============================================================================
+// Section 15: Getters and Setters
+// ============================================================================
+
+/// A settings class demonstrating computed getters and setters.
+pub const Settings = struct {
+    pub const js_class = true;
+    pub const js_getters = .{ "volume", "muted", "label" };
+    pub const js_setters = .{ "volume", "muted" };
+
+    _volume: i32,
+    _muted: bool,
+    _label: []const u8,
+
+    pub fn init() Settings {
+        return .{
+            ._volume = 50,
+            ._muted = false,
+            ._label = "default",
+        };
+    }
+
+    // Read-write getter/setter: obj.volume / obj.volume = 80
+    pub fn volume(self: Settings) Number {
+        return Number.from(self._volume);
+    }
+
+    pub fn set_volume(self: *Settings, value: Number) !void {
+        const v = value.assertI32();
+        if (v < 0 or v > 100) return error.VolumeOutOfRange;
+        self._volume = v;
+    }
+
+    // Read-write getter/setter: obj.muted / obj.muted = true
+    pub fn muted(self: Settings) Boolean {
+        return Boolean.from(self._muted);
+    }
+
+    pub fn set_muted(self: *Settings, value: Boolean) void {
+        self._muted = value.assertBool();
+    }
+
+    // Read-only getter: obj.label
+    pub fn label(self: Settings) String {
+        return String.from(self._label);
+    }
+
+    // Regular method (not a getter)
+    pub fn reset(self: *Settings) void {
+        self._volume = 50;
+        self._muted = false;
+    }
+};
+
 comptime {
     js.exportModule(@This(), .{
         .init = struct {

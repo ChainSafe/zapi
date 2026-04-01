@@ -259,6 +259,65 @@ describe("optional parameters", () => {
 	});
 });
 
+// Section 15: Getters and Setters
+describe("Settings class (getters/setters)", () => {
+	it("has getter for volume with default value", () => {
+		const s = new mod.Settings();
+		expect(s.volume).toEqual(50);
+	});
+
+	it("has setter for volume", () => {
+		const s = new mod.Settings();
+		s.volume = 80;
+		expect(s.volume).toEqual(80);
+	});
+
+	it("setter validates volume range", () => {
+		const s = new mod.Settings();
+		expect(() => { s.volume = 101; }).toThrow();
+		expect(() => { s.volume = -1; }).toThrow();
+		expect(s.volume).toEqual(50); // unchanged after errors
+	});
+
+	it("has getter/setter for muted", () => {
+		const s = new mod.Settings();
+		expect(s.muted).toBe(false);
+		s.muted = true;
+		expect(s.muted).toBe(true);
+	});
+
+	it("has read-only getter for label", () => {
+		const s = new mod.Settings();
+		expect(s.label).toEqual("default");
+		// In ESM strict mode, assigning to a getter-only property throws TypeError
+		expect(() => { (s as any).label = "changed"; }).toThrow();
+	});
+
+	it("getter is not callable as a method", () => {
+		const s = new mod.Settings();
+		expect(typeof s.volume).toBe("number");
+		expect(typeof s.volume).not.toBe("function");
+	});
+
+	it("reset method still works alongside getters", () => {
+		const s = new mod.Settings();
+		s.volume = 80;
+		s.muted = true;
+		s.reset();
+		expect(s.volume).toEqual(50);
+		expect(s.muted).toBe(false);
+	});
+
+	it("multiple instances have independent state", () => {
+		const s1 = new mod.Settings();
+		const s2 = new mod.Settings();
+		s1.volume = 10;
+		s2.volume = 90;
+		expect(s1.volume).toEqual(10);
+		expect(s2.volume).toEqual(90);
+	});
+});
+
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
 		const { Worker } = await import("node:worker_threads");
