@@ -39,22 +39,25 @@ pub fn add(a: js.Number, b: js.Number) js.Number {
 
 pub const Counter = struct {
     pub const js_class = true;
-    count: i32,
+    pub const js_getters = .{ "count" };
+
+    _count: i32,
 
     pub fn init(start: js.Number) Counter {
-        return .{ .count = start.assertI32() };
+        return .{ ._count = start.assertI32() };
     }
 
     pub fn increment(self: *Counter) void {
-        self.count += 1;
+        self._count += 1;
     }
 
-    pub fn getCount(self: Counter) js.Number {
-        return js.Number.from(self.count);
+    // Getter: obj.count (not obj.count())
+    pub fn count(self: Counter) js.Number {
+        return js.Number.from(self._count);
     }
 };
 
-comptime { js.exportModule(@This()); }
+comptime { js.exportModule(@This(), .{}); }
 ```
 
 **JavaScript usage:**
@@ -64,10 +67,10 @@ const mod = require('./my_module.node');
 mod.add(1, 2); // 3
 const c = new mod.Counter(0);
 c.increment();
-c.getCount(); // 1
+c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_class = true` become JS classes. One line — `comptime { js.exportModule(@This()); }` — registers everything.
+`pub` functions are auto-exported, and structs with `js_class = true` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
 
 ---
 
@@ -151,14 +154,112 @@ pub const Timer = struct {
 };
 ```
 
-**Rules:**
+**Method classification:**
 
-- `pub const js_class = true` — marker that identifies the struct as a JS class
-- `pub fn init(...)` — constructor (must return `T` or `!T`)
-- `pub fn method(self: *T, ...)` — mutable instance method
-- `pub fn method(self: T, ...)` — immutable instance method
-- `pub fn method(...)` — static method (no self)
-- `pub fn deinit(self: *T)` — optional GC destructor
+| Signature | JS Behavior |
+|-----------|-------------|
+| `pub fn init(...)` | Constructor (`new Class(...)`) — must return `T` or `!T` |
+| `pub fn method(self: T, ...)` | Immutable instance method |
+| `pub fn method(self: *T, ...)` | Mutable instance method |
+| `pub fn method(self: T, ...) !T` | Instance factory — returns a new instance |
+| `pub fn method(...) !T` | Static factory — `Class.method()` returns new instance |
+| `pub fn method(...)` | Static method (no self, returns non-T) |
+| `pub fn deinit(self: *T)` | Optional GC destructor |
+
+### Static Factory Methods
+
+Static methods that return `!T` (or `T`) are automatically registered as factory methods. The DSL handles heap allocation, `napi_new_instance`, and wrapping:
+
+```zig
+pub const PublicKey = struct {
+    pub const js_class = true;
+    pk: bls.PublicKey,
+
+    pub fn init() PublicKey {
+        return .{ .pk = undefined };
+    }
+
+    // Static factory: PublicKey.fromBytes(bytes)
+    pub fn fromBytes(bytes: js.Uint8Array) !PublicKey {
+        const slice = try bytes.toSlice();
+        return .{ .pk = try bls.PublicKey.deserialize(slice) };
+    }
+};
+```
+
+JS: `const pk = PublicKey.fromBytes(bytes);`
+
+Classes with static factories must have a zero-arg `init()`.
+
+### Instance Factory Methods
+
+Instance methods that return `!T` (same class type) create new instances. The DSL gets the constructor from `this.constructor` automatically:
+
+```zig
+pub fn clone(self: MyState) !MyState {
+    const cloned = try self.data.clone();
+    return .{ .data = cloned };
+}
+```
+
+JS: `const newState = state.clone();` — returns a new instance, original unchanged.
+
+### Optional Parameters
+
+Parameters with optional DSL types (`?js.Number`, `?js.Boolean`, etc.) become optional JS arguments:
+
+```zig
+pub fn fromBytes(bytes: js.Uint8Array, validate: ?js.Boolean) !PublicKey {
+    const do_validate = if (validate) |v| try v.toBool() else false;
+    // ...
+}
+```
+
+JS: `PublicKey.fromBytes(bytes)` or `PublicKey.fromBytes(bytes, true)`
+
+### Getters and Setters
+
+Declare `js_getters` and `js_setters` to register computed property accessors:
+
+```zig
+pub const Config = struct {
+    pub const js_class = true;
+    pub const js_getters = .{ "volume", "muted", "label" };
+    pub const js_setters = .{ "volume", "muted" };
+
+    _volume: i32,
+    _muted: bool,
+    _label: []const u8,
+
+    pub fn init() Config {
+        return .{ ._volume = 50, ._muted = false, ._label = "default" };
+    }
+
+    // Read-write: obj.volume / obj.volume = 80
+    pub fn volume(self: Config) js.Number {
+        return js.Number.from(self._volume);
+    }
+    pub fn set_volume(self: *Config, value: js.Number) !void {
+        const v = value.assertI32();
+        if (v < 0 or v > 100) return error.VolumeOutOfRange;
+        self._volume = v;
+    }
+
+    // Read-only: obj.label
+    pub fn label(self: Config) js.String {
+        return js.String.from(self._label);
+    }
+};
+```
+
+JS: `cfg.volume = 80; cfg.label; // "default"`
+
+**Rules:**
+- `js_getters` — tuple of function names to register as getters (optional)
+- `js_setters` — subset of `js_getters` that also have setters (optional, requires `js_getters`)
+- Getter: `pub fn name(self: T) DslType` — zero non-self args, must return a DSL type (not void)
+- Setter: `pub fn set_name(self: *T, value: DslType) void` or `!void` — mutable self, one arg
+- Names in `js_getters` are NOT exposed as callable methods
 
 ---
 
@@ -206,18 +307,57 @@ pub fn applyCallback(val: Number, cb: Function) !Value {
 
 ---
 
+## Namespaces
+
+Import Zig modules as `pub const` to create JS namespaces. The DSL recursively registers all DSL-compatible declarations:
+
+```zig
+// root.zig
+pub const math = @import("math.zig");     // → exports.math.multiply(...)
+pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
+
+comptime { js.exportModule(@This(), .{}); }
+```
+
+Namespaces nest arbitrarily — a sub-module with more `pub const` imports creates deeper nesting.
+
+---
+
+## Module Lifecycle
+
+`exportModule` accepts optional lifecycle hooks with atomic env refcounting:
+
+```zig
+comptime {
+    js.exportModule(@This(), .{
+        .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
+        .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
+    });
+}
+```
+
+This enables safe shared-state initialization for worker thread scenarios.
+
+---
+
 ## Mixing DSL and N-API
 
 ```zig
 pub fn advanced() !Value {
-    const e = js.env();  // access low-level napi.Env
+    const e = js.env();      // access low-level napi.Env
     const obj = try e.createObject();
     // use any napi.Env method...
     return .{ .val = obj };
 }
 ```
 
-`js.env()` gives access to the full N-API when you need it. `js.allocator()` provides the C allocator.
+**Context accessors:**
+
+| Function | Description |
+|----------|-------------|
+| `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
+| `js.allocator()` | C allocator for native allocations |
+| `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
 
 ---
 
@@ -574,7 +714,10 @@ Resolution order:
 See the [examples/](examples/) directory for comprehensive examples including:
 - All DSL types (Number, String, Boolean, BigInt, Date, Array, Object, TypedArrays, Promise)
 - Error handling and nullable returns
-- Classes with lifecycle management
+- Classes with static factories, instance factories, and optional parameters
+- Computed getters and setters
+- Nested namespaces
+- Module lifecycle hooks (init/cleanup with worker thread refcounting)
 - Callbacks and mixed DSL/N-API usage
 - Low-level N-API with manual registration
 
