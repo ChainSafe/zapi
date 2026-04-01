@@ -45,7 +45,7 @@ pub fn wrapClass(comptime T: type) type {
             inline for (decls) |decl| {
                 const cat = comptime classifyDecl(decl.name);
                 switch (cat) {
-                    .getter, .instance_method, .static_factory, .static_method => {
+                    .getter, .instance_method, .instance_factory, .static_factory, .static_method => {
                         count += 1;
                     },
                     .setter, .skip => {},
@@ -86,7 +86,7 @@ pub fn wrapClass(comptime T: type) type {
                 // Pass 2: Instance methods, static factories, static methods
                 for (decls) |decl| {
                     const cat = classifyDecl(decl.name);
-                    if (cat != .instance_method and cat != .static_factory and cat != .static_method) continue;
+                    if (cat != .instance_method and cat != .instance_factory and cat != .static_factory and cat != .static_method) continue;
 
                     const field = @field(T, decl.name);
                     const fn_info = @typeInfo(@TypeOf(field)).@"fn";
@@ -100,6 +100,11 @@ pub fn wrapClass(comptime T: type) type {
                         .instance_method => {
                             const is_by_value = params[0].type.? == T;
                             desc.method = wrapMethod(T, field, is_by_value);
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
+                        },
+                        .instance_factory => {
+                            const is_by_value = params[0].type.? == T;
+                            desc.method = wrapInstanceFactory(T, field, is_by_value);
                             desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
                         },
                         .static_factory => {
@@ -170,7 +175,7 @@ pub fn wrapClass(comptime T: type) type {
             return null;
         }
 
-        const DeclCategory = enum { getter, setter, instance_method, static_factory, static_method, skip };
+        const DeclCategory = enum { getter, setter, instance_method, instance_factory, static_factory, static_method, skip };
 
         fn classifyDecl(comptime name: []const u8) DeclCategory {
             if (shouldSkipDecl(name)) return .skip;
@@ -188,9 +193,16 @@ pub fn wrapClass(comptime T: type) type {
                 if (isSetter(target)) return .setter;
             }
 
-            // Existing classification logic
             const params = field_info.@"fn".params;
-            if (params.len > 0 and isClassSelfParam(params[0].type.?)) return .instance_method;
+
+            // Instance method or instance factory (has self param)
+            if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
+                // Instance factory: has self, return type (stripped of !) == T
+                if (isStaticFactory(field)) return .instance_factory;
+                return .instance_method;
+            }
+
+            // Static factory or static method (no self param)
             if (isStaticFactory(field)) return .static_factory;
             return .static_method;
         }
@@ -447,6 +459,10 @@ pub fn wrapClass(comptime T: type) type {
                         return null;
                     };
 
+                    // Store JS this for js.thisArg() access
+                    const prev_this = context.setThis(this_val);
+                    defer context.restoreThis(prev_this);
+
                     // Build full args tuple (self + JS args)
                     var args: std.meta.ArgsTuple(MethodFnType) = undefined;
                     if (is_by_value) {
@@ -464,6 +480,126 @@ pub fn wrapClass(comptime T: type) type {
                 }
             };
             return method_cb.callback;
+        }
+
+        /// Generates a C callback for an instance method that returns a new instance of Class.
+        /// Like wrapStaticFactory but for instance methods — gets the constructor from this.constructor.
+        fn wrapInstanceFactory(comptime Class: type, comptime method_fn: anytype, comptime is_by_value: bool) napi.c.napi_callback {
+            const MethodFnType = @TypeOf(method_fn);
+            const method_info = @typeInfo(MethodFnType).@"fn";
+            const method_params = method_info.params;
+            const js_argc = method_params.len - 1; // excludes self
+            const required_js_argc = comptime wrap_function.requiredArgCount(method_params[1..]);
+            const ReturnType = method_info.return_type.?;
+
+            const factory_cb = struct {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                    const e = napi.Env{ .env = raw_env };
+                    const prev_env = context.setEnv(e);
+                    defer context.restoreEnv(prev_env);
+
+                    // Get args and this
+                    var raw_args: [if (js_argc > 0) js_argc else 1]napi.c.napi_value = std.mem.zeroes([if (js_argc > 0) js_argc else 1]napi.c.napi_value);
+                    var actual_argc: usize = js_argc;
+                    var this_arg: napi.c.napi_value = null;
+                    napi.status.check(napi.c.napi_get_cb_info(
+                        raw_env,
+                        cb_info,
+                        &actual_argc,
+                        if (js_argc > 0) &raw_args else null,
+                        &this_arg,
+                        null,
+                    )) catch {
+                        e.throwError("", "Failed to get callback info in instance factory") catch {};
+                        return null;
+                    };
+
+                    if (required_js_argc > 0 and actual_argc < required_js_argc) {
+                        e.throwTypeError("", "Method expects at least " ++ std.fmt.comptimePrint("{d}", .{required_js_argc}) ++ " arguments") catch {};
+                        return null;
+                    }
+
+                    // Unwrap self
+                    const this_val = napi.Value{ .env = raw_env, .value = this_arg };
+                    const self_ptr = e.unwrap(Class, this_val) catch {
+                        e.throwError("", "Failed to unwrap native object in instance factory") catch {};
+                        return null;
+                    };
+
+                    // Store JS this for js.thisArg() access
+                    const prev_this = context.setThis(this_val);
+                    defer context.restoreThis(prev_this);
+
+                    // Build args tuple (self + JS args)
+                    var args: std.meta.ArgsTuple(MethodFnType) = undefined;
+                    if (is_by_value) {
+                        args[0] = self_ptr.*;
+                    } else {
+                        args[0] = self_ptr;
+                    }
+                    inline for (0..js_argc) |i| {
+                        const ParamType = method_params[i + 1].type.?;
+                        args[i + 1] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
+                    }
+
+                    // Call user function → get T value
+                    const instance = if (@typeInfo(ReturnType) == .error_union)
+                        @call(.auto, method_fn, args) catch |err| {
+                            e.throwError(@errorName(err), @errorName(err)) catch {};
+                            return null;
+                        }
+                    else
+                        @call(.auto, method_fn, args);
+
+                    // Allocate on heap
+                    const obj_ptr = std.heap.c_allocator.create(Class) catch {
+                        e.throwError("", "Out of memory allocating native object") catch {};
+                        return null;
+                    };
+                    obj_ptr.* = instance;
+
+                    // Get constructor from this.constructor (instance method, not static)
+                    const ctor_val = this_val.getNamedProperty("constructor") catch {
+                        std.heap.c_allocator.destroy(obj_ptr);
+                        e.throwError("", "Failed to get constructor from instance") catch {};
+                        return null;
+                    };
+
+                    // Create new JS instance
+                    var js_instance: napi.c.napi_value = null;
+                    napi.status.check(napi.c.napi_new_instance(
+                        raw_env,
+                        ctor_val.value,
+                        0,
+                        null,
+                        &js_instance,
+                    )) catch {
+                        std.heap.c_allocator.destroy(obj_ptr);
+                        e.throwError("", "Failed to create instance in instance factory") catch {};
+                        return null;
+                    };
+
+                    // Remove the wrap that the constructor created (init() result),
+                    // then re-wrap with the factory's result.
+                    const instance_napi = napi.Value{ .env = raw_env, .value = js_instance };
+                    const old_ptr = e.removeWrap(Class, instance_napi) catch {
+                        std.heap.c_allocator.destroy(obj_ptr);
+                        e.throwError("", "Failed to remove constructor wrap in instance factory") catch {};
+                        return null;
+                    };
+                    std.heap.c_allocator.destroy(old_ptr);
+
+                    // Wrap with the factory's result
+                    _ = e.wrap(instance_napi, Class, obj_ptr, defaultFinalize, null, null) catch {
+                        std.heap.c_allocator.destroy(obj_ptr);
+                        e.throwError("", "Failed to wrap native object in instance factory") catch {};
+                        return null;
+                    };
+
+                    return js_instance;
+                }
+            };
+            return factory_cb.callback;
         }
 
         /// Generates a C callback for a getter property of class `Class`.
@@ -498,6 +634,10 @@ pub fn wrapClass(comptime T: type) type {
                         e.throwError("", "Failed to unwrap native object in getter") catch {};
                         return null;
                     };
+
+                    // Store JS this for js.thisArg() access
+                    const prev_this = context.setThis(this_val);
+                    defer context.restoreThis(prev_this);
 
                     // Build args tuple (self only)
                     var args: std.meta.ArgsTuple(GetterFnType) = undefined;
@@ -550,6 +690,10 @@ pub fn wrapClass(comptime T: type) type {
                         e.throwError("", "Failed to unwrap native object in setter") catch {};
                         return null;
                     };
+
+                    // Store JS this for js.thisArg() access
+                    const prev_this = context.setThis(this_val);
+                    defer context.restoreThis(prev_this);
 
                     // Convert the assigned value
                     const value_arg = convertArg(ValueParamType, raw_args[0], raw_env);

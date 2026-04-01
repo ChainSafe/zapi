@@ -7,6 +7,9 @@ pub const env = context.env;
 pub const allocator = context.allocator;
 pub const setEnv = context.setEnv;
 pub const restoreEnv = context.restoreEnv;
+pub const thisArg = context.thisArg;
+pub const setThis = context.setThis;
+pub const restoreThis = context.restoreThis;
 
 // Primitive types
 pub const Number = @import("js/number.zig").Number;
