@@ -14,6 +14,27 @@ pub fn isDslType(comptime T: type) bool {
     return false;
 }
 
+/// Checks if T is a DSL type, napi.Value, or an optional wrapping one of those.
+pub fn isDslOrOptionalDsl(comptime T: type) bool {
+    if (T == napi.Value) return true;
+    if (isDslType(T)) return true;
+    if (@typeInfo(T) == .optional) {
+        const Inner = @typeInfo(T).optional.child;
+        return Inner == napi.Value or isDslType(Inner);
+    }
+    return false;
+}
+
+/// Counts the number of required (non-optional) parameters.
+pub fn requiredArgCount(comptime params: []const std.builtin.Type.Fn.Param) usize {
+    var count: usize = 0;
+    for (params) |p| {
+        const PT = p.type orelse continue;
+        if (@typeInfo(PT) != .optional) count += 1;
+    }
+    return count;
+}
+
 /// Wraps a raw napi.Value into a DSL wrapper type by setting its `val` field.
 pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env) T {
     if (T == napi.Value) {
@@ -23,6 +44,23 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
         return T{ .val = napi.Value{ .env = env, .value = raw } };
     }
     @compileError("convertArg: unsupported type " ++ @typeName(T));
+}
+
+/// Like convertArg, but handles optional types (?T).
+/// Returns null if param_index >= actual_argc, otherwise wraps as the inner type.
+pub fn convertArgWithOptional(
+    comptime T: type,
+    raw: napi.c.napi_value,
+    env: napi.c.napi_env,
+    param_index: usize,
+    actual_argc: usize,
+) T {
+    if (@typeInfo(T) == .optional) {
+        if (param_index >= actual_argc) return null;
+        const Inner = @typeInfo(T).optional.child;
+        return convertArg(Inner, raw, env);
+    }
+    return convertArg(T, raw, env);
 }
 
 /// Extracts the raw napi_value from a DSL type, napi.Value, or handles void.
@@ -102,6 +140,7 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
     const fn_info = @typeInfo(FnType).@"fn";
     const params = fn_info.params;
     const argc = params.len;
+    const required_argc = comptime requiredArgCount(params);
 
     const wrapper = struct {
         pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
@@ -109,7 +148,6 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
             const prev = context.setEnv(e);
             defer context.restoreEnv(prev);
 
-            // Extract arguments
             var raw_args: [if (argc > 0) argc else 1]napi.c.napi_value = std.mem.zeroes([if (argc > 0) argc else 1]napi.c.napi_value);
             var actual_argc: usize = argc;
             var this_arg: napi.c.napi_value = null;
@@ -125,17 +163,15 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
                 return null;
             };
 
-            // Validate argument count
-            if (argc > 0 and actual_argc < argc) {
-                e.throwTypeError("", "Expected " ++ std.fmt.comptimePrint("{d}", .{argc}) ++ " arguments") catch {};
+            if (required_argc > 0 and actual_argc < required_argc) {
+                e.throwTypeError("", "Expected at least " ++ std.fmt.comptimePrint("{d}", .{required_argc}) ++ " arguments") catch {};
                 return null;
             }
 
-            // Build args tuple
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..argc) |i| {
                 const ParamType = params[i].type.?;
-                args[i] = convertArg(ParamType, raw_args[i], raw_env);
+                args[i] = convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
             }
 
             return callAndConvert(func, args, raw_env);
