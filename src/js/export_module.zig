@@ -140,9 +140,52 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value) !void
 
                 const cls = napi.Value{ .env = env.env, .value = class_val };
                 try module.setNamedProperty(name, cls);
+            } else if (@typeInfo(InnerType) == .@"struct" and hasDslDecls(InnerType)) {
+                // Namespace — create JS object and recurse
+                const ns_obj = try env.createObject();
+                try registerDecls(InnerType, env, ns_obj);
+                const name: [:0]const u8 = decl.name ++ "";
+                try module.setNamedProperty(name, ns_obj);
             }
         }
     }
+}
+
+/// Comptime check: does this struct type contain any exportable DSL content?
+/// Returns true if it has at least one DSL-compatible function, js_class struct,
+/// or nested struct that itself qualifies as a namespace.
+fn hasDslDecls(comptime T: type) bool {
+    if (@typeInfo(T) != .@"struct") return false;
+    const decls = @typeInfo(T).@"struct".decls;
+    for (decls) |decl| {
+        const field = @field(T, decl.name);
+        const FieldType = @TypeOf(field);
+        const field_info = @typeInfo(FieldType);
+
+        if (field_info == .@"fn") {
+            const fn_params = field_info.@"fn".params;
+            const is_dsl = blk: {
+                for (fn_params) |p| {
+                    const PT = p.type orelse break :blk false;
+                    if (PT != napi.Value and !wrap_function.isDslType(PT)) break :blk false;
+                }
+                break :blk true;
+            };
+            if (is_dsl) return true;
+        } else if (field_info == .type) {
+            const InnerType = field;
+            if (@typeInfo(InnerType) == .@"struct") {
+                if (@hasDecl(InnerType, "js_class") and
+                    @TypeOf(@field(InnerType, "js_class")) == bool and
+                    @field(InnerType, "js_class") == true)
+                {
+                    return true;
+                }
+                if (hasDslDecls(InnerType)) return true;
+            }
+        }
+    }
+    return false;
 }
 
 test "exportModule comptime smoke test" {
