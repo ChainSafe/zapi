@@ -8,8 +8,9 @@ const wrap_class = @import("wrap_class.zig");
 ///
 /// Optional second argument for lifecycle hooks:
 ///   js.exportModule(@This(), .{
-///       .init    = fn (refcount: u32) !void,  — called during registration
-///       .cleanup = fn (refcount: u32) void,   — called on env exit
+///       .init     = fn (refcount: u32) !void,       — called during registration
+///       .cleanup  = fn (refcount: u32) void,         — called on env exit
+///       .register = fn (napi.Env, napi.Value) !void, — called with (env, exports) for manual registration
 ///   })
 ///
 /// The DSL manages an atomic refcount internally:
@@ -19,9 +20,11 @@ const wrap_class = @import("wrap_class.zig");
 /// Usage:
 ///   comptime { js.exportModule(@This()); }
 ///   comptime { js.exportModule(@This(), .{ .init = ..., .cleanup = ... }); }
+///   comptime { js.exportModule(@This(), .{ .register = myRegisterFn }); }
 pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
+    const has_register = @hasField(@TypeOf(options), "register");
     const has_lifecycle = has_init or has_cleanup;
 
     const State = struct {
@@ -62,6 +65,11 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
             // Register all pub decls
             try registerDecls(Module, env, module);
+
+            // Manual registration hook for non-DSL modules
+            if (has_register) {
+                try options.register(env, module);
+            }
 
             // Lifecycle: register cleanup hook
             if (has_cleanup) {
