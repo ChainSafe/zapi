@@ -157,7 +157,7 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value) !void
 fn hasDslDecls(comptime T: type) bool {
     if (@typeInfo(T) != .@"struct") return false;
     const decls = @typeInfo(T).@"struct".decls;
-    for (decls) |decl| {
+    inline for (decls) |decl| {
         const field = @field(T, decl.name);
         const FieldType = @TypeOf(field);
         const field_info = @typeInfo(FieldType);
@@ -165,7 +165,7 @@ fn hasDslDecls(comptime T: type) bool {
         if (field_info == .@"fn") {
             const fn_params = field_info.@"fn".params;
             const is_dsl = blk: {
-                for (fn_params) |p| {
+                inline for (fn_params) |p| {
                     const PT = p.type orelse break :blk false;
                     if (PT != napi.Value and !wrap_function.isDslType(PT)) break :blk false;
                 }
