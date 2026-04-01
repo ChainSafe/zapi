@@ -216,6 +216,49 @@ describe("nested namespaces", () => {
 	});
 });
 
+// Section 13: Static Factory Methods + Optional Parameters
+describe("static factories", () => {
+	it("Point.create returns new instance", () => {
+		const p = mod.Point.create(3, 4);
+		expect(p.getX()).toEqual(3);
+		expect(p.getY()).toEqual(4);
+	});
+
+	it("Point.fromArray without offset", () => {
+		const p = mod.Point.fromArray([10, 20]);
+		expect(p.getX()).toEqual(10);
+		expect(p.getY()).toEqual(20);
+	});
+
+	it("Point.fromArray with offset", () => {
+		const p = mod.Point.fromArray([0, 0, 5, 7], 2);
+		expect(p.getX()).toEqual(5);
+		expect(p.getY()).toEqual(7);
+	});
+
+	it("new Point() creates zero point", () => {
+		const p = new mod.Point();
+		expect(p.getX()).toEqual(0);
+		expect(p.getY()).toEqual(0);
+	});
+});
+
+describe("optional parameters", () => {
+	it("translate with both args", () => {
+		const p = mod.Point.create(1, 1);
+		p.translate(5, 10);
+		expect(p.getX()).toEqual(6);
+		expect(p.getY()).toEqual(11);
+	});
+
+	it("translate with optional omitted", () => {
+		const p = mod.Point.create(1, 1);
+		p.translate(5);
+		expect(p.getX()).toEqual(6);
+		expect(p.getY()).toEqual(1);
+	});
+});
+
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
 		const { Worker } = await import("node:worker_threads");

@@ -305,6 +305,51 @@ pub fn getEnvRefcount() Number {
 }
 
 // ============================================================================
+// Section 13: Static Factory Methods + Optional Parameters
+// ============================================================================
+
+/// A point class demonstrating static factories and optional params.
+pub const Point = struct {
+    pub const js_class = true;
+    x: i32,
+    y: i32,
+
+    pub fn init() Point {
+        return .{ .x = 0, .y = 0 };
+    }
+
+    /// Static factory: Point.create(x, y)
+    pub fn create(x: Number, y: Number) Point {
+        return .{ .x = x.assertI32(), .y = y.assertI32() };
+    }
+
+    /// Static factory with optional: Point.fromArray(arr, offset?)
+    pub fn fromArray(arr: Array, offset: ?Number) !Point {
+        const off: u32 = if (offset) |o| o.assertU32() else 0;
+        const x_val = try arr.getNumber(off);
+        const y_val = try arr.getNumber(off + 1);
+        return .{ .x = x_val.assertI32(), .y = y_val.assertI32() };
+    }
+
+    /// Instance method
+    pub fn getX(self: Point) Number {
+        return Number.from(self.x);
+    }
+
+    pub fn getY(self: Point) Number {
+        return Number.from(self.y);
+    }
+
+    /// Instance method with optional param
+    pub fn translate(self: *Point, dx: Number, dy: ?Number) void {
+        self.x += dx.assertI32();
+        if (dy) |d| {
+            self.y += d.assertI32();
+        }
+    }
+};
+
+// ============================================================================
 // Module Export
 // ============================================================================
 

@@ -92,7 +92,7 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value) !void
             const is_dsl_fn = comptime blk: {
                 for (fn_params) |p| {
                     const PT = p.type orelse break :blk false;
-                    if (PT != napi.Value and !wrap_function.isDslType(PT)) break :blk false;
+                    if (!wrap_function.isDslOrOptionalDsl(PT)) break :blk false;
                 }
                 break :blk true;
             };
@@ -167,7 +167,7 @@ fn hasDslDecls(comptime T: type) bool {
             const is_dsl = blk: {
                 inline for (fn_params) |p| {
                     const PT = p.type orelse break :blk false;
-                    if (PT != napi.Value and !wrap_function.isDslType(PT)) break :blk false;
+                    if (!wrap_function.isDslOrOptionalDsl(PT)) break :blk false;
                 }
                 break :blk true;
             };
