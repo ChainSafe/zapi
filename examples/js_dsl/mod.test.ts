@@ -193,6 +193,29 @@ describe("module lifecycle", () => {
 	});
 });
 
+// Section 12: Nested Namespaces
+describe("nested namespaces", () => {
+	it("math.multiply", () => {
+		expect(mod.math.multiply(3, 4)).toEqual(12);
+	});
+
+	it("math.square", () => {
+		expect(mod.math.square(5)).toEqual(25);
+	});
+
+	it("math.utils.clamp within range", () => {
+		expect(mod.math.utils.clamp(5, 0, 10)).toEqual(5);
+	});
+
+	it("math.utils.clamp below min", () => {
+		expect(mod.math.utils.clamp(-5, 0, 10)).toEqual(0);
+	});
+
+	it("math.utils.clamp above max", () => {
+		expect(mod.math.utils.clamp(15, 0, 10)).toEqual(10);
+	});
+});
+
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
 		const { Worker } = await import("node:worker_threads");
