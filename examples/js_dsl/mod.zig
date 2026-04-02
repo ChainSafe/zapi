@@ -72,6 +72,11 @@ pub fn doubleNumber(n: Number) Number {
     return Number.from(n.assertI32() * 2);
 }
 
+/// Return a Number created from a u64 value just above i64 max.
+pub fn largeUnsignedBoundary() Number {
+    return Number.from(@as(u64, std.math.maxInt(i64)) + 1);
+}
+
 /// Negate a boolean.
 pub fn toggleBool(b: Boolean) Boolean {
     return Boolean.from(!b.assertBool());

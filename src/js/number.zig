@@ -47,6 +47,10 @@ pub const Number = struct {
     /// Creates a JS Number from a Zig numeric value.
     /// Accepts integer types (i8..i64, u8..u64), float types (f32, f64),
     /// comptime_int, and comptime_float.
+    ///
+    /// Unsigned 64-bit values above `i64` max are created via JS `number`
+    /// (`double`) rather than `int64`, so values above `2^53 - 1` may lose
+    /// integer precision. Use `BigInt` when exact large integers matter.
     pub fn from(value: anytype) Number {
         const e = context.env();
         const T = @TypeOf(value);
@@ -57,6 +61,8 @@ pub const Number = struct {
                         break :blk e.createInt32(@intCast(value)) catch @panic("Number.from: createInt32 failed");
                     } else if (value >= std.math.minInt(i64) and value <= std.math.maxInt(i64)) {
                         break :blk e.createInt64(@intCast(value)) catch @panic("Number.from: createInt64 failed");
+                    } else if (value >= 0 and value <= std.math.maxInt(u64)) {
+                        break :blk e.createDouble(@floatFromInt(value)) catch @panic("Number.from: createDouble failed");
                     } else {
                         @compileError("Number.from: value out of range for JS number. Use BigInt for i128/u128.");
                     }
@@ -66,8 +72,13 @@ pub const Number = struct {
                         break :blk e.createInt32(@intCast(value)) catch @panic("Number.from: createInt32 failed");
                     } else if (info.bits <= 32 and info.signedness == .unsigned) {
                         break :blk e.createUint32(@intCast(value)) catch @panic("Number.from: createUint32 failed");
-                    } else if (info.bits <= 64) {
+                    } else if (info.bits <= 64 and info.signedness == .signed) {
                         break :blk e.createInt64(@intCast(value)) catch @panic("Number.from: createInt64 failed");
+                    } else if (info.bits <= 64 and info.signedness == .unsigned) {
+                        if (value <= std.math.maxInt(i64)) {
+                            break :blk e.createInt64(@intCast(value)) catch @panic("Number.from: createInt64 failed");
+                        }
+                        break :blk e.createDouble(@floatFromInt(value)) catch @panic("Number.from: createDouble failed");
                     } else {
                         @compileError("Number.from: integer too large for JS number. Use BigInt for i128/u128.");
                     }
