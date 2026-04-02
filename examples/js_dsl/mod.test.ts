@@ -58,6 +58,12 @@ describe("primitive types", () => {
 		expect(mod.doubleBigInt(50n)).toEqual(100n);
 	});
 
+	it("largeUnsignedBoundary survives u64 values above i64 max", () => {
+		const value = mod.largeUnsignedBoundary();
+		expect(Number.isFinite(value)).toBe(true);
+		expect(value).toEqual(2 ** 63);
+	});
+
 	it("tomorrow adds one day", () => {
 		const now = new Date("2025-01-01T00:00:00Z");
 		const result = mod.tomorrow(now);
