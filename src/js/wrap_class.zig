@@ -49,12 +49,16 @@ pub fn wrapClass(comptime T: type) type {
         /// C-ABI constructor callback for napi_define_class.
         pub const constructor: napi.c.napi_callback = genConstructor();
 
-        /// Default GC-invoked destructor. Frees the native object using c_allocator.
-        pub fn defaultFinalize(_: napi.Env, obj: *T, _: ?*anyopaque) void {
+        fn destroyNativeObject(obj: *T) void {
             if (@hasDecl(T, "deinit")) {
                 obj.deinit();
             }
             std.heap.c_allocator.destroy(obj);
+        }
+
+        /// Default GC-invoked destructor. Frees the native object using c_allocator.
+        pub fn defaultFinalize(_: napi.Env, obj: *T, _: ?*anyopaque) void {
+            destroyNativeObject(obj);
         }
 
         fn isClassSelfParam(comptime ParamType: type) bool {
@@ -620,7 +624,7 @@ pub fn wrapClass(comptime T: type) type {
                         e.throwError("", "Failed to remove constructor wrap in instance factory") catch {};
                         return null;
                     };
-                    std.heap.c_allocator.destroy(old_ptr);
+                    destroyNativeObject(old_ptr);
 
                     // Wrap with the factory's result
                     _ = e.wrap(instance_napi, Class, obj_ptr, defaultFinalize, null, null) catch {
@@ -837,8 +841,8 @@ pub fn wrapClass(comptime T: type) type {
                         e.throwError("", "Failed to remove constructor wrap in factory") catch {};
                         return null;
                     };
-                    // The constructor allocated this — free it since we're replacing
-                    std.heap.c_allocator.destroy(old_ptr);
+                    // The constructor allocated this — destroy it via the same path as GC finalization.
+                    destroyNativeObject(old_ptr);
 
                     // Wrap with the factory's result
                     _ = e.wrap(instance_val, Class, obj_ptr, defaultFinalize, null, null) catch {

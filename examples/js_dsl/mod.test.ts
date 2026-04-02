@@ -272,6 +272,31 @@ describe("optional parameters", () => {
 	});
 });
 
+describe("factory cleanup", () => {
+	it("static factory deinitializes constructor placeholder", () => {
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		const resource = mod.FactoryResource.withByte(7);
+
+		expect(resource.getByte()).toEqual(7);
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 2);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
+	});
+
+	it("instance factory deinitializes constructor placeholder", () => {
+		const base = mod.FactoryResource.withByte(1);
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		const clone = base.cloneWithByte(9);
+
+		expect(clone.getByte()).toEqual(9);
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 2);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
+	});
+});
+
 // Section 15: Getters and Setters
 describe("Settings class (getters/setters)", () => {
 	it("has getter for volume with default value", () => {
