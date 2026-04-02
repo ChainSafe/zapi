@@ -22,6 +22,30 @@ pub fn wrapClass(comptime T: type) type {
     }
 
     return struct {
+        const all_decls = @typeInfo(T).@"struct".decls;
+        const decl_count = all_decls.len;
+        const DeclCategory = enum { getter, setter, instance_method, instance_factory, static_factory, static_method, skip };
+        const DeclMeta = struct {
+            name: []const u8,
+            category: DeclCategory = .skip,
+            is_by_value: bool = false,
+            setter_name: ?[]const u8 = null,
+        };
+        const ClassMeta = struct {
+            decls: [decl_count]DeclMeta,
+            descriptor_count: usize,
+            static_factory_count: usize,
+        };
+        const getter_name_count = if (@hasDecl(T, "js_getters"))
+            @typeInfo(@TypeOf(T.js_getters)).@"struct".fields.len
+        else
+            0;
+        const setter_name_count = if (@hasDecl(T, "js_setters"))
+            @typeInfo(@TypeOf(T.js_setters)).@"struct".fields.len
+        else
+            0;
+        const class_meta = analyzeClass();
+
         /// C-ABI constructor callback for napi_define_class.
         pub const constructor: napi.c.napi_callback = genConstructor();
 
@@ -31,103 +55,6 @@ pub fn wrapClass(comptime T: type) type {
                 obj.deinit();
             }
             std.heap.c_allocator.destroy(obj);
-        }
-
-        /// Returns an array of napi_property_descriptor for all public declarations of T.
-        /// Getters/setters produce accessor descriptors; methods/statics produce method descriptors.
-        pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
-            comptime validateGettersSetters();
-
-            const decls = @typeInfo(T).@"struct".decls;
-
-            // Count output descriptors (setters merge into getters, skips produce 0)
-            comptime var count: usize = 0;
-            inline for (decls) |decl| {
-                const cat = comptime classifyDecl(decl.name);
-                switch (cat) {
-                    .getter, .instance_method, .instance_factory, .static_factory, .static_method => {
-                        count += 1;
-                    },
-                    .setter, .skip => {},
-                }
-            }
-
-            if (count == 0) return &[0]napi.c.napi_property_descriptor{};
-
-            const descriptors = comptime blk: {
-                var descs: [count]napi.c.napi_property_descriptor = undefined;
-                var idx: usize = 0;
-
-                // Pass 1: Getters (with optional setters merged in)
-                for (decls) |decl| {
-                    if (classifyDecl(decl.name) != .getter) continue;
-
-                    var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
-                    const prop_name: [:0]const u8 = decl.name ++ "";
-                    desc.utf8name = prop_name.ptr;
-
-                    const getter_field = @field(T, decl.name);
-                    const getter_params = @typeInfo(@TypeOf(getter_field)).@"fn".params;
-                    const getter_is_by_value = getter_params[0].type.? == T;
-                    desc.getter = wrapGetter(T, getter_field, getter_is_by_value);
-
-                    // Merge setter if declared
-                    if (isSetter(decl.name)) {
-                        const set_fn_name = "set_" ++ decl.name;
-                        const setter_field = @field(T, set_fn_name);
-                        desc.setter = wrapSetter(T, setter_field);
-                    }
-
-                    desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_jsproperty);
-                    descs[idx] = desc;
-                    idx += 1;
-                }
-
-                // Pass 2: Instance methods, static factories, static methods
-                for (decls) |decl| {
-                    const cat = classifyDecl(decl.name);
-                    if (cat != .instance_method and cat != .instance_factory and cat != .static_factory and cat != .static_method) continue;
-
-                    const field = @field(T, decl.name);
-                    const fn_info = @typeInfo(@TypeOf(field)).@"fn";
-                    const params = fn_info.params;
-
-                    var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
-                    const method_name: [:0]const u8 = decl.name ++ "";
-                    desc.utf8name = method_name.ptr;
-
-                    switch (cat) {
-                        .instance_method => {
-                            const is_by_value = params[0].type.? == T;
-                            desc.method = wrapMethod(T, field, is_by_value);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
-                        },
-                        .instance_factory => {
-                            const is_by_value = params[0].type.? == T;
-                            desc.method = wrapInstanceFactory(T, field, is_by_value);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
-                        },
-                        .static_factory => {
-                            desc.method = wrapStaticFactory(T, field);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
-                                @intFromEnum(napi.value_types.PropertyAttributes.static);
-                        },
-                        .static_method => {
-                            desc.method = wrap_function.wrapFunction(field);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
-                                @intFromEnum(napi.value_types.PropertyAttributes.static);
-                        },
-                        else => unreachable,
-                    }
-
-                    descs[idx] = desc;
-                    idx += 1;
-                }
-
-                break :blk descs;
-            };
-
-            return &descriptors;
         }
 
         fn isClassSelfParam(comptime ParamType: type) bool {
@@ -146,28 +73,8 @@ pub fn wrapClass(comptime T: type) type {
                 std.mem.eql(u8, name, "js_setters");
         }
 
-        /// Checks if a name exists in a comptime string tuple (e.g., js_getters/js_setters).
-        fn isInTuple(comptime tuple: anytype, comptime name: []const u8) bool {
-            inline for (tuple) |entry| {
-                if (comptime std.mem.eql(u8, entry, name)) return true;
-            }
-            return false;
-        }
-
-        /// Checks if T declares js_getters and the given name is in it.
-        fn isGetter(comptime name: []const u8) bool {
-            if (!@hasDecl(T, "js_getters")) return false;
-            return isInTuple(T.js_getters, name);
-        }
-
-        /// Checks if T declares js_setters and the given name is in it.
-        fn isSetter(comptime name: []const u8) bool {
-            if (!@hasDecl(T, "js_setters")) return false;
-            return isInTuple(T.js_setters, name);
-        }
-
         /// Returns the getter name for a potential setter function name.
-        /// e.g., "set_count" → "count", "reset" → null
+        /// e.g., "set_count" -> "count", "reset" -> null
         fn setterTarget(comptime name: []const u8) ?[]const u8 {
             if (name.len > 4 and std.mem.eql(u8, name[0..4], "set_")) {
                 return name[4..];
@@ -175,114 +82,59 @@ pub fn wrapClass(comptime T: type) type {
             return null;
         }
 
-        const DeclCategory = enum { getter, setter, instance_method, instance_factory, static_factory, static_method, skip };
-
-        fn classifyDecl(comptime name: []const u8) DeclCategory {
-            if (shouldSkipDecl(name)) return .skip;
-
-            const field = @field(T, name);
-            const FieldType = @TypeOf(field);
-            const field_info = @typeInfo(FieldType);
-            if (field_info != .@"fn") return .skip;
-
-            // Check if this is a getter
-            if (isGetter(name)) return .getter;
-
-            // Check if this is a setter (set_<name> where <name> is in js_setters)
-            if (setterTarget(name)) |target| {
-                if (isSetter(target)) return .setter;
+        fn tupleIndex(comptime tuple: anytype, comptime name: []const u8) ?usize {
+            inline for (tuple, 0..) |entry, idx| {
+                if (std.mem.eql(u8, entry, name)) return idx;
             }
-
-            const params = field_info.@"fn".params;
-
-            // Instance method or instance factory (has self param)
-            if (params.len > 0 and isClassSelfParam(params[0].type.?)) {
-                // Instance factory: has self, return type (stripped of !) == T
-                if (isStaticFactory(field)) return .instance_factory;
-                return .instance_method;
-            }
-
-            // Static factory or static method (no self param)
-            if (isStaticFactory(field)) return .static_factory;
-            return .static_method;
+            return null;
         }
 
-        /// Validates js_getters/js_setters declarations at comptime.
-        fn validateGettersSetters() void {
-            // Rule: js_setters requires js_getters
-            if (@hasDecl(T, "js_setters") and !@hasDecl(T, "js_getters")) {
-                @compileError("js_setters requires js_getters to also be declared in " ++ @typeName(T));
+        fn validateGetterField(comptime getter_name: []const u8, comptime getter_field: anytype) void {
+            const getter_info = @typeInfo(@TypeOf(getter_field));
+            if (getter_info != .@"fn") {
+                @compileError("js_getters: '" ++ getter_name ++ "' is not a function in " ++ @typeName(T));
             }
 
-            if (@hasDecl(T, "js_getters")) {
-                // Validate each getter
-                inline for (T.js_getters) |getter_name| {
-                    if (!@hasDecl(T, getter_name)) {
-                        @compileError("js_getters: '" ++ getter_name ++ "' does not match any pub fn in " ++ @typeName(T));
-                    }
-                    const getter_field = @field(T, getter_name);
-                    const getter_info = @typeInfo(@TypeOf(getter_field));
-                    if (getter_info != .@"fn") {
-                        @compileError("js_getters: '" ++ getter_name ++ "' is not a function in " ++ @typeName(T));
-                    }
-                    const getter_params = getter_info.@"fn".params;
-                    if (getter_params.len == 0 or !isClassSelfParam(getter_params[0].type.?)) {
-                        @compileError("getter '" ++ getter_name ++ "' must have a self parameter in " ++ @typeName(T));
-                    }
-                    if (getter_params.len > 1) {
-                        @compileError("getter '" ++ getter_name ++ "' must take only self, got " ++
-                            std.fmt.comptimePrint("{d}", .{getter_params.len - 1}) ++ " additional arg(s)");
-                    }
-                    const ReturnType = getter_info.@"fn".return_type.?;
-                    const InnerReturn = if (@typeInfo(ReturnType) == .error_union) @typeInfo(ReturnType).error_union.payload else ReturnType;
-                    if (InnerReturn == void) {
-                        @compileError("getter '" ++ getter_name ++ "' must return a DSL type, not void");
-                    }
-                }
+            const getter_params = getter_info.@"fn".params;
+            if (getter_params.len == 0 or !isClassSelfParam(getter_params[0].type.?)) {
+                @compileError("getter '" ++ getter_name ++ "' must have a self parameter in " ++ @typeName(T));
+            }
+            if (getter_params.len > 1) {
+                @compileError("getter '" ++ getter_name ++ "' must take only self, got " ++
+                    std.fmt.comptimePrint("{d}", .{getter_params.len - 1}) ++ " additional arg(s)");
             }
 
-            if (@hasDecl(T, "js_setters")) {
-                inline for (T.js_setters) |setter_name| {
-                    if (!isInTuple(T.js_getters, setter_name)) {
-                        @compileError("js_setters: '" ++ setter_name ++ "' is not listed in js_getters");
-                    }
-                    const set_fn_name = "set_" ++ setter_name;
-                    if (!@hasDecl(T, set_fn_name)) {
-                        @compileError("js_setters: '" ++ setter_name ++ "' requires a pub fn '" ++ set_fn_name ++ "' in " ++ @typeName(T));
-                    }
-                    const setter_field = @field(T, set_fn_name);
-                    const setter_info = @typeInfo(@TypeOf(setter_field));
-                    if (setter_info != .@"fn") {
-                        @compileError("'" ++ set_fn_name ++ "' is not a function in " ++ @typeName(T));
-                    }
-                    const setter_params = setter_info.@"fn".params;
-                    if (setter_params.len == 0 or setter_params[0].type.? != *T) {
-                        @compileError("setter '" ++ set_fn_name ++ "' must take self as *" ++ @typeName(T) ++ " (mutable pointer)");
-                    }
-                    if (setter_params.len != 2) {
-                        @compileError("setter '" ++ set_fn_name ++ "' must take exactly one argument besides self");
-                    }
-                    const SetterReturn = setter_info.@"fn".return_type.?;
-                    const SetterInner = if (@typeInfo(SetterReturn) == .error_union) @typeInfo(SetterReturn).error_union.payload else SetterReturn;
-                    if (SetterInner != void) {
-                        @compileError("setter '" ++ set_fn_name ++ "' must return void or !void");
-                    }
-                }
+            const ReturnType = getter_info.@"fn".return_type.?;
+            const InnerReturn = if (@typeInfo(ReturnType) == .error_union)
+                @typeInfo(ReturnType).error_union.payload
+            else
+                ReturnType;
+            if (InnerReturn == void) {
+                @compileError("getter '" ++ getter_name ++ "' must return a DSL type, not void");
+            }
+        }
+
+        fn validateSetterField(comptime set_fn_name: []const u8, comptime setter_field: anytype) void {
+            const setter_info = @typeInfo(@TypeOf(setter_field));
+            if (setter_info != .@"fn") {
+                @compileError("'" ++ set_fn_name ++ "' is not a function in " ++ @typeName(T));
             }
 
-            // Rule: orphaned setter check (only when js_getters is declared)
-            if (@hasDecl(T, "js_getters")) {
-                const all_decls = @typeInfo(T).@"struct".decls;
-                inline for (all_decls) |decl| {
-                    if (setterTarget(decl.name)) |target| {
-                        const field = @field(T, decl.name);
-                        if (@typeInfo(@TypeOf(field)) == .@"fn") {
-                            if (!isSetter(target)) {
-                                @compileError("pub fn '" ++ decl.name ++ "' looks like a setter but '" ++ target ++ "' is not in js_setters — add it or rename the function");
-                            }
-                        }
-                    }
-                }
+            const setter_params = setter_info.@"fn".params;
+            if (setter_params.len == 0 or setter_params[0].type.? != *T) {
+                @compileError("setter '" ++ set_fn_name ++ "' must take self as *" ++ @typeName(T) ++ " (mutable pointer)");
+            }
+            if (setter_params.len != 2) {
+                @compileError("setter '" ++ set_fn_name ++ "' must take exactly one argument besides self");
+            }
+
+            const SetterReturn = setter_info.@"fn".return_type.?;
+            const SetterInner = if (@typeInfo(SetterReturn) == .error_union)
+                @typeInfo(SetterReturn).error_union.payload
+            else
+                SetterReturn;
+            if (SetterInner != void) {
+                @compileError("setter '" ++ set_fn_name ++ "' must return void or !void");
             }
         }
 
@@ -296,16 +148,197 @@ pub fn wrapClass(comptime T: type) type {
             return Inner == T;
         }
 
-        pub fn hasFactories() bool {
-            const decls = @typeInfo(T).@"struct".decls;
-            inline for (decls) |decl| {
-                if (comptime shouldSkipDecl(decl.name)) continue;
-                const field = @field(T, decl.name);
+        fn analyzeClass() ClassMeta {
+            const branch_quota = @max(
+                100_000,
+                1000 + (decl_count * 32) + (getter_name_count * 256) + (setter_name_count * 256),
+            );
+            @setEvalBranchQuota(branch_quota);
+
+            var metas: [decl_count]DeclMeta = undefined;
+            inline for (all_decls, 0..) |decl, idx| {
+                metas[idx] = .{ .name = decl.name };
+            }
+
+            var getter_flags = [_]bool{false} ** decl_count;
+            var setter_decl_flags = [_]bool{false} ** decl_count;
+            var getter_setter_names = [_]?[]const u8{null} ** decl_count;
+            var getter_seen = [_]bool{false} ** getter_name_count;
+            var setter_seen = [_]bool{false} ** setter_name_count;
+
+            if (@hasDecl(T, "js_setters") and !@hasDecl(T, "js_getters")) {
+                @compileError("js_setters requires js_getters to also be declared in " ++ @typeName(T));
+            }
+
+            if (@hasDecl(T, "js_setters")) {
+                inline for (T.js_setters) |setter_name| {
+                    if (tupleIndex(T.js_getters, setter_name) == null) {
+                        @compileError("js_setters: '" ++ setter_name ++ "' is not listed in js_getters");
+                    }
+                }
+            }
+
+            inline for (all_decls, 0..) |decl, idx| {
+                const name = decl.name;
+                const field = @field(T, name);
+                const field_info = @typeInfo(@TypeOf(field));
+
+                if (@hasDecl(T, "js_getters")) {
+                    if (tupleIndex(T.js_getters, name)) |getter_idx| {
+                        getter_seen[getter_idx] = true;
+                        getter_flags[idx] = true;
+                        validateGetterField(name, field);
+
+                        if (@hasDecl(T, "js_setters") and tupleIndex(T.js_setters, name) != null) {
+                            getter_setter_names[idx] = "set_" ++ name;
+                        }
+                    }
+                }
+
+                if (setterTarget(name)) |target| {
+                    if (field_info == .@"fn") {
+                        if (@hasDecl(T, "js_setters")) {
+                            if (tupleIndex(T.js_setters, target)) |setter_idx| {
+                                setter_seen[setter_idx] = true;
+                                setter_decl_flags[idx] = true;
+                                validateSetterField(name, field);
+                            } else if (@hasDecl(T, "js_getters")) {
+                                @compileError("pub fn '" ++ name ++ "' looks like a setter but '" ++ target ++ "' is not in js_setters — add it or rename the function");
+                            }
+                        } else if (@hasDecl(T, "js_getters")) {
+                            @compileError("pub fn '" ++ name ++ "' looks like a setter but '" ++ target ++ "' is not in js_setters — add it or rename the function");
+                        }
+                    }
+                }
+            }
+
+            if (@hasDecl(T, "js_getters")) {
+                inline for (T.js_getters, 0..) |getter_name, getter_idx| {
+                    if (!getter_seen[getter_idx]) {
+                        @compileError("js_getters: '" ++ getter_name ++ "' does not match any pub fn in " ++ @typeName(T));
+                    }
+                }
+            }
+
+            if (@hasDecl(T, "js_setters")) {
+                inline for (T.js_setters, 0..) |setter_name, setter_idx| {
+                    if (!setter_seen[setter_idx]) {
+                        const set_fn_name = "set_" ++ setter_name;
+                        @compileError("js_setters: '" ++ setter_name ++ "' requires a pub fn '" ++ set_fn_name ++ "' in " ++ @typeName(T));
+                    }
+                }
+            }
+
+            var descriptor_count: usize = 0;
+            var static_factory_count: usize = 0;
+
+            inline for (all_decls, 0..) |decl, idx| {
+                const name = decl.name;
+                if (shouldSkipDecl(name)) continue;
+
+                const field = @field(T, name);
                 const field_info = @typeInfo(@TypeOf(field));
                 if (field_info != .@"fn") continue;
-                if (comptime isStaticMethod(field_info.@"fn".params) and isStaticFactory(field)) return true;
+
+                if (getter_flags[idx]) {
+                    const getter_params = field_info.@"fn".params;
+                    metas[idx].category = .getter;
+                    metas[idx].is_by_value = getter_params[0].type.? == T;
+                    metas[idx].setter_name = getter_setter_names[idx];
+                    descriptor_count += 1;
+                    continue;
+                }
+
+                if (setter_decl_flags[idx]) {
+                    metas[idx].category = .setter;
+                    continue;
+                }
+
+                const params = field_info.@"fn".params;
+                if (!isStaticMethod(params)) {
+                    metas[idx].is_by_value = params[0].type.? == T;
+                    metas[idx].category = if (isStaticFactory(field)) .instance_factory else .instance_method;
+                    descriptor_count += 1;
+                    continue;
+                }
+
+                metas[idx].category = if (isStaticFactory(field)) .static_factory else .static_method;
+                descriptor_count += 1;
+                if (metas[idx].category == .static_factory) {
+                    static_factory_count += 1;
+                }
             }
-            return false;
+
+            return .{
+                .decls = metas,
+                .descriptor_count = descriptor_count,
+                .static_factory_count = static_factory_count,
+            };
+        }
+
+        /// Returns an array of napi_property_descriptor for all public declarations of T.
+        /// Getters/setters produce accessor descriptors; methods/statics produce method descriptors.
+        pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
+            if (class_meta.descriptor_count == 0) return &[0]napi.c.napi_property_descriptor{};
+
+            const descriptors = comptime blk: {
+                var descs: [class_meta.descriptor_count]napi.c.napi_property_descriptor = undefined;
+                var idx: usize = 0;
+
+                for (class_meta.decls) |meta| {
+                    switch (meta.category) {
+                        .skip, .setter => continue,
+                        else => {},
+                    }
+
+                    const field = @field(T, meta.name);
+
+                    var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
+                    const property_name: [:0]const u8 = meta.name ++ "";
+                    desc.utf8name = property_name.ptr;
+
+                    switch (meta.category) {
+                        .getter => {
+                            desc.getter = wrapGetter(T, field, meta.is_by_value);
+                            if (meta.setter_name) |setter_name| {
+                                const setter_field = @field(T, setter_name);
+                                desc.setter = wrapSetter(T, setter_field);
+                            }
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_jsproperty);
+                        },
+                        .instance_method => {
+                            desc.method = wrapMethod(T, field, meta.is_by_value);
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
+                        },
+                        .instance_factory => {
+                            desc.method = wrapInstanceFactory(T, field, meta.is_by_value);
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
+                        },
+                        .static_factory => {
+                            desc.method = wrapStaticFactory(T, field);
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
+                                @intFromEnum(napi.value_types.PropertyAttributes.static);
+                        },
+                        .static_method => {
+                            desc.method = wrap_function.wrapFunction(field);
+                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
+                                @intFromEnum(napi.value_types.PropertyAttributes.static);
+                        },
+                        .skip, .setter => unreachable,
+                    }
+
+                    descs[idx] = desc;
+                    idx += 1;
+                }
+
+                break :blk descs;
+            };
+
+            return &descriptors;
+        }
+
+        pub fn hasFactories() bool {
+            return class_meta.static_factory_count > 0;
         }
 
         fn genConstructor() napi.c.napi_callback {
@@ -823,31 +856,18 @@ pub fn wrapClass(comptime T: type) type {
         /// Returns property descriptors for factory methods with constructor as data.
         /// Called at runtime after napi_define_class returns the constructor value.
         pub fn getFactoryDescriptors(ctor: napi.c.napi_value) []const napi.c.napi_property_descriptor {
-            const decls = @typeInfo(T).@"struct".decls;
-            comptime var factory_count: usize = 0;
-            inline for (decls) |decl| {
-                if (comptime shouldSkipDecl(decl.name)) continue;
-                const field = @field(T, decl.name);
-                const field_info = @typeInfo(@TypeOf(field));
-                if (field_info != .@"fn") continue;
-                if (comptime isStaticMethod(field_info.@"fn".params) and isStaticFactory(field)) factory_count += 1;
-            }
-
-            if (factory_count == 0) return &[0]napi.c.napi_property_descriptor{};
+            if (class_meta.static_factory_count == 0) return &[0]napi.c.napi_property_descriptor{};
 
             const S = struct {
-                var descs: [factory_count]napi.c.napi_property_descriptor = undefined;
+                var descs: [class_meta.static_factory_count]napi.c.napi_property_descriptor = undefined;
             };
 
             var idx: usize = 0;
-            inline for (decls) |decl| {
-                if (comptime shouldSkipDecl(decl.name)) continue;
-                const field = @field(T, decl.name);
-                const field_info2 = @typeInfo(@TypeOf(field));
-                if (field_info2 != .@"fn") continue;
-                if (comptime isStaticMethod(field_info2.@"fn".params) and isStaticFactory(field)) {
+            inline for (class_meta.decls) |meta| {
+                if (meta.category == .static_factory) {
+                    const field = @field(T, meta.name);
                     S.descs[idx] = std.mem.zeroes(napi.c.napi_property_descriptor);
-                    const method_name: [:0]const u8 = decl.name ++ "";
+                    const method_name: [:0]const u8 = meta.name ++ "";
                     S.descs[idx].utf8name = method_name.ptr;
                     S.descs[idx].method = wrapStaticFactory(T, field);
                     S.descs[idx].attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
@@ -857,7 +877,7 @@ pub fn wrapClass(comptime T: type) type {
                 }
             }
 
-            return S.descs[0..factory_count];
+            return S.descs[0..class_meta.static_factory_count];
         }
     };
 }
