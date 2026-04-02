@@ -47,7 +47,8 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
 }
 
 /// Like convertArg, but handles optional types (?T).
-/// Returns null if param_index >= actual_argc, otherwise wraps as the inner type.
+/// Returns null if the argument is omitted or explicitly `undefined`,
+/// otherwise wraps as the inner type.
 pub fn convertArgWithOptional(
     comptime T: type,
     raw: napi.c.napi_value,
@@ -57,6 +58,8 @@ pub fn convertArgWithOptional(
 ) T {
     if (@typeInfo(T) == .optional) {
         if (param_index >= actual_argc) return null;
+        const raw_value = napi.Value{ .env = env, .value = raw };
+        if ((raw_value.typeof() catch null) == .undefined) return null;
         const Inner = @typeInfo(T).optional.child;
         return convertArg(Inner, raw, env);
     }
