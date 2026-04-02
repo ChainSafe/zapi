@@ -308,6 +308,24 @@ pub fn getEnvRefcount() Number {
 // Section 13: Static Factory Methods + Optional Parameters
 // ============================================================================
 
+var factory_resource_init_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+var factory_resource_deinit_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+
+fn makeFactoryResource(byte: u8) !FactoryResource {
+    const data = try js.allocator().alloc(u8, 1);
+    data[0] = byte;
+    _ = factory_resource_init_count.fetchAdd(1, .monotonic);
+    return .{ .data = data };
+}
+
+pub fn getFactoryResourceInitCount() Number {
+    return Number.from(@as(i32, @intCast(factory_resource_init_count.load(.acquire))));
+}
+
+pub fn getFactoryResourceDeinitCount() Number {
+    return Number.from(@as(i32, @intCast(factory_resource_deinit_count.load(.acquire))));
+}
+
 /// A point class demonstrating static factories and optional params.
 pub const Point = struct {
     pub const js_class = true;
@@ -346,6 +364,34 @@ pub const Point = struct {
         if (dy) |d| {
             self.y += d.assertI32();
         }
+    }
+};
+
+/// A resource-owning class used to verify placeholder cleanup in factory paths.
+pub const FactoryResource = struct {
+    pub const js_class = true;
+    data: []u8,
+
+    pub fn init() !FactoryResource {
+        return makeFactoryResource(0);
+    }
+
+    pub fn withByte(value: Number) !FactoryResource {
+        return makeFactoryResource(@intCast(value.assertU32()));
+    }
+
+    pub fn cloneWithByte(self: FactoryResource, value: Number) !FactoryResource {
+        _ = self;
+        return makeFactoryResource(@intCast(value.assertU32()));
+    }
+
+    pub fn getByte(self: FactoryResource) Number {
+        return Number.from(@as(i32, @intCast(self.data[0])));
+    }
+
+    pub fn deinit(self: *FactoryResource) void {
+        _ = factory_resource_deinit_count.fetchAdd(1, .monotonic);
+        js.allocator().free(self.data);
     }
 };
 
