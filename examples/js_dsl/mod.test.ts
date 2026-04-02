@@ -257,6 +257,19 @@ describe("optional parameters", () => {
 		expect(p.getX()).toEqual(6);
 		expect(p.getY()).toEqual(1);
 	});
+
+	it("translate treats explicit undefined like omitted optional", () => {
+		const p = mod.Point.create(1, 1);
+		p.translate(5, undefined);
+		expect(p.getX()).toEqual(6);
+		expect(p.getY()).toEqual(1);
+	});
+
+	it("fromArray treats explicit undefined like omitted optional", () => {
+		const p = mod.Point.fromArray([10, 20], undefined);
+		expect(p.getX()).toEqual(10);
+		expect(p.getY()).toEqual(20);
+	});
 });
 
 // Section 15: Getters and Setters
