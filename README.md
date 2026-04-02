@@ -2,11 +2,9 @@
 
 A Zig N-API wrapper library and CLI for building and publishing cross-platform Node.js native addons.
 
-## Overview
-
 zapi provides two main components:
 
-1. **Zig Library** (`src/`) - Idiomatic Zig bindings for the Node.js N-API, making it easy to write native addons in Zig
+1. **Zig Library** (`src/`) - Write Node.js native addons in Zig with a high-level DSL that mirrors JavaScript's type system
 2. **CLI Tool** (`ts/`) - Build tooling for cross-compiling and publishing multi-platform npm packages
 
 ## Installation
@@ -28,29 +26,344 @@ Add the Zig dependency to your `build.zig.zon`:
 
 ---
 
-## Zig Library
+## Zig Library — Quick Start
 
-### Quick Start
+The DSL is the default approach for writing native addons. Import `js` from zapi and write normal Zig functions — zapi handles all the N-API marshalling automatically.
 
 ```zig
-const napi = @import("napi");
+const js = @import("zapi").js;
 
-comptime {
-    napi.module.register(initModule);
+pub fn add(a: js.Number, b: js.Number) js.Number {
+    return js.Number.from(a.assertI32() + b.assertI32());
 }
 
-fn initModule(env: napi.Env, module: napi.Value) !void {
-    // Export a string
-    try module.setNamedProperty("greeting", try env.createStringUtf8("Hello from Zig!"));
-    
-    // Export a function
-    try module.setNamedProperty("add", try env.createFunction("add", 2, napi.createCallback(2, add, .{}), null));
-}
+pub const Counter = struct {
+    pub const js_class = true;
+    pub const js_getters = .{ "count" };
 
-fn add(a: i32, b: i32) i32 {
-    return a + b;
+    _count: i32,
+
+    pub fn init(start: js.Number) Counter {
+        return .{ ._count = start.assertI32() };
+    }
+
+    pub fn increment(self: *Counter) void {
+        self._count += 1;
+    }
+
+    // Getter: obj.count (not obj.count())
+    pub fn count(self: Counter) js.Number {
+        return js.Number.from(self._count);
+    }
+};
+
+comptime { js.exportModule(@This(), .{}); }
+```
+
+**JavaScript usage:**
+
+```js
+const mod = require('./my_module.node');
+mod.add(1, 2); // 3
+const c = new mod.Counter(0);
+c.increment();
+c.count; // 1 (getter, not a method call)
+```
+
+`pub` functions are auto-exported, and structs with `js_class = true` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
+
+---
+
+## JS Types Reference
+
+| Type | JS Equivalent | Key Methods |
+|------|--------------|-------------|
+| `Number` | `number` | `toI32()`, `toF64()`, `assertI32()`, `from(anytype)` |
+| `String` | `string` | `toSlice(buf)`, `toOwnedSlice(alloc)`, `len()`, `from([]const u8)` |
+| `Boolean` | `boolean` | `toBool()`, `assertBool()`, `from(bool)` |
+| `BigInt` | `bigint` | `toI64()`, `toU64()`, `toI128()`, `from(anytype)` |
+| `Date` | `Date` | `toTimestamp()`, `from(f64)` |
+| `Array` | `Array` | `get(i)`, `getNumber(i)`, `length()`, `set(i, val)` |
+| `Object(T)` | `object` | `get()`, `set(value)` — `T` fields must be DSL types |
+| `Function` | `Function` | `call(args)` |
+| `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
+| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `from(slice)` |
+| `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
+
+---
+
+## Functions
+
+Three patterns for exporting functions:
+
+### Basic — direct mapping
+
+```zig
+pub fn add(a: Number, b: Number) Number {
+    return Number.from(a.assertI32() + b.assertI32());
 }
 ```
+
+### Error handling — `!T` becomes a thrown JS exception
+
+```zig
+pub fn safeDivide(a: Number, b: Number) !Number {
+    const divisor = b.assertI32();
+    if (divisor == 0) return error.DivisionByZero;
+    return Number.from(@divTrunc(a.assertI32(), divisor));
+}
+```
+
+JS: `try { safeDivide(10, 0) } catch (e) { /* "DivisionByZero" */ }`
+
+### Nullable returns — `?T` becomes `undefined`
+
+```zig
+pub fn findValue(arr: Array, target: Number) ?Number {
+    const len = arr.length() catch return null;
+    // ... search, return null if not found
+}
+```
+
+---
+
+## Classes
+
+Structs with `js_class = true` are exported as JavaScript classes:
+
+```zig
+pub const Timer = struct {
+    pub const js_class = true;
+    start: i64,
+
+    pub fn init() Timer {
+        return .{ .start = std.time.milliTimestamp() };
+    }
+
+    pub fn elapsed(self: Timer) js.Number {
+        return js.Number.from(std.time.milliTimestamp() - self.start);
+    }
+
+    pub fn reset(self: *Timer) void {
+        self.start = std.time.milliTimestamp();
+    }
+
+    pub fn deinit(self: *Timer) void {
+        _ = self;
+    }
+};
+```
+
+**Method classification:**
+
+| Signature | JS Behavior |
+|-----------|-------------|
+| `pub fn init(...)` | Constructor (`new Class(...)`) — must return `T` or `!T` |
+| `pub fn method(self: T, ...)` | Immutable instance method |
+| `pub fn method(self: *T, ...)` | Mutable instance method |
+| `pub fn method(self: T, ...) !T` | Instance factory — returns a new instance |
+| `pub fn method(...) !T` | Static factory — `Class.method()` returns new instance |
+| `pub fn method(...)` | Static method (no self, returns non-T) |
+| `pub fn deinit(self: *T)` | Optional GC destructor |
+
+### Static Factory Methods
+
+Static methods that return `!T` (or `T`) are automatically registered as factory methods. The DSL handles heap allocation, `napi_new_instance`, and wrapping:
+
+```zig
+pub const PublicKey = struct {
+    pub const js_class = true;
+    pk: bls.PublicKey,
+
+    pub fn init() PublicKey {
+        return .{ .pk = undefined };
+    }
+
+    // Static factory: PublicKey.fromBytes(bytes)
+    pub fn fromBytes(bytes: js.Uint8Array) !PublicKey {
+        const slice = try bytes.toSlice();
+        return .{ .pk = try bls.PublicKey.deserialize(slice) };
+    }
+};
+```
+
+JS: `const pk = PublicKey.fromBytes(bytes);`
+
+Classes with static factories must have a zero-arg `init()`.
+
+### Instance Factory Methods
+
+Instance methods that return `!T` (same class type) create new instances. The DSL gets the constructor from `this.constructor` automatically:
+
+```zig
+pub fn clone(self: MyState) !MyState {
+    const cloned = try self.data.clone();
+    return .{ .data = cloned };
+}
+```
+
+JS: `const newState = state.clone();` — returns a new instance, original unchanged.
+
+### Optional Parameters
+
+Parameters with optional DSL types (`?js.Number`, `?js.Boolean`, etc.) become optional JS arguments:
+
+```zig
+pub fn fromBytes(bytes: js.Uint8Array, validate: ?js.Boolean) !PublicKey {
+    const do_validate = if (validate) |v| try v.toBool() else false;
+    // ...
+}
+```
+
+JS: `PublicKey.fromBytes(bytes)` or `PublicKey.fromBytes(bytes, true)`
+
+### Getters and Setters
+
+Declare `js_getters` and `js_setters` to register computed property accessors:
+
+```zig
+pub const Config = struct {
+    pub const js_class = true;
+    pub const js_getters = .{ "volume", "muted", "label" };
+    pub const js_setters = .{ "volume", "muted" };
+
+    _volume: i32,
+    _muted: bool,
+    _label: []const u8,
+
+    pub fn init() Config {
+        return .{ ._volume = 50, ._muted = false, ._label = "default" };
+    }
+
+    // Read-write: obj.volume / obj.volume = 80
+    pub fn volume(self: Config) js.Number {
+        return js.Number.from(self._volume);
+    }
+    pub fn set_volume(self: *Config, value: js.Number) !void {
+        const v = value.assertI32();
+        if (v < 0 or v > 100) return error.VolumeOutOfRange;
+        self._volume = v;
+    }
+
+    // Read-only: obj.label
+    pub fn label(self: Config) js.String {
+        return js.String.from(self._label);
+    }
+};
+```
+
+JS: `cfg.volume = 80; cfg.label; // "default"`
+
+**Rules:**
+- `js_getters` — tuple of function names to register as getters (optional)
+- `js_setters` — subset of `js_getters` that also have setters (optional, requires `js_getters`)
+- Getter: `pub fn name(self: T) DslType` — zero non-self args, must return a DSL type (not void)
+- Setter: `pub fn set_name(self: *T, value: DslType) void` or `!void` — mutable self, one arg
+- Names in `js_getters` are NOT exposed as callable methods
+
+---
+
+## Working with Types
+
+### Typed Objects
+
+```zig
+const Config = struct { host: String, port: Number, verbose: Boolean };
+
+pub fn connect(config: Object(Config)) !String {
+    const c = try config.get();
+    // access c.host, c.port, c.verbose
+}
+```
+
+### TypedArrays
+
+```zig
+pub fn sum(data: Uint8Array) !Number {
+    const slice = try data.toSlice();
+    var total: i32 = 0;
+    for (slice) |byte| total += @intCast(byte);
+    return Number.from(total);
+}
+```
+
+### Promises
+
+```zig
+pub fn asyncOp(val: Number) !Promise(Number) {
+    var promise = try js.createPromise(Number);
+    try promise.resolve(val);  // or dispatch async work
+    return promise;
+}
+```
+
+### Callbacks
+
+```zig
+pub fn applyCallback(val: Number, cb: Function) !Value {
+    return try cb.call(.{val});
+}
+```
+
+---
+
+## Namespaces
+
+Import Zig modules as `pub const` to create JS namespaces. The DSL recursively registers all DSL-compatible declarations:
+
+```zig
+// root.zig
+pub const math = @import("math.zig");     // → exports.math.multiply(...)
+pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
+
+comptime { js.exportModule(@This(), .{}); }
+```
+
+Namespaces nest arbitrarily — a sub-module with more `pub const` imports creates deeper nesting.
+
+---
+
+## Module Lifecycle
+
+`exportModule` accepts optional lifecycle hooks with atomic env refcounting:
+
+```zig
+comptime {
+    js.exportModule(@This(), .{
+        .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
+        .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
+    });
+}
+```
+
+This enables safe shared-state initialization for worker thread scenarios.
+
+---
+
+## Mixing DSL and N-API
+
+```zig
+pub fn advanced() !Value {
+    const e = js.env();      // access low-level napi.Env
+    const obj = try e.createObject();
+    // use any napi.Env method...
+    return .{ .val = obj };
+}
+```
+
+**Context accessors:**
+
+| Function | Description |
+|----------|-------------|
+| `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
+| `js.allocator()` | C allocator for native allocations |
+| `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
+
+---
+
+## Advanced: Low-Level N-API
+
+The DSL layer handles most use cases. Drop down to the N-API layer when you need full control over handle scopes, async work, thread-safe functions, or other advanced features.
 
 ### Core Types
 
@@ -86,6 +399,8 @@ fn add_manual(env: napi.Env, info: napi.CallbackInfo(2)) !napi.Value {
 Let zapi handle argument/return conversion:
 
 ```zig
+const napi = @import("zapi").napi;
+
 // Arguments and return value are automatically converted
 fn add(a: i32, b: i32) i32 {
     return a + b;
@@ -118,9 +433,11 @@ napi.createCallback(2, myFunc, .{
 ### Creating Classes
 
 ```zig
+const napi = @import("zapi").napi;
+
 const Timer = struct {
     start: i64,
-    
+
     pub fn read(self: *Timer) i64 {
         return std.time.milliTimestamp() - self.start;
     }
@@ -142,6 +459,8 @@ try env.defineClass(
 Run CPU-intensive work off the main thread:
 
 ```zig
+const napi = @import("zapi").napi;
+
 const Work = struct {
     a: i32,
     b: i32,
@@ -170,6 +489,8 @@ try work.queue();
 Call JavaScript from any thread:
 
 ```zig
+const napi = @import("zapi").napi;
+
 const tsfn = try env.createThreadsafeFunction(
     jsCallback,        // JS function to call
     context,           // User context
@@ -190,10 +511,12 @@ try tsfn.call(&data, .blocking);
 All N-API calls return `NapiError` on failure:
 
 ```zig
+const napi = @import("zapi").napi;
+
 fn myFunction(env: napi.Env) !void {
     // Errors propagate naturally
     const value = try env.createStringUtf8("hello");
-    
+
     // Throw JavaScript errors
     try env.throwError("ERR_CODE", "Something went wrong");
     try env.throwTypeError("ERR_TYPE", "Expected a number");
@@ -386,24 +709,18 @@ Resolution order:
 
 ---
 
-## Example
+## Examples
 
-See the [example/](example/) directory for a comprehensive example including:
-- String properties
-- Functions with manual and automatic argument handling
-- Classes with methods
-- Async work with promises
-- Thread-safe functions
-
-```bash
-# Build the example
-zig build
-
-# Test it
-node example/test.js
-```
+See the [examples/](examples/) directory for comprehensive examples including:
+- All DSL types (Number, String, Boolean, BigInt, Date, Array, Object, TypedArrays, Promise)
+- Error handling and nullable returns
+- Classes with static factories, instance factories, and optional parameters
+- Computed getters and setters
+- Nested namespaces
+- Module lifecycle hooks (init/cleanup with worker thread refcounting)
+- Callbacks and mixed DSL/N-API usage
+- Low-level N-API with manual registration
 
 ## License
 
 MIT
-

@@ -7,3 +7,5 @@ test/spec/static_tests.zig
 .yarn
 node_modules/
 lib/
+docs/superpowers/
+.claude/settings.local.json
