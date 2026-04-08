@@ -204,7 +204,7 @@ pub fn applyCallback(val: Number, cb: Function) !Value {
 
 /// A simple counter class.
 pub const Counter = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     count: i32,
 
     pub fn init(start: Number) Counter {
@@ -226,7 +226,7 @@ pub const Counter = struct {
 
 /// A resource-owning buffer class demonstrating deinit.
 pub const Buffer = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     data: []u8,
 
     pub fn init(size: Number) !Buffer {
@@ -333,7 +333,7 @@ pub fn getFactoryResourceDeinitCount() Number {
 
 /// A point class demonstrating static factories and optional params.
 pub const Point = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     x: i32,
     y: i32,
 
@@ -374,7 +374,7 @@ pub const Point = struct {
 
 /// A resource-owning class used to verify placeholder cleanup in factory paths.
 pub const FactoryResource = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     data: []u8,
 
     pub fn init() !FactoryResource {
@@ -410,19 +410,26 @@ pub const FactoryResource = struct {
 
 /// A settings class demonstrating computed getters and setters.
 pub const Settings = struct {
-    pub const js_class = true;
-    pub const js_getters = .{ "volume", "muted", "label" };
-    pub const js_setters = .{ "volume", "muted" };
+    pub const js_meta = js.class(.{
+        .properties = .{
+            .volume = js.prop(.{ .get = true, .set = true }),
+            .muted = js.prop(.{ .get = true, .set = true }),
+            .label = true,
+            .kind = js.field("_kind"),
+        },
+    });
 
     _volume: i32,
     _muted: bool,
     _label: []const u8,
+    _kind: []const u8,
 
     pub fn init() Settings {
         return .{
             ._volume = 50,
             ._muted = false,
             ._label = "default",
+            ._kind = "settings",
         };
     }
 
@@ -431,7 +438,7 @@ pub const Settings = struct {
         return Number.from(self._volume);
     }
 
-    pub fn set_volume(self: *Settings, value: Number) !void {
+    pub fn setVolume(self: *Settings, value: Number) !void {
         const v = value.assertI32();
         if (v < 0 or v > 100) return error.VolumeOutOfRange;
         self._volume = v;
@@ -442,7 +449,7 @@ pub const Settings = struct {
         return Boolean.from(self._muted);
     }
 
-    pub fn set_muted(self: *Settings, value: Boolean) void {
+    pub fn setMuted(self: *Settings, value: Boolean) void {
         self._muted = value.assertBool();
     }
 
@@ -457,6 +464,38 @@ pub const Settings = struct {
         self._muted = false;
     }
 };
+
+pub const Token = struct {
+    pub const js_meta = js.class(.{});
+
+    value: i32,
+
+    pub fn init(value: Number) Token {
+        return .{ .value = value.assertI32() };
+    }
+
+    pub fn getValue(self: Token) Number {
+        return Number.from(self.value);
+    }
+};
+
+pub const TokenIssuer = struct {
+    pub const js_meta = js.class(.{});
+
+    seed: i32,
+
+    pub fn init(seed: Number) TokenIssuer {
+        return .{ .seed = seed.assertI32() };
+    }
+
+    pub fn issue(self: TokenIssuer) Token {
+        return .{ .value = self.seed * 2 };
+    }
+};
+
+pub fn makeToken(value: Number) Token {
+    return .{ .value = value.assertI32() + 1 };
+}
 
 comptime {
     js.exportModule(@This(), .{

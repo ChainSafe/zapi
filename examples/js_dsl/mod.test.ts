@@ -247,6 +247,13 @@ describe("static factories", () => {
 		expect(p.getX()).toEqual(0);
 		expect(p.getY()).toEqual(0);
 	});
+
+	it("preserves subclass constructor for same-class static returns", () => {
+		class DerivedPoint extends mod.Point {}
+		const p = DerivedPoint.create(3, 4);
+		expect(p).toBeInstanceOf(DerivedPoint);
+		expect(p.getX()).toEqual(3);
+	});
 });
 
 describe("optional parameters", () => {
@@ -278,19 +285,19 @@ describe("optional parameters", () => {
 	});
 });
 
-describe("factory cleanup", () => {
-	it("static factory deinitializes constructor placeholder", () => {
+describe("class materialization", () => {
+	it("static class return avoids constructor placeholder allocation", () => {
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
 
 		const resource = mod.FactoryResource.withByte(7);
 
 		expect(resource.getByte()).toEqual(7);
-		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 2);
-		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 1);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
 	});
 
-	it("instance factory deinitializes constructor placeholder", () => {
+	it("instance class return avoids constructor placeholder allocation", () => {
 		const base = mod.FactoryResource.withByte(1);
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
@@ -298,8 +305,16 @@ describe("factory cleanup", () => {
 		const clone = base.cloneWithByte(9);
 
 		expect(clone.getByte()).toEqual(9);
-		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 2);
-		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 1);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
+	});
+
+	it("preserves subclass constructor for same-class instance returns", () => {
+		class DerivedFactoryResource extends mod.FactoryResource {}
+		const base = DerivedFactoryResource.withByte(1);
+		const clone = base.cloneWithByte(9);
+		expect(clone).toBeInstanceOf(DerivedFactoryResource);
+		expect(clone.getByte()).toEqual(9);
 	});
 });
 
@@ -337,6 +352,12 @@ describe("Settings class (getters/setters)", () => {
 		expect(() => { (s as any).label = "changed"; }).toThrow();
 	});
 
+	it("has read-only field-backed property", () => {
+		const s = new mod.Settings();
+		expect(s.kind).toEqual("settings");
+		expect(() => { (s as any).kind = "changed"; }).toThrow();
+	});
+
 	it("getter is not callable as a method", () => {
 		const s = new mod.Settings();
 		expect(typeof s.volume).toBe("number");
@@ -359,6 +380,21 @@ describe("Settings class (getters/setters)", () => {
 		s2.volume = 90;
 		expect(s1.volume).toEqual(10);
 		expect(s2.volume).toEqual(90);
+	});
+});
+
+describe("class return interop", () => {
+	it("free function returning class materializes a Token instance", () => {
+		const token = mod.makeToken(4);
+		expect(token).toBeInstanceOf(mod.Token);
+		expect(token.getValue()).toEqual(5);
+	});
+
+	it("instance method returning different class materializes a Token instance", () => {
+		const issuer = new mod.TokenIssuer(6);
+		const token = issuer.issue();
+		expect(token).toBeInstanceOf(mod.Token);
+		expect(token.getValue()).toEqual(12);
 	});
 });
 

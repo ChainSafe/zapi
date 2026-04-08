@@ -3,6 +3,8 @@ const napi = @import("../napi.zig");
 const context = @import("context.zig");
 const wrap_function = @import("wrap_function.zig");
 const wrap_class = @import("wrap_class.zig");
+const class_meta = @import("class_meta.zig");
+const class_runtime = @import("class_runtime.zig");
 
 /// Scans pub decls of `Module` and registers them as JS exports.
 ///
@@ -64,7 +66,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             }
 
             // Register all pub decls
-            try registerDecls(Module, env, module);
+            _ = try registerDecls(Module, env, module, 0);
 
             // Manual registration hook for non-DSL modules
             if (has_register) {
@@ -85,9 +87,10 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     napi.module.register(init.moduleInit);
 }
 
-/// Iterates module declarations and registers DSL functions and js_class structs.
-fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value) !void {
+/// Iterates module declarations and registers DSL functions and js_meta classes.
+fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, comptime depth: usize) !bool {
     const decls = @typeInfo(Module).@"struct".decls;
+    var exported_any = false;
 
     inline for (decls) |decl| {
         const field = @field(Module, decl.name);
@@ -122,78 +125,44 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value) !void
 
             const fn_val = napi.Value{ .env = env.env, .value = js_fn };
             try module.setNamedProperty(name, fn_val);
-        } else if (field_info == .type) {
-            const InnerType = field;
-            if (@typeInfo(InnerType) == .@"struct" and
-                @hasDecl(InnerType, "js_class") and
-                @TypeOf(@field(InnerType, "js_class")) == bool and
-                @field(InnerType, "js_class") == true)
-            {
-                // Class with js_class — wrap and register
-                const wrapped = wrap_class.wrapClass(InnerType);
-                const props = wrapped.getPropertyDescriptors();
-                const name: [:0]const u8 = decl.name ++ "";
-
-                var class_val: napi.c.napi_value = null;
-                try napi.status.check(napi.c.napi_define_class(
-                    env.env,
-                    name.ptr,
-                    name.len,
-                    wrapped.constructor,
-                    null,
-                    props.len,
-                    if (props.len > 0) props.ptr else null,
-                    &class_val,
-                ));
-
-                const cls = napi.Value{ .env = env.env, .value = class_val };
-                try module.setNamedProperty(name, cls);
-            } else if (@typeInfo(InnerType) == .@"struct" and hasDslDecls(InnerType)) {
-                // Namespace — create JS object and recurse
-                const ns_obj = try env.createObject();
-                try registerDecls(InnerType, env, ns_obj);
-                const name: [:0]const u8 = decl.name ++ "";
-                try module.setNamedProperty(name, ns_obj);
-            }
-        }
-    }
-}
-
-/// Comptime check: does this struct type contain any exportable DSL content?
-/// Returns true if it has at least one DSL-compatible function, js_class struct,
-/// or nested struct that itself qualifies as a namespace.
-fn hasDslDecls(comptime T: type) bool {
-    if (@typeInfo(T) != .@"struct") return false;
-    const decls = @typeInfo(T).@"struct".decls;
-    inline for (decls) |decl| {
-        const field = @field(T, decl.name);
-        const FieldType = @TypeOf(field);
-        const field_info = @typeInfo(FieldType);
-
-        if (field_info == .@"fn") {
-            const fn_params = field_info.@"fn".params;
-            const is_dsl = blk: {
-                inline for (fn_params) |p| {
-                    const PT = p.type orelse break :blk false;
-                    if (!wrap_function.isDslOrOptionalDsl(PT)) break :blk false;
-                }
-                break :blk true;
-            };
-            if (is_dsl) return true;
+            exported_any = true;
         } else if (field_info == .type) {
             const InnerType = field;
             if (@typeInfo(InnerType) == .@"struct") {
-                if (@hasDecl(InnerType, "js_class") and
-                    @TypeOf(@field(InnerType, "js_class")) == bool and
-                    @field(InnerType, "js_class") == true)
-                {
-                    return true;
+                if (comptime class_meta.hasClassMeta(InnerType) or class_meta.isLegacyClassType(InnerType)) {
+                    const wrapped = wrap_class.wrapClass(InnerType);
+                    const props = wrapped.getPropertyDescriptors();
+                    const class_name = comptime class_meta.getClassName(InnerType, decl.name);
+                    const name: [:0]const u8 = class_name ++ "";
+
+                    var class_val: napi.c.napi_value = null;
+                    try napi.status.check(napi.c.napi_define_class(
+                        env.env,
+                        name.ptr,
+                        name.len,
+                        wrapped.constructor,
+                        null,
+                        props.len,
+                        if (props.len > 0) props.ptr else null,
+                        &class_val,
+                    ));
+
+                    const cls = napi.Value{ .env = env.env, .value = class_val };
+                    try class_runtime.registerClass(InnerType, env, cls);
+                    try module.setNamedProperty(name, cls);
+                    exported_any = true;
+                } else {
+                    const ns_obj = try env.createObject();
+                    if (try registerDecls(InnerType, env, ns_obj, depth + 1)) {
+                        const name: [:0]const u8 = decl.name ++ "";
+                        try module.setNamedProperty(name, ns_obj);
+                        exported_any = true;
+                    }
                 }
-                if (hasDslDecls(InnerType)) return true;
             }
         }
     }
-    return false;
+    return exported_any;
 }
 
 test "exportModule comptime smoke test" {

@@ -38,8 +38,11 @@ pub fn add(a: js.Number, b: js.Number) js.Number {
 }
 
 pub const Counter = struct {
-    pub const js_class = true;
-    pub const js_getters = .{ "count" };
+    pub const js_meta = js.class(.{
+        .properties = .{
+            .count = true,
+        },
+    });
 
     _count: i32,
 
@@ -70,7 +73,7 @@ c.increment();
 c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_class = true` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
+`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
 
 ---
 
@@ -129,11 +132,11 @@ pub fn findValue(arr: Array, target: Number) ?Number {
 
 ## Classes
 
-Structs with `js_class = true` are exported as JavaScript classes:
+Structs with `js_meta = js.class(...)` are exported as JavaScript classes:
 
 ```zig
 pub const Timer = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     start: i64,
 
     pub fn init() Timer {
@@ -161,18 +164,16 @@ pub const Timer = struct {
 | `pub fn init(...)` | Constructor (`new Class(...)`) — must return `T` or `!T` |
 | `pub fn method(self: T, ...)` | Immutable instance method |
 | `pub fn method(self: *T, ...)` | Mutable instance method |
-| `pub fn method(self: T, ...) !T` | Instance factory — returns a new instance |
-| `pub fn method(...) !T` | Static factory — `Class.method()` returns new instance |
+| `pub fn method(self: T, ...) !T` | Instance method returning a new JS instance |
+| `pub fn method(...) !T` | Static method returning a new JS instance |
 | `pub fn method(...)` | Static method (no self, returns non-T) |
 | `pub fn deinit(self: *T)` | Optional GC destructor |
 
-### Static Factory Methods
-
-Static methods that return `!T` (or `T`) are automatically registered as factory methods. The DSL handles heap allocation, `napi_new_instance`, and wrapping:
+Methods or functions that return the class type automatically materialize a fresh JS instance. There is no separate author-facing "factory" marker:
 
 ```zig
 pub const PublicKey = struct {
-    pub const js_class = true;
+    pub const js_meta = js.class(.{});
     pk: bls.PublicKey,
 
     pub fn init() PublicKey {
@@ -189,11 +190,7 @@ pub const PublicKey = struct {
 
 JS: `const pk = PublicKey.fromBytes(bytes);`
 
-Classes with static factories must have a zero-arg `init()`.
-
-### Instance Factory Methods
-
-Instance methods that return `!T` (same class type) create new instances. The DSL gets the constructor from `this.constructor` automatically:
+Same-class instance methods also work:
 
 ```zig
 pub fn clone(self: MyState) !MyState {
@@ -219,13 +216,17 @@ JS: `PublicKey.fromBytes(bytes)` or `PublicKey.fromBytes(bytes, true)`
 
 ### Getters and Setters
 
-Declare `js_getters` and `js_setters` to register computed property accessors:
+Declare properties inside `js_meta` to register computed or field-backed property accessors:
 
 ```zig
 pub const Config = struct {
-    pub const js_class = true;
-    pub const js_getters = .{ "volume", "muted", "label" };
-    pub const js_setters = .{ "volume", "muted" };
+    pub const js_meta = js.class(.{
+        .properties = .{
+            .volume = js.prop(.{ .get = true, .set = true }),
+            .muted = js.prop(.{ .get = true, .set = true }),
+            .label = true,
+        },
+    });
 
     _volume: i32,
     _muted: bool,
@@ -239,7 +240,7 @@ pub const Config = struct {
     pub fn volume(self: Config) js.Number {
         return js.Number.from(self._volume);
     }
-    pub fn set_volume(self: *Config, value: js.Number) !void {
+    pub fn setVolume(self: *Config, value: js.Number) !void {
         const v = value.assertI32();
         if (v < 0 or v > 100) return error.VolumeOutOfRange;
         self._volume = v;
@@ -255,11 +256,11 @@ pub const Config = struct {
 JS: `cfg.volume = 80; cfg.label; // "default"`
 
 **Rules:**
-- `js_getters` — tuple of function names to register as getters (optional)
-- `js_setters` — subset of `js_getters` that also have setters (optional, requires `js_getters`)
-- Getter: `pub fn name(self: T) DslType` — zero non-self args, must return a DSL type (not void)
-- Setter: `pub fn set_name(self: *T, value: DslType) void` or `!void` — mutable self, one arg
-- Names in `js_getters` are NOT exposed as callable methods
+- `pub const js_meta = js.class(.{})` marks a struct as a JS class
+- `.properties = .{ .name = true }` registers a readonly computed getter backed by `pub fn name(...)`
+- `.properties = .{ .name = js.field("field_name") }` registers a readonly field-backed property
+- `.properties = .{ .name = js.prop(.{ .get = true, .set = true }) }` registers getter/setter methods using `name` and `setName`
+- Accessor backing methods are not exported as callable JS methods
 
 ---
 

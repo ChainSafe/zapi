@@ -1,6 +1,8 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
+const class_meta = @import("class_meta.zig");
+const class_runtime = @import("class_runtime.zig");
 
 /// Checks whether `T` is a DSL wrapper type (a struct with a `val: napi.Value` field).
 pub fn isDslType(comptime T: type) bool {
@@ -18,9 +20,18 @@ pub fn isDslType(comptime T: type) bool {
 pub fn isDslOrOptionalDsl(comptime T: type) bool {
     if (T == napi.Value) return true;
     if (isDslType(T)) return true;
+    if (class_meta.isClassType(T)) return true;
+    if (@typeInfo(T) == .pointer) {
+        const ptr = @typeInfo(T).pointer;
+        if (ptr.size == .one and class_meta.isClassType(ptr.child)) return true;
+    }
     if (@typeInfo(T) == .optional) {
         const Inner = @typeInfo(T).optional.child;
-        return Inner == napi.Value or isDslType(Inner);
+        if (Inner == napi.Value or isDslType(Inner) or class_meta.isClassType(Inner)) return true;
+        if (@typeInfo(Inner) == .pointer) {
+            const ptr = @typeInfo(Inner).pointer;
+            return ptr.size == .one and class_meta.isClassType(ptr.child);
+        }
     }
     return false;
 }
@@ -42,6 +53,22 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
     }
     if (comptime isDslType(T)) {
         return T{ .val = napi.Value{ .env = env, .value = raw } };
+    }
+    if (comptime class_meta.isClassType(T)) {
+        const e = napi.Env{ .env = env };
+        const obj = napi.Value{ .env = env, .value = raw };
+        const ptr = e.unwrap(T, obj) catch @panic("convertArg: failed to unwrap class instance");
+        return ptr.*;
+    }
+    switch (@typeInfo(T)) {
+        .pointer => |ptr| {
+            if (ptr.size == .one and class_meta.isClassType(ptr.child)) {
+                const e = napi.Env{ .env = env };
+                const obj = napi.Value{ .env = env, .value = raw };
+                return e.unwrap(ptr.child, obj) catch @panic("convertArg: failed to unwrap class pointer");
+            }
+        },
+        else => {},
     }
     @compileError("convertArg: unsupported type " ++ @typeName(T));
 }
@@ -67,7 +94,7 @@ pub fn convertArgWithOptional(
 }
 
 /// Extracts the raw napi_value from a DSL type, napi.Value, or handles void.
-pub fn convertReturn(comptime T: type, value: T, env: napi.c.napi_env) napi.c.napi_value {
+pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, preferred_ctor: ?napi.Value) napi.c.napi_value {
     if (T == void) {
         var result: napi.c.napi_value = null;
         napi.status.check(napi.c.napi_get_undefined(env, &result)) catch return null;
@@ -79,12 +106,24 @@ pub fn convertReturn(comptime T: type, value: T, env: napi.c.napi_env) napi.c.na
     if (comptime isDslType(T)) {
         return value.val.value;
     }
+    if (comptime class_meta.isClassType(T)) {
+        const e = napi.Env{ .env = env };
+        const instance = class_runtime.materializeClassInstance(T, e, value, preferred_ctor) catch {
+            e.throwError("", "Failed to materialize returned class instance") catch {};
+            return null;
+        };
+        return instance.value;
+    }
     @compileError("convertReturn: unsupported return type " ++ @typeName(T));
+}
+
+pub fn convertReturn(comptime T: type, value: T, env: napi.c.napi_env) napi.c.napi_value {
+    return convertReturnWithCtor(T, value, env, null);
 }
 
 /// Calls the user function with the given args tuple and converts the return value,
 /// handling error unions (`!T`), optionals (`?T`), and combinations (`!?T`).
-pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func)), env: napi.c.napi_env) napi.c.napi_value {
+pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func)), env: napi.c.napi_env, preferred_ctor: ?napi.Value) napi.c.napi_value {
     const ReturnType = @typeInfo(@TypeOf(func)).@"fn".return_type.?;
 
     const ret_info = @typeInfo(ReturnType);
@@ -103,7 +142,7 @@ pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(f
         // !?T — optional inside error union
         if (payload_info == .optional) {
             if (result) |val| {
-                return convertReturn(payload_info.optional.child, val, env);
+                return convertReturnWithCtor(payload_info.optional.child, val, env, preferred_ctor);
             } else {
                 var undef: napi.c.napi_value = null;
                 napi.status.check(napi.c.napi_get_undefined(env, &undef)) catch return null;
@@ -112,14 +151,14 @@ pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(f
         }
 
         // !T — plain error union
-        return convertReturn(Payload, result, env);
+        return convertReturnWithCtor(Payload, result, env, preferred_ctor);
     }
 
     // ?T — optional (no error)
     if (ret_info == .optional) {
         const result = @call(.auto, func, args);
         if (result) |val| {
-            return convertReturn(ret_info.optional.child, val, env);
+            return convertReturnWithCtor(ret_info.optional.child, val, env, preferred_ctor);
         } else {
             var undef: napi.c.napi_value = null;
             napi.status.check(napi.c.napi_get_undefined(env, &undef)) catch return null;
@@ -129,7 +168,11 @@ pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(f
 
     // Plain T
     const result = @call(.auto, func, args);
-    return convertReturn(ReturnType, result, env);
+    return convertReturnWithCtor(ReturnType, result, env, preferred_ctor);
+}
+
+pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func)), env: napi.c.napi_env) napi.c.napi_value {
+    return callAndConvertWithCtor(func, args, env, null);
 }
 
 /// Generates a C-ABI napi_callback that wraps a DSL-typed Zig function.

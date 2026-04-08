@@ -1,6 +1,7 @@
 const napi = @import("napi.zig");
 const context = @import("js/context.zig");
 const typed_arrays = @import("js/typed_arrays.zig");
+const class_meta = @import("js/class_meta.zig");
 
 // Context
 pub const env = context.env;
@@ -46,6 +47,9 @@ pub const createPromise = @import("js/promise.zig").createPromise;
 pub const wrapFunction = @import("js/wrap_function.zig").wrapFunction;
 pub const wrapClass = @import("js/wrap_class.zig").wrapClass;
 pub const exportModule = @import("js/export_module.zig").exportModule;
+pub const class = class_meta.class;
+pub const field = class_meta.field;
+pub const prop = class_meta.prop;
 
 // Comptime helpers (public for advanced use)
 pub const isDslType = @import("js/wrap_function.zig").isDslType;
@@ -78,4 +82,6 @@ test {
     _ = @import("js/wrap_function.zig");
     _ = @import("js/wrap_class.zig");
     _ = @import("js/export_module.zig");
+    _ = @import("js/class_meta.zig");
+    _ = @import("js/class_runtime.zig");
 }
