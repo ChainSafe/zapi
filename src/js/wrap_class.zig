@@ -449,7 +449,7 @@ pub fn wrapClass(comptime T: type) type {
                     obj_ptr.* = init_result;
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, null) catch {
+                    _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, class_runtime.internalPlaceholderHint(T), null) catch {
                         std.heap.c_allocator.destroy(obj_ptr);
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
