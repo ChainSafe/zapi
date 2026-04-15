@@ -414,8 +414,8 @@ pub const Settings = struct {
         .properties = .{
             .volume = js.prop(.{ .get = true, .set = true }),
             .muted = js.prop(.{ .get = true, .set = true }),
-            .label = true,
-            .kind = js.field("_kind"),
+            .label = js.prop(.{ .get = true, .set = false }),
+            .kind = js.prop(.{ .get = "kindValue", .set = false }),
         },
     });
 
@@ -456,6 +456,10 @@ pub const Settings = struct {
     // Read-only getter: obj.label
     pub fn label(self: Settings) String {
         return String.from(self._label);
+    }
+
+    pub fn kindValue(self: Settings) String {
+        return String.from(self._kind);
     }
 
     // Regular method (not a getter)

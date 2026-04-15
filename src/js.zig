@@ -48,7 +48,6 @@ pub const wrapFunction = @import("js/wrap_function.zig").wrapFunction;
 pub const wrapClass = @import("js/wrap_class.zig").wrapClass;
 pub const exportModule = @import("js/export_module.zig").exportModule;
 pub const class = class_meta.class;
-pub const field = class_meta.field;
 pub const prop = class_meta.prop;
 
 // Comptime helpers (public for advanced use)

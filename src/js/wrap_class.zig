@@ -29,14 +29,11 @@ pub fn wrapClass(comptime T: type) type {
             0;
 
         const MethodCategory = enum { instance_method, static_method, skip };
-        const GetterKind = enum { method, field };
 
         const PropertyMeta = struct {
             name: []const u8,
-            getter_kind: GetterKind,
             getter_name: ?[]const u8 = null,
             setter_name: ?[]const u8 = null,
-            field_name: ?[]const u8 = null,
             is_by_value: bool = false,
         };
 
@@ -180,14 +177,6 @@ pub fn wrapClass(comptime T: type) type {
             }
         }
 
-        fn validateFieldProperty(comptime field_name: []const u8) void {
-            const fields = @typeInfo(T).@"struct".fields;
-            inline for (fields) |field_info| {
-                if (std.mem.eql(u8, field_info.name, field_name)) return;
-            }
-            @compileError("js.field references missing field '" ++ field_name ++ "' in " ++ @typeName(T));
-        }
-
         fn addProperty(props: anytype, count: *usize, meta: PropertyMeta) void {
             props[count.*] = meta;
             count.* += 1;
@@ -210,25 +199,6 @@ pub fn wrapClass(comptime T: type) type {
                     const property_name = prop_field.name;
                     const spec = @field(T.js_meta.options.properties, property_name);
                     switch (class_meta.propertyKind(spec)) {
-                        .computed => {
-                            const getter_field = @field(T, property_name);
-                            const is_by_value = validateGetterMethod(property_name, getter_field);
-                            addProperty(&properties, &property_count, .{
-                                .name = property_name,
-                                .getter_kind = .method,
-                                .getter_name = property_name,
-                                .is_by_value = is_by_value,
-                            });
-                            consumedMethod(&consumed_methods, property_name);
-                        },
-                        .field => {
-                            validateFieldProperty(spec.field_name);
-                            addProperty(&properties, &property_count, .{
-                                .name = property_name,
-                                .getter_kind = .field,
-                                .field_name = spec.field_name,
-                            });
-                        },
                         .prop => {
                             const getter_name = accessorName(property_name, spec.get, false) orelse
                                 @compileError("js.prop for '" ++ property_name ++ "' requires a getter");
@@ -243,7 +213,6 @@ pub fn wrapClass(comptime T: type) type {
 
                             addProperty(&properties, &property_count, .{
                                 .name = property_name,
-                                .getter_kind = .method,
                                 .getter_name = getter_name,
                                 .setter_name = setter_name,
                                 .is_by_value = is_by_value,
@@ -269,7 +238,6 @@ pub fn wrapClass(comptime T: type) type {
 
                     addProperty(&properties, &property_count, .{
                         .name = getter_name,
-                        .getter_kind = .method,
                         .getter_name = getter_name,
                         .setter_name = setter_name,
                         .is_by_value = is_by_value,
@@ -332,10 +300,7 @@ pub fn wrapClass(comptime T: type) type {
                     var desc = std.mem.zeroes(napi.c.napi_property_descriptor);
                     const property_name: [:0]const u8 = prop.name ++ "";
                     desc.utf8name = property_name.ptr;
-                    desc.getter = switch (prop.getter_kind) {
-                        .method => wrapGetter(T, @field(T, prop.getter_name.?), prop.is_by_value),
-                        .field => wrapFieldGetter(T, prop.field_name.?),
-                    };
+                    desc.getter = wrapGetter(T, @field(T, prop.getter_name.?), prop.is_by_value);
                     if (prop.setter_name) |setter_name| {
                         desc.setter = wrapSetter(T, @field(T, setter_name));
                     }
@@ -659,72 +624,6 @@ pub fn wrapClass(comptime T: type) type {
                 }
             };
             return static_cb.callback;
-        }
-
-        fn wrapFieldGetter(comptime Class: type, comptime field_name: []const u8) napi.c.napi_callback {
-            const FieldType = fieldType(field_name);
-
-            const getter_cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
-                    const e = napi.Env{ .env = raw_env };
-                    const prev_env = context.setEnv(e);
-                    defer context.restoreEnv(prev_env);
-
-                    var argc: usize = 0;
-                    var this_arg: napi.c.napi_value = null;
-                    napi.status.check(napi.c.napi_get_cb_info(
-                        raw_env,
-                        cb_info,
-                        &argc,
-                        null,
-                        &this_arg,
-                        null,
-                    )) catch {
-                        e.throwError("", "Failed to get callback info in field getter") catch {};
-                        return null;
-                    };
-
-                    const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    const self_ptr = e.unwrapChecked(Class, this_val, class_runtime.typeTag(Class)) catch {
-                        e.throwTypeError("", "Invalid class receiver") catch {};
-                        return null;
-                    };
-
-                    const field_value: FieldType = @field(self_ptr.*, field_name);
-                    return convertFieldValue(FieldType, field_value, raw_env);
-                }
-            };
-            return getter_cb.callback;
-        }
-
-        fn fieldType(comptime field_name: []const u8) type {
-            inline for (@typeInfo(T).@"struct".fields) |field_info| {
-                if (std.mem.eql(u8, field_info.name, field_name)) return field_info.type;
-            }
-            @compileError("unknown field '" ++ field_name ++ "' on " ++ @typeName(T));
-        }
-
-        fn convertFieldValue(comptime FieldType: type, value: FieldType, raw_env: napi.c.napi_env) napi.c.napi_value {
-            if (FieldType == bool) return @import("boolean.zig").Boolean.from(value).toValue().value;
-
-            switch (@typeInfo(FieldType)) {
-                .int, .comptime_int, .float, .comptime_float => return @import("number.zig").Number.from(value).toValue().value,
-                .pointer => |ptr| {
-                    if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) {
-                        return @import("string.zig").String.from(value).toValue().value;
-                    }
-                },
-                else => {},
-            }
-
-            if (wrap_function.isDslType(FieldType)) {
-                return value.val.value;
-            }
-            if (class_meta.isClassType(FieldType)) {
-                return wrap_function.convertReturn(FieldType, value, raw_env);
-            }
-
-            @compileError("js.field unsupported field type " ++ @typeName(FieldType) ++ " on " ++ @typeName(T));
         }
 
         fn wrapSetter(comptime Class: type, comptime setter_fn: anytype) napi.c.napi_callback {

@@ -6,11 +6,6 @@ pub const AccessorRef = union(enum) {
     named: []const u8,
 };
 
-pub const FieldSpec = struct {
-    pub const zapi_js_property_kind = "field";
-    field_name: []const u8,
-};
-
 pub const PropSpec = struct {
     pub const zapi_js_property_kind = "prop";
     get: AccessorRef,
@@ -29,10 +24,6 @@ pub fn class(comptime opts: anytype) ClassMeta(@TypeOf(opts)) {
     return .{ .options = opts };
 }
 
-pub fn field(comptime name: []const u8) FieldSpec {
-    return .{ .field_name = name };
-}
-
 pub fn prop(comptime spec: anytype) PropSpec {
     const Spec = @TypeOf(spec);
     if (@typeInfo(Spec) != .@"struct") {
@@ -43,9 +34,13 @@ pub fn prop(comptime spec: anytype) PropSpec {
         @compileError("js.prop requires .get");
     }
 
+    if (!@hasField(Spec, "set")) {
+        @compileError("js.prop requires .set (use false for read-only properties)");
+    }
+
     return .{
         .get = parseAccessor("get", @field(spec, "get")),
-        .set = if (@hasField(Spec, "set")) parseAccessor("set", @field(spec, "set")) else .none,
+        .set = parseAccessor("set", @field(spec, "set")),
     };
 }
 
@@ -90,21 +85,19 @@ pub fn getClassName(comptime T: type, comptime default_name: []const u8) []const
     }
 }
 
-pub fn propertyKind(comptime value: anytype) enum { computed, field, prop, invalid } {
-    if (@TypeOf(value) == bool) {
-        return if (value) .computed else .invalid;
-    }
-    if (isFieldSpec(value)) return .field;
+pub fn propertyKind(comptime value: anytype) enum { prop, invalid } {
     if (isPropSpec(value)) return .prop;
     return .invalid;
 }
 
-pub fn isFieldSpec(comptime value: anytype) bool {
-    return @hasDecl(@TypeOf(value), "zapi_js_property_kind") and
-        std.mem.eql(u8, @field(@TypeOf(value), "zapi_js_property_kind"), "field");
-}
-
 pub fn isPropSpec(comptime value: anytype) bool {
+    switch (@typeInfo(@TypeOf(value))) {
+        .@"struct" => {},
+        .@"enum" => {},
+        .@"union" => {},
+        .@"opaque" => {},
+        else => return false,
+    }
     return @hasDecl(@TypeOf(value), "zapi_js_property_kind") and
         std.mem.eql(u8, @field(@TypeOf(value), "zapi_js_property_kind"), "prop");
 }
@@ -143,8 +136,8 @@ fn validateProperties(comptime Props: type, comptime props: Props) void {
     inline for (@typeInfo(Props).@"struct".fields) |field_info| {
         const value = @field(props, field_info.name);
         switch (propertyKind(value)) {
-            .computed, .field, .prop => {},
-            .invalid => @compileError("unsupported property spec for '" ++ field_info.name ++ "'"),
+            .prop => {},
+            .invalid => @compileError("unsupported property spec for '" ++ field_info.name ++ "' (use js.prop)"),
         }
     }
 }
@@ -191,13 +184,25 @@ test "js.class accepts empty options" {
     try std.testing.expect(isClassMetaValue(meta));
 }
 
-test "js.field accepts field names" {
-    const spec = field("label_");
-    try std.testing.expectEqualStrings("label_", spec.field_name);
-}
-
 test "js.prop accepts derived getter and setter" {
     const spec = prop(.{ .get = true, .set = true });
     try std.testing.expect(spec.get == .derived);
     try std.testing.expect(spec.set == .derived);
+}
+
+test "js.prop accepts named getter without setter" {
+    const spec = prop(.{ .get = "kindValue", .set = false });
+    try std.testing.expect(spec.get == .named);
+    try std.testing.expectEqualStrings("kindValue", spec.get.named);
+    try std.testing.expect(spec.set == .none);
+}
+
+test "js.prop accepts explicit read-only derived getter" {
+    const spec = prop(.{ .get = true, .set = false });
+    try std.testing.expect(spec.get == .derived);
+    try std.testing.expect(spec.set == .none);
+}
+
+test "bare bool property specs are invalid" {
+    try std.testing.expect(propertyKind(true) == .invalid);
 }

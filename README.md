@@ -216,7 +216,7 @@ JS: `PublicKey.fromBytes(bytes)` or `PublicKey.fromBytes(bytes, true)`
 
 ### Getters and Setters
 
-Declare properties inside `js_meta` to register computed or field-backed property accessors:
+Declare properties inside `js_meta` with `js.prop` to register property accessors:
 
 ```zig
 pub const Config = struct {
@@ -224,7 +224,7 @@ pub const Config = struct {
         .properties = .{
             .volume = js.prop(.{ .get = true, .set = true }),
             .muted = js.prop(.{ .get = true, .set = true }),
-            .label = true,
+            .label = js.prop(.{ .get = true, .set = false }),
         },
     });
 
@@ -257,9 +257,9 @@ JS: `cfg.volume = 80; cfg.label; // "default"`
 
 **Rules:**
 - `pub const js_meta = js.class(.{})` marks a struct as a JS class
-- `.properties = .{ .name = true }` registers a readonly computed getter backed by `pub fn name(...)`
-- `.properties = .{ .name = js.field("field_name") }` registers a readonly field-backed property
+- `.properties = .{ .name = js.prop(.{ .get = true, .set = false }) }` registers a readonly getter backed by `pub fn name(...)`
 - `.properties = .{ .name = js.prop(.{ .get = true, .set = true }) }` registers getter/setter methods using `name` and `setName`
+- `.properties = .{ .name = js.prop(.{ .get = "customGetter", .set = false }) }` registers a getter backed by a specifically named method
 - Accessor backing methods are not exported as callable JS methods
 
 ---
