@@ -4,6 +4,10 @@ const context = @import("context.zig");
 pub const Date = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if (!(try val.isDate())) return error.TypeMismatch;
+    }
+
     /// Returns the timestamp (milliseconds since Unix epoch) as f64.
     pub fn toTimestamp(self: Date) !f64 {
         return self.val.getDateValue();

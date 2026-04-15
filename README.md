@@ -293,10 +293,12 @@ pub fn sum(data: Uint8Array) !Number {
 ```zig
 pub fn asyncOp(val: Number) !Promise(Number) {
     var promise = try js.createPromise(Number);
-    try promise.resolve(val);  // or dispatch async work
+    try promise.resolve(val);  // must resolve or reject before returning
     return promise;
 }
 ```
+
+`Promise(T)` in this DSL path is synchronous-only: resolve or reject it before the exported function returns. For truly asynchronous completion, keep the `Deferred` handle in lower-level N-API code and bridge back with `napi.AsyncWork` or `napi.ThreadSafeFunction`.
 
 ### Callbacks
 

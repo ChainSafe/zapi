@@ -7,6 +7,10 @@ const Boolean = @import("boolean.zig").Boolean;
 pub const Array = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if (!(try val.isArray())) return error.TypeMismatch;
+    }
+
     /// Returns the element at `index` as an untyped Value.
     pub fn get(self: Array, index: u32) !@import("value.zig").Value {
         const element = try self.val.getElement(index);

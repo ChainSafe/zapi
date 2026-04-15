@@ -138,6 +138,11 @@ describe("Counter class", () => {
 		expect(c.getCount()).toEqual(5);
 	});
 
+	it("rejects cross-class method binding", () => {
+		const getCount = mod.Counter.prototype.getCount;
+		expect(() => getCount.call(new mod.Buffer(4))).toThrow();
+	});
+
 	it("increments", () => {
 		const c = new mod.Counter(0);
 		c.increment();
@@ -316,6 +321,10 @@ describe("class materialization", () => {
 		expect(clone).toBeInstanceOf(DerivedFactoryResource);
 		expect(clone.getByte()).toEqual(9);
 	});
+
+	it("rejects cross-class static factory binding during materialization", () => {
+		expect(() => mod.Point.create.call(mod.Buffer, 1, 2)).toThrow();
+	});
 });
 
 // Section 15: Getters and Setters
@@ -362,6 +371,14 @@ describe("Settings class (getters/setters)", () => {
 		const s = new mod.Settings();
 		expect(typeof s.volume).toBe("number");
 		expect(typeof s.volume).not.toBe("function");
+	});
+
+	it("rejects cross-class getter and setter binding", () => {
+		const volume = Object.getOwnPropertyDescriptor(mod.Settings.prototype, "volume");
+		expect(volume?.get).toBeTypeOf("function");
+		expect(volume?.set).toBeTypeOf("function");
+		expect(() => volume?.get?.call(new mod.Counter(1))).toThrow();
+		expect(() => volume?.set?.call(new mod.Counter(1), 20)).toThrow();
 	});
 
 	it("reset method still works alongside getters", () => {

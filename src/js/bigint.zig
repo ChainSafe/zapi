@@ -5,6 +5,10 @@ const context = @import("context.zig");
 pub const BigInt = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if ((try val.typeof()) != .bigint) return error.TypeMismatch;
+    }
+
     /// Returns the i64 value. If lossless is provided, it indicates whether the
     /// conversion was lossless.
     pub fn toI64(self: BigInt, lossless: ?*bool) !i64 {

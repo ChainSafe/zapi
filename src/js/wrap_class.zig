@@ -419,8 +419,7 @@ pub fn wrapClass(comptime T: type) type {
                             obj_ptr.* = std.mem.zeroes(T);
 
                             const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                            _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, class_runtime.internalPlaceholderHint(T), null) catch {
-                                std.heap.c_allocator.destroy(obj_ptr);
+                            class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, class_runtime.internalPlaceholderHint(T)) catch {
                                 e.throwError("", "Failed to wrap internal placeholder") catch {};
                                 return null;
                             };
@@ -437,7 +436,10 @@ pub fn wrapClass(comptime T: type) type {
                     var args: std.meta.ArgsTuple(InitFnType) = undefined;
                     inline for (0..init_argc) |i| {
                         const ParamType = init_params[i].type.?;
-                        args[i] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
+                        args[i] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc) catch {
+                            wrap_function.throwArgTypeError(e, ParamType, i);
+                            return null;
+                        };
                     }
 
                     const init_result = callInit(init_fn, args) orelse return null;
@@ -449,8 +451,7 @@ pub fn wrapClass(comptime T: type) type {
                     obj_ptr.* = init_result;
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    _ = e.wrap(this_val, T, obj_ptr, defaultFinalize, class_runtime.internalPlaceholderHint(T), null) catch {
-                        std.heap.c_allocator.destroy(obj_ptr);
+                    class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, null) catch {
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
                     };
@@ -530,8 +531,8 @@ pub fn wrapClass(comptime T: type) type {
                     }
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    const self_ptr = e.unwrap(Class, this_val) catch {
-                        e.throwError("", "Failed to unwrap native object") catch {};
+                    const self_ptr = e.unwrapChecked(Class, this_val, class_runtime.typeTag(Class)) catch {
+                        e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
                     };
 
@@ -543,7 +544,10 @@ pub fn wrapClass(comptime T: type) type {
 
                     inline for (0..js_argc) |i| {
                         const ParamType = method_params[i + 1].type.?;
-                        args[i + 1] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
+                        args[i + 1] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc) catch {
+                            wrap_function.throwArgTypeError(e, ParamType, i);
+                            return null;
+                        };
                     }
 
                     const preferred_ctor = if (prefers_receiver_ctor)
@@ -582,8 +586,8 @@ pub fn wrapClass(comptime T: type) type {
                     };
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    const self_ptr = e.unwrap(Class, this_val) catch {
-                        e.throwError("", "Failed to unwrap native object in getter") catch {};
+                    const self_ptr = e.unwrapChecked(Class, this_val, class_runtime.typeTag(Class)) catch {
+                        e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
                     };
 
@@ -641,7 +645,10 @@ pub fn wrapClass(comptime T: type) type {
                     var args: std.meta.ArgsTuple(MethodFnType) = undefined;
                     inline for (0..method_argc) |i| {
                         const ParamType = method_params[i].type.?;
-                        args[i] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
+                        args[i] = wrap_function.convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc) catch {
+                            wrap_function.throwArgTypeError(e, ParamType, i);
+                            return null;
+                        };
                     }
 
                     const preferred_ctor = if (prefers_this_ctor)
@@ -678,8 +685,8 @@ pub fn wrapClass(comptime T: type) type {
                     };
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    const self_ptr = e.unwrap(Class, this_val) catch {
-                        e.throwError("", "Failed to unwrap native object in field getter") catch {};
+                    const self_ptr = e.unwrapChecked(Class, this_val, class_runtime.typeTag(Class)) catch {
+                        e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
                     };
 
@@ -748,15 +755,18 @@ pub fn wrapClass(comptime T: type) type {
                     };
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    const self_ptr = e.unwrap(Class, this_val) catch {
-                        e.throwError("", "Failed to unwrap native object in setter") catch {};
+                    const self_ptr = e.unwrapChecked(Class, this_val, class_runtime.typeTag(Class)) catch {
+                        e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
                     };
 
                     const prev_this = context.setThis(this_val);
                     defer context.restoreThis(prev_this);
 
-                    const value_arg = convertArg(ValueParamType, raw_args[0], raw_env);
+                    const value_arg = convertArg(ValueParamType, raw_args[0], raw_env) catch {
+                        wrap_function.throwArgTypeError(e, ValueParamType, 0);
+                        return null;
+                    };
 
                     var args: std.meta.ArgsTuple(SetterFnType) = undefined;
                     args[0] = self_ptr;

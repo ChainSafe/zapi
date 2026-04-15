@@ -5,6 +5,10 @@ const context = @import("context.zig");
 pub const String = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if ((try val.typeof()) != .string) return error.TypeMismatch;
+    }
+
     /// Copies the string value into the provided buffer.
     /// Returns a slice of the buffer containing the string data.
     pub fn toSlice(self: String, buf: []u8) ![]const u8 {

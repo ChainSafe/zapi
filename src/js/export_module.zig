@@ -52,17 +52,32 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             const prev = context.setEnv(env);
             defer context.restoreEnv(prev);
 
-            // Lifecycle: init
             if (has_lifecycle) {
                 const prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
+                var cleanup_hook_registered = false;
+                errdefer if (!cleanup_hook_registered) {
+                    _ = State.env_refcount.fetchSub(1, .acq_rel);
+                };
 
                 if (has_init) {
-                    options.init(prev_refcount) catch |err| {
-                        // Rollback refcount on init failure
-                        _ = State.env_refcount.fetchSub(1, .acq_rel);
-                        return err;
-                    };
+                    try options.init(prev_refcount);
                 }
+
+                _ = try registerDecls(Module, env, module, 0);
+
+                if (has_register) {
+                    try options.register(env, module);
+                }
+
+                if (shouldRegisterEnvCleanupHook(has_lifecycle)) {
+                    try env.addEnvCleanupHook(
+                        State.CleanupData,
+                        &State.cleanup_data,
+                        State.cleanupHook,
+                    );
+                    cleanup_hook_registered = true;
+                }
+                return;
             }
 
             // Register all pub decls
@@ -72,19 +87,14 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             if (has_register) {
                 try options.register(env, module);
             }
-
-            // Lifecycle: register cleanup hook
-            if (has_cleanup) {
-                try env.addEnvCleanupHook(
-                    State.CleanupData,
-                    &State.cleanup_data,
-                    State.cleanupHook,
-                );
-            }
         }
     };
 
     napi.module.register(init.moduleInit);
+}
+
+fn shouldRegisterEnvCleanupHook(has_lifecycle: bool) bool {
+    return has_lifecycle;
 }
 
 /// Iterates module declarations and registers DSL functions and js_meta classes.
@@ -167,4 +177,9 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
 
 test "exportModule comptime smoke test" {
     try std.testing.expect(true);
+}
+
+test "exportModule registers cleanup hook for init-only lifecycle" {
+    try std.testing.expect(shouldRegisterEnvCleanupHook(true));
+    try std.testing.expect(!shouldRegisterEnvCleanupHook(false));
 }

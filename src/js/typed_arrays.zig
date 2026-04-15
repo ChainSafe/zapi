@@ -8,6 +8,13 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         val: napi.Value,
 
         const Self = @This();
+        pub const expected_array_type = array_type;
+
+        pub fn validateArg(val: napi.Value) !void {
+            if (!(try val.isTypedarray())) return error.TypeMismatch;
+            const info = try val.getTypedarrayInfo();
+            if (info.array_type != array_type) return error.TypeMismatch;
+        }
 
         /// Returns a slice pointing directly into the V8 ArrayBuffer backing store.
         ///
@@ -18,6 +25,7 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         /// outlive the callback, copy the slice contents to a heap allocation.
         pub fn toSlice(self: Self) ![]Element {
             const info = try self.val.getTypedarrayInfo();
+            if (info.array_type != array_type) return error.TypeMismatch;
             const byte_ptr: [*]u8 = info.data.ptr;
             const typed_ptr: [*]Element = @ptrCast(@alignCast(byte_ptr));
             return typed_ptr[0..info.length];
@@ -55,3 +63,8 @@ pub const Float32Array = TypedArray(f32, .float32);
 pub const Float64Array = TypedArray(f64, .float64);
 pub const BigInt64Array = TypedArray(i64, .bigint64);
 pub const BigUint64Array = TypedArray(u64, .biguint64);
+
+test "TypedArray exposes expected subtype metadata" {
+    try @import("std").testing.expect(Uint8Array.expected_array_type == .uint8);
+    try @import("std").testing.expect(Float64Array.expected_array_type == .float64);
+}

@@ -4,6 +4,10 @@ const context = @import("context.zig");
 pub const Function = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if ((try val.typeof()) != .function) return error.TypeMismatch;
+    }
+
     /// Calls the function with `undefined` as the receiver.
     /// `args` is a tuple where each element is either a DSL wrapper type
     /// (has `.val` field) or a raw `napi.Value`.

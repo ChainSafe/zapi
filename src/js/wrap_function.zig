@@ -46,26 +46,89 @@ pub fn requiredArgCount(comptime params: []const std.builtin.Type.Fn.Param) usiz
     return count;
 }
 
+fn normalizedArgType(comptime T: type) type {
+    if (@typeInfo(T) == .optional) return @typeInfo(T).optional.child;
+    return T;
+}
+
+fn typedArrayName(comptime array_type: napi.value_types.TypedarrayType) []const u8 {
+    return switch (array_type) {
+        .int8 => "Int8Array",
+        .uint8 => "Uint8Array",
+        .uint8_clamped => "Uint8ClampedArray",
+        .int16 => "Int16Array",
+        .uint16 => "Uint16Array",
+        .int32 => "Int32Array",
+        .uint32 => "Uint32Array",
+        .float32 => "Float32Array",
+        .float64 => "Float64Array",
+        .bigint64 => "BigInt64Array",
+        .biguint64 => "BigUint64Array",
+    };
+}
+
+fn argTypeDescription(comptime T: type) []const u8 {
+    const Inner = normalizedArgType(T);
+
+    if (Inner == napi.Value) return "a JavaScript value";
+    if (comptime isDslType(Inner)) {
+        if (Inner == @import("number.zig").Number) return "a number";
+        if (Inner == @import("string.zig").String) return "a string";
+        if (Inner == @import("boolean.zig").Boolean) return "a boolean";
+        if (Inner == @import("bigint.zig").BigInt) return "a bigint";
+        if (Inner == @import("date.zig").Date) return "a Date";
+        if (Inner == @import("array.zig").Array) return "an Array";
+        if (Inner == @import("function.zig").Function) return "a function";
+        if (@hasDecl(Inner, "expected_array_type")) return comptime ("a " ++ typedArrayName(Inner.expected_array_type));
+        return "a compatible JavaScript value";
+    }
+
+    if (comptime class_meta.isClassType(Inner)) return "an instance of " ++ @typeName(Inner);
+    if (@typeInfo(Inner) == .pointer) {
+        const ptr = @typeInfo(Inner).pointer;
+        if (ptr.size == .one and class_meta.isClassType(ptr.child)) {
+            return "an instance of " ++ @typeName(ptr.child);
+        }
+    }
+
+    return "a compatible JavaScript value";
+}
+
+pub fn throwArgTypeError(e: napi.Env, comptime T: type, arg_index: usize) void {
+    var buf: [128:0]u8 = undefined;
+    const message = std.fmt.bufPrintZ(&buf, "Argument {d} must be {s}", .{ arg_index + 1, argTypeDescription(T) }) catch return;
+    e.throwTypeError("", message) catch {};
+}
+
+fn validateDslArg(comptime T: type, value: napi.Value) !void {
+    if (T == napi.Value) return;
+    if (!comptime isDslType(T)) return;
+    if (@hasDecl(T, "validateArg")) {
+        try T.validateArg(value);
+    }
+}
+
 /// Wraps a raw napi.Value into a DSL wrapper type by setting its `val` field.
-pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env) T {
+pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env) !T {
+    const value = napi.Value{ .env = env, .value = raw };
+
     if (T == napi.Value) {
-        return napi.Value{ .env = env, .value = raw };
+        return value;
     }
     if (comptime isDslType(T)) {
-        return T{ .val = napi.Value{ .env = env, .value = raw } };
+        try validateDslArg(T, value);
+        return T{ .val = value };
     }
     if (comptime class_meta.isClassType(T)) {
         const e = napi.Env{ .env = env };
-        const obj = napi.Value{ .env = env, .value = raw };
-        const ptr = e.unwrap(T, obj) catch @panic("convertArg: failed to unwrap class instance");
+        const ptr = e.unwrapChecked(T, value, class_runtime.typeTag(T)) catch return error.TypeMismatch;
         return ptr.*;
     }
     switch (@typeInfo(T)) {
         .pointer => |ptr| {
             if (ptr.size == .one and class_meta.isClassType(ptr.child)) {
                 const e = napi.Env{ .env = env };
-                const obj = napi.Value{ .env = env, .value = raw };
-                return e.unwrap(ptr.child, obj) catch @panic("convertArg: failed to unwrap class pointer");
+                return e.unwrapChecked(ptr.child, value, class_runtime.typeTag(ptr.child)) catch error.TypeMismatch;
             }
         },
         else => {},
@@ -82,15 +145,15 @@ pub fn convertArgWithOptional(
     env: napi.c.napi_env,
     param_index: usize,
     actual_argc: usize,
-) T {
+) !T {
     if (@typeInfo(T) == .optional) {
         if (param_index >= actual_argc) return null;
         const raw_value = napi.Value{ .env = env, .value = raw };
-        if ((raw_value.typeof() catch null) == .undefined) return null;
+        if ((try raw_value.typeof()) == .undefined) return null;
         const Inner = @typeInfo(T).optional.child;
-        return convertArg(Inner, raw, env);
+        return try convertArg(Inner, raw, env);
     }
-    return convertArg(T, raw, env);
+    return try convertArg(T, raw, env);
 }
 
 /// Extracts the raw napi_value from a DSL type, napi.Value, or handles void.
@@ -217,7 +280,10 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..argc) |i| {
                 const ParamType = params[i].type.?;
-                args[i] = convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc);
+                args[i] = convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc) catch {
+                    throwArgTypeError(e, ParamType, i);
+                    return null;
+                };
             }
 
             return callAndConvert(func, args, raw_env);
@@ -237,4 +303,11 @@ test "isDslType recognizes DSL types" {
 test "isDslType rejects non-DSL types" {
     try std.testing.expect(!isDslType(u32));
     try std.testing.expect(!isDslType(struct { x: u32 }));
+}
+
+test "argTypeDescription names typed arrays and unwraps optionals" {
+    const typed_arrays = @import("typed_arrays.zig");
+
+    try std.testing.expectEqualStrings("a number", argTypeDescription(?@import("number.zig").Number));
+    try std.testing.expectEqualStrings("a Uint8Array", argTypeDescription(typed_arrays.Uint8Array));
 }

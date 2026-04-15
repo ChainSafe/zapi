@@ -10,6 +10,10 @@ pub fn Object(comptime T: type) type {
 
         const Self = @This();
 
+        pub fn validateArg(val: napi.Value) !void {
+            if ((try val.typeof()) != .object) return error.TypeMismatch;
+        }
+
         /// Reads all properties from the JS object into a Zig struct.
         pub fn get(self: Self) !T {
             var result: T = undefined;

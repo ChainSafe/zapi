@@ -1,6 +1,46 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
 
+pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
+    return .{
+        .lower = fnv1a64Parts(.{ "zapi:dsl:type-tag:lower:", @typeName(T) }),
+        .upper = fnv1a64Parts(.{ "zapi:dsl:type-tag:upper:", @typeName(T) }),
+    };
+}
+
+pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T, finalize_hint: ?*anyopaque) !void {
+    const tag = typeTag(T);
+    try env.wrap(object, T, native_object, defaultFinalize(T), finalize_hint, null);
+    errdefer if (env.removeWrap(T, object)) |removed| {
+        if (isInternalPlaceholderHint(T, finalize_hint)) {
+            destroyInternalPlaceholder(T, removed);
+        } else {
+            destroyNativeObject(T, removed);
+        }
+    } else |_| {};
+    if (!(try env.checkObjectTypeTag(object, tag))) {
+        try env.typeTagObject(object, tag);
+    }
+}
+
+/// Generates a deterministic 64-bit FNV-1a hash at compile-time.
+/// This is used to create stable `napi_type_tag` values for DSL classes
+/// based on their type names. FNV-1a is chosen for its simplicity, speed,
+/// and suitability for non-cryptographic unique-ish identification.
+///
+/// The `parts` argument allows concatenating multiple compile-time strings
+/// (e.g., prefixes and type names) into a single input for hashing.
+fn fnv1a64Parts(comptime parts: anytype) u64 {
+    var hash: u64 = 0xcbf29ce484222325;
+    inline for (parts) |part| {
+        inline for (part) |byte| {
+            hash ^= byte;
+            hash *%= 0x100000001b3;
+        }
+    }
+    return hash;
+}
+
 pub fn destroyNativeObject(comptime T: type, obj: *T) void {
     if (@hasDecl(T, "deinit")) {
         obj.deinit();
@@ -14,7 +54,11 @@ pub fn destroyInternalPlaceholder(comptime T: type, obj: *T) void {
 
 pub fn defaultFinalize(comptime T: type) @import("../finalize_callback.zig").FinalizeCallback(T) {
     return struct {
-        fn f(_: napi.Env, obj: *T, _: ?*anyopaque) void {
+        fn f(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
+            if (isInternalPlaceholderHint(T, hint)) {
+                destroyInternalPlaceholder(T, obj);
+                return;
+            }
             destroyNativeObject(T, obj);
         }
     }.f;
@@ -56,14 +100,13 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     ));
 
     const js_instance = napi.Value{ .env = env.env, .value = js_instance_raw };
-    const placeholder = try env.removeWrap(T, js_instance);
+    const placeholder = try env.removeWrapChecked(T, js_instance, typeTag(T));
     destroyInternalPlaceholder(T, placeholder);
 
     const obj_ptr = try std.heap.c_allocator.create(T);
-    errdefer std.heap.c_allocator.destroy(obj_ptr);
     obj_ptr.* = instance;
 
-    try env.wrap(js_instance, T, obj_ptr, defaultFinalize(T), null, null);
+    try wrapTaggedObject(T, env, js_instance, obj_ptr, null);
     return js_instance;
 }
 

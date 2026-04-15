@@ -12,6 +12,10 @@ const context = @import("context.zig");
 pub const Number = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if ((try val.typeof()) != .number) return error.TypeMismatch;
+    }
+
     pub fn toI32(self: Number) !i32 {
         return self.val.getValueInt32();
     }

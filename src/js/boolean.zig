@@ -4,6 +4,10 @@ const context = @import("context.zig");
 pub const Boolean = struct {
     val: napi.Value,
 
+    pub fn validateArg(val: napi.Value) !void {
+        if ((try val.typeof()) != .boolean) return error.TypeMismatch;
+    }
+
     pub fn toBool(self: Boolean) !bool {
         return self.val.getValueBool();
     }
