@@ -4,6 +4,16 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const mod = require("../../zig-out/lib/example_js_dsl.node");
 
+function expectTypeErrorWithMessage(fn: () => unknown, message: string) {
+	try {
+		fn();
+		expect.fail(`Expected TypeError with message: ${message}`);
+	} catch (error) {
+		expect(error).toBeInstanceOf(TypeError);
+		expect((error as Error).message).toEqual(message);
+	}
+}
+
 // Section 1: Basic Functions
 describe("basic functions", () => {
 	it("add two numbers", () => {
@@ -44,9 +54,19 @@ describe("primitive types", () => {
 		expect(mod.doubleNumber(21)).toEqual(42);
 	});
 
+	it("doubleNumber rejects non-number arguments at the JS boundary", () => {
+		expectTypeErrorWithMessage(() => mod.doubleNumber(true), "Argument 1 must be a number");
+		expectTypeErrorWithMessage(() => mod.doubleNumber("21"), "Argument 1 must be a number");
+	});
+
 	it("toggleBool", () => {
 		expect(mod.toggleBool(true)).toBe(false);
 		expect(mod.toggleBool(false)).toBe(true);
+	});
+
+	it("toggleBool rejects non-boolean arguments at the JS boundary", () => {
+		expectTypeErrorWithMessage(() => mod.toggleBool(1), "Argument 1 must be a boolean");
+		expectTypeErrorWithMessage(() => mod.toggleBool("true"), "Argument 1 must be a boolean");
 	});
 
 	it("reverseString", () => {
@@ -54,8 +74,18 @@ describe("primitive types", () => {
 		expect(mod.reverseString("a")).toEqual("a");
 	});
 
+	it("reverseString rejects non-string arguments at the JS boundary", () => {
+		expectTypeErrorWithMessage(() => mod.reverseString(false), "Argument 1 must be a string");
+		expectTypeErrorWithMessage(() => mod.reverseString(123), "Argument 1 must be a string");
+	});
+
 	it("doubleBigInt", () => {
 		expect(mod.doubleBigInt(50n)).toEqual(100n);
+	});
+
+	it("doubleBigInt rejects non-bigint arguments at the JS boundary", () => {
+		expectTypeErrorWithMessage(() => mod.doubleBigInt(50), "Argument 1 must be a bigint");
+		expectTypeErrorWithMessage(() => mod.doubleBigInt("50"), "Argument 1 must be a bigint");
 	});
 
 	it("largeUnsignedBoundary survives u64 values above i64 max", () => {
@@ -69,6 +99,11 @@ describe("primitive types", () => {
 		const result = mod.tomorrow(now);
 		expect(result).toBeInstanceOf(Date);
 		expect(result.toISOString()).toEqual("2025-01-02T00:00:00.000Z");
+	});
+
+	it("tomorrow rejects non-Date arguments at the JS boundary", () => {
+		expectTypeErrorWithMessage(() => mod.tomorrow("2025-01-01T00:00:00Z"), "Argument 1 must be a Date");
+		expectTypeErrorWithMessage(() => mod.tomorrow(123), "Argument 1 must be a Date");
 	});
 });
 
