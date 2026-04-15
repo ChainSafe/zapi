@@ -50,14 +50,7 @@ pub fn hasClassMeta(comptime T: type) bool {
 }
 
 pub fn isClassType(comptime T: type) bool {
-    return hasClassMeta(T) or isLegacyClassType(T);
-}
-
-pub fn isLegacyClassType(comptime T: type) bool {
-    if (@typeInfo(T) != .@"struct") return false;
-    return @hasDecl(T, "js_class") and
-        @TypeOf(@field(T, "js_class")) == bool and
-        @field(T, "js_class") == true;
+    return hasClassMeta(T);
 }
 
 pub fn isClassMetaValue(comptime value: anytype) bool {

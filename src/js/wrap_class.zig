@@ -7,8 +7,7 @@ const wrap_function = @import("wrap_function.zig");
 const convertArg = wrap_function.convertArg;
 const callAndConvert = wrap_function.callAndConvert;
 
-/// Given a class type `T` (a struct with `pub const js_meta = js.class(...)`
-/// or legacy `pub const js_class = true`), returns a type with comptime-generated
+/// Given a class type `T` (a struct with `pub const js_meta = js.class(...)`), returns a type with comptime-generated
 /// N-API constructor, finalizer, property descriptors, and method wrappers.
 pub fn wrapClass(comptime T: type) type {
     if (!class_meta.isClassType(T)) {
@@ -23,8 +22,6 @@ pub fn wrapClass(comptime T: type) type {
         const all_decls = @typeInfo(T).@"struct".decls;
         const max_property_count = if (class_meta.hasProperties(T))
             class_meta.propertyFields(T).len
-        else if (@hasDecl(T, "js_getters"))
-            @typeInfo(@TypeOf(T.js_getters)).@"struct".fields.len
         else
             0;
 
@@ -85,24 +82,7 @@ pub fn wrapClass(comptime T: type) type {
         fn shouldSkipDecl(comptime name: []const u8) bool {
             return std.mem.eql(u8, name, "init") or
                 std.mem.eql(u8, name, "deinit") or
-                std.mem.eql(u8, name, "js_meta") or
-                std.mem.eql(u8, name, "js_class") or
-                std.mem.eql(u8, name, "js_getters") or
-                std.mem.eql(u8, name, "js_setters");
-        }
-
-        fn legacySetterTarget(comptime name: []const u8) ?[]const u8 {
-            if (name.len > 4 and std.mem.eql(u8, name[0..4], "set_")) {
-                return name[4..];
-            }
-            return null;
-        }
-
-        fn tupleContains(comptime tuple: anytype, comptime name: []const u8) bool {
-            inline for (tuple) |entry| {
-                if (std.mem.eql(u8, entry, name)) return true;
-            }
-            return false;
+                std.mem.eql(u8, name, "js_meta");
         }
 
         fn capitalizeFirst(comptime name: []const u8) []const u8 {
@@ -222,28 +202,6 @@ pub fn wrapClass(comptime T: type) type {
                         .invalid => @compileError("unsupported property spec for '" ++ property_name ++ "'"),
                     }
                 }
-            } else if (@hasDecl(T, "js_getters")) {
-                inline for (T.js_getters) |getter_name| {
-                    const getter_field = @field(T, getter_name);
-                    const is_by_value = validateGetterMethod(getter_name, getter_field);
-                    const setter_name = if (@hasDecl(T, "js_setters") and tupleContains(T.js_setters, getter_name))
-                        "set_" ++ getter_name
-                    else
-                        null;
-
-                    if (setter_name) |name| {
-                        validateSetterMethod(name, @field(T, name));
-                        consumedMethod(&consumed_methods, name);
-                    }
-
-                    addProperty(&properties, &property_count, .{
-                        .name = getter_name,
-                        .getter_name = getter_name,
-                        .setter_name = setter_name,
-                        .is_by_value = is_by_value,
-                    });
-                    consumedMethod(&consumed_methods, getter_name);
-                }
             }
 
             var method_count: usize = 0;
@@ -254,12 +212,6 @@ pub fn wrapClass(comptime T: type) type {
                 const field = @field(T, name);
                 const field_info = @typeInfo(@TypeOf(field));
                 if (field_info != .@"fn") continue;
-
-                if (@hasDecl(T, "js_setters")) {
-                    if (legacySetterTarget(name)) |target| {
-                        if (tupleContains(T.js_setters, target)) continue;
-                    }
-                }
 
                 const params = field_info.@"fn".params;
                 methods[idx].category = if (isStaticMethod(params)) .static_method else .instance_method;

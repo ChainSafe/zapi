@@ -139,7 +139,7 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
         } else if (field_info == .type) {
             const InnerType = field;
             if (@typeInfo(InnerType) == .@"struct") {
-                if (comptime class_meta.hasClassMeta(InnerType) or class_meta.isLegacyClassType(InnerType)) {
+                if (comptime class_meta.hasClassMeta(InnerType)) {
                     const wrapped = wrap_class.wrapClass(InnerType);
                     const props = wrapped.getPropertyDescriptors();
                     const class_name = comptime class_meta.getClassName(InnerType, decl.name);
