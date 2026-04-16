@@ -189,13 +189,6 @@ pub fn resolvedPromise(val: Number) !Promise(Number) {
     return promise;
 }
 
-/// Create a promise that rejects immediately with a JS Error carrying the given message.
-pub fn rejectedPromiseMessage(message: String) !Promise(Number) {
-    var promise = try js.createPromise(Number);
-    try promise.rejectWithMessage(message);
-    return promise;
-}
-
 // ============================================================================
 // Section 8: Callbacks
 // ============================================================================
