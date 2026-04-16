@@ -33,8 +33,8 @@ The DSL is the default approach for writing native addons. Import `js` from zapi
 ```zig
 const js = @import("zapi").js;
 
-pub fn add(a: js.Number, b: js.Number) js.Number {
-    return js.Number.from(a.assertI32() + b.assertI32());
+pub fn add(a: js.Number, b: js.Number) !js.Number {
+    return js.Number.from(try a.toI32() + try b.toI32());
 }
 
 pub const Counter = struct {
@@ -46,8 +46,8 @@ pub const Counter = struct {
 
     _count: i32,
 
-    pub fn init(start: js.Number) Counter {
-        return .{ ._count = start.assertI32() };
+    pub fn init(start: js.Number) !Counter {
+        return .{ ._count = try start.toI32() };
     }
 
     pub fn increment(self: *Counter) void {
@@ -102,8 +102,8 @@ Three patterns for exporting functions:
 ### Basic — direct mapping
 
 ```zig
-pub fn add(a: Number, b: Number) Number {
-    return Number.from(a.assertI32() + b.assertI32());
+pub fn add(a: Number, b: Number) !Number {
+    return Number.from(try a.toI32() + try b.toI32());
 }
 ```
 
@@ -111,9 +111,9 @@ pub fn add(a: Number, b: Number) Number {
 
 ```zig
 pub fn safeDivide(a: Number, b: Number) !Number {
-    const divisor = b.assertI32();
+    const divisor = try b.toI32();
     if (divisor == 0) return error.DivisionByZero;
-    return Number.from(@divTrunc(a.assertI32(), divisor));
+    return Number.from(@divTrunc(try a.toI32(), divisor));
 }
 ```
 
@@ -241,7 +241,7 @@ pub const Config = struct {
         return js.Number.from(self._volume);
     }
     pub fn setVolume(self: *Config, value: js.Number) !void {
-        const v = value.assertI32();
+        const v = try value.toI32();
         if (v < 0 or v > 100) return error.VolumeOutOfRange;
         self._volume = v;
     }
