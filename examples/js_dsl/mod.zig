@@ -370,6 +370,12 @@ pub const Point = struct {
             self.y += d.assertI32();
         }
     }
+
+    /// Demonstrates `js.thisArg()` by comparing the active JS receiver.
+    pub fn hasReceiver(self: Point, other: Value) !Boolean {
+        _ = self;
+        return Boolean.from(try js.thisArg().strictEquals(other.toValue()));
+    }
 };
 
 /// A resource-owning class used to verify placeholder cleanup in factory paths.

@@ -323,6 +323,13 @@ describe("optional parameters", () => {
 		expect(p.getX()).toEqual(10);
 		expect(p.getY()).toEqual(20);
 	});
+
+	it("hasReceiver uses js.thisArg() for the active JS receiver", () => {
+		const p = mod.Point.create(1, 1);
+		const other = mod.Point.create(2, 2);
+		expect(p.hasReceiver(p)).toBe(true);
+		expect(p.hasReceiver(other)).toBe(false);
+	});
 });
 
 describe("class materialization", () => {
