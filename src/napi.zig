@@ -10,8 +10,10 @@ pub const HandleScope = @import("HandleScope.zig");
 pub const NodeVersion = @import("NodeVersion.zig");
 pub const status = @import("status.zig");
 pub const module = @import("module.zig");
+pub const Ref = @import("Ref.zig");
 pub const CallbackInfo = @import("callback_info.zig").CallbackInfo;
 pub const Callback = @import("callback.zig").Callback;
+pub const FinalizeCallback = @import("finalize_callback.zig").FinalizeCallback;
 pub const value_types = @import("value_types.zig");
 
 pub const createCallback = @import("create_callback.zig").createCallback;

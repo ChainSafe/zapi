@@ -52,7 +52,7 @@ pub fn destroyInternalPlaceholder(comptime T: type, obj: *T) void {
     std.heap.c_allocator.destroy(obj);
 }
 
-pub fn defaultFinalize(comptime T: type) @import("../finalize_callback.zig").FinalizeCallback(T) {
+pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
     return struct {
         fn f(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
             if (isInternalPlaceholderHint(T, hint)) {
@@ -142,7 +142,7 @@ fn state(comptime T: type) type {
 
         const Entry = struct {
             env: napi.c.napi_env,
-            ctor_ref: @import("../Ref.zig"),
+            ctor_ref: napi.Ref,
             next: ?*Entry,
         };
 
