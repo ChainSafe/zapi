@@ -9,20 +9,58 @@ const napi = @import("../napi.zig");
 /// `napi.AsyncWork` or `napi.ThreadSafeFunction` from the low-level API.
 threadlocal var current_env: ?napi.Env = null;
 
+/// Returns the active N-API environment for the current synchronous callback.
+///
+/// This function provides access to the N-API environment (`napi_env`) context
+/// that is implicitly managed by the DSL's callback wrappers. It is essential
+/// for any low-level N-API operations or manual creation of `napi.Value`s.
+///
+/// SAFETY: This function is only valid when called within the synchronous
+/// execution scope of a JavaScript function, method, getter, or setter that
+/// was exposed to JS via the ZAPI DSL. Calling it outside such a context
+/// (e.g., from a background thread or a Zig-initiated function call) will
+/// result in a panic. For asynchronous N-API work, use `napi.AsyncWork` or
+/// `napi.ThreadSafeFunction` which provide explicit `napi_env` parameters.
 pub fn env() napi.Env {
     return current_env orelse @panic("js.env() called outside of a JS callback context");
 }
 
+/// Returns the standard C allocator (`std.heap.c_allocator`) used by the DSL
+/// for all native memory allocations related to JavaScript objects.
+///
+/// This allocator should be used when:
+/// - Allocating native memory that will be wrapped by a JS object (e.g., for
+///   `napi.Env.wrap()`).
+/// - Allocating memory that will be freed by an N-API finalizer.
+/// - Performing general-purpose allocations within the synchronous N-API callback
+///   context.
+///
+/// It aligns with the memory management expectations of Node-API, and memory
+/// allocated with it can generally be freed by `std.heap.c_allocator.free()`.
 pub fn allocator() std.mem.Allocator {
     return std.heap.c_allocator;
 }
 
+/// Sets the thread-local N-API environment for the current context.
+///
+/// This function is primarily used internally by the ZAPI DSL's generated
+/// wrappers to establish the correct `napi_env` before executing Zig callback
+/// logic. Custom wrappers or advanced DSL integrations might use this to
+/// temporarily change the active environment.
+///
+/// It returns the previously active `napi.Env`, allowing for proper restoration
+/// using `restoreEnv` (typically with `defer`).
 pub fn setEnv(e: napi.Env) ?napi.Env {
     const prev = current_env;
     current_env = e;
     return prev;
 }
 
+/// Restores the thread-local N-API environment to a previous state.
+///
+/// This function is typically used in conjunction with `setEnv` to ensure that
+/// the `napi_env` is correctly reset after a temporary change. It is common
+/// to see `defer restoreEnv(prev)` immediately after a `setEnv` call.
 pub fn restoreEnv(prev: ?napi.Env) void {
     current_env = prev;
 }

@@ -2,15 +2,25 @@ const napi = @import("../napi.zig");
 const context = @import("context.zig");
 
 pub const Function = struct {
+    /// The underlying `napi.Value` representing the JavaScript function object.
     val: napi.Value,
 
+    /// Validates if the given `napi.Value` is a JavaScript function.
+    ///
+    /// Returns an error (`error.TypeMismatch`) if the value is not a function,
+    /// suitable for argument validation in DSL-wrapped functions.
     pub fn validateArg(val: napi.Value) !void {
         if ((try val.typeof()) != .function) return error.TypeMismatch;
     }
 
-    /// Calls the function with `undefined` as the receiver.
-    /// `args` is a tuple where each element is either a DSL wrapper type
-    /// (has `.val` field) or a raw `napi.Value`.
+    /// Calls the JavaScript function with `undefined` as the receiver (`this`).
+    ///
+    /// The `args` parameter must be a tuple where each element is either a ZAPI
+    /// DSL wrapper type (e.g., `js.Number`, `js.String`) or a raw `napi.Value`.
+    /// This method extracts the underlying `napi.Value` from each argument before
+    /// making the call.
+    /// Returns a `js.Value` wrapper for the JavaScript function's return value.
+    /// Returns an error if the function call fails or N-API operations encounter an issue.
     pub fn call(self: Function, args: anytype) !@import("value.zig").Value {
         const e = context.env();
         const recv = try e.getUndefined();
@@ -33,6 +43,7 @@ pub const Function = struct {
         return .{ .val = result };
     }
 
+    /// Returns the underlying `napi.Value` representation of this JavaScript function.
     pub fn toValue(self: Function) napi.Value {
         return self.val;
     }

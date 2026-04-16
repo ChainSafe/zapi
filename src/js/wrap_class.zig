@@ -9,6 +9,20 @@ const callAndConvert = wrap_function.callAndConvert;
 
 /// Given a class type `T` (a struct with `pub const js_meta = js.class(...)`), returns a type with comptime-generated
 /// N-API constructor, finalizer, property descriptors, and method wrappers.
+///
+/// This comptime function takes a Zig struct `T` that represents a JavaScript
+/// class. `T` must have a `pub const js_meta = js.class(...)` declaration to
+/// define its properties and behaviors, and a `pub fn init(...)` constructor.
+///
+/// It generates a type that encapsulates all the necessary N-API binding logic
+/// for the class, including:
+/// - A `constructor` callback that handles JS `new Class(...)` calls.
+/// - A `defaultFinalize` function for native object cleanup.
+/// - `getPropertyDescriptors` to expose methods and properties to JS.
+/// - (Potentially) `getFactoryDescriptors` for static factory methods.
+///
+/// This result is typically passed to `js.exportModule` to register the class
+/// with Node-API.
 pub fn wrapClass(comptime T: type) type {
     if (!class_meta.isClassType(T)) {
         @compileError("wrapClass: " ++ @typeName(T) ++ " must declare `pub const js_meta = js.class(...)`");
@@ -49,9 +63,22 @@ pub fn wrapClass(comptime T: type) type {
 
         const analysis = analyzeClass();
 
-        pub const constructor: napi.c.napi_callback = genConstructor();
+        /// The generated N-API constructor callback for this class.
+        ///
+        /// This callback is invoked when `new Class(...)` is called in JavaScript.
+        /// It handles argument conversion, calls the `pub fn init(...)` method of
+        /// the Zig struct `T`, and wraps the resulting native object in the JS instance.
+        /// It also handles internal placeholder creation for factory methods.
+pub const constructor: napi.c.napi_callback = genConstructor();
 
-        pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
+        /// The default N-API finalizer callback for native objects wrapped by instances of `T`.
+        ///
+        /// This function is registered with `napi.Env.wrap()` and is called by the
+        /// JavaScript garbage collector when the wrapped JS object is finalized.
+        /// It handles cleanup for internal placeholder objects during class
+        /// materialization and calls the `deinit()` method (if present) and frees
+        /// the native memory for regular class instances.
+pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
             if (class_runtime.isInternalPlaceholderHint(T, hint)) {
                 class_runtime.destroyInternalPlaceholder(T, obj);
                 return;
@@ -240,7 +267,13 @@ pub fn wrapClass(comptime T: type) type {
             @compileError("property accessor '" ++ name ++ "' does not match any public declaration in " ++ @typeName(T));
         }
 
-        pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
+        /// Returns a comptime-generated slice of N-API property descriptors for
+        /// all methods and properties (getters/setters) exposed by this class.
+        ///
+        /// This function analyzes the `js_meta` definition of `T` at compile time
+        /// and constructs the necessary N-API descriptors. This slice is typically
+        /// passed to `napi.Env.defineClass()`.
+pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
             const descriptor_count = analysis.property_count + analysis.method_count;
             if (descriptor_count == 0) return &[0]napi.c.napi_property_descriptor{};
 
@@ -289,11 +322,17 @@ pub fn wrapClass(comptime T: type) type {
             return &descriptors;
         }
 
-        pub fn hasFactories() bool {
+        /// Returns `true` if this class has static factory methods defined via `js.factory`.
+        ///
+        /// Current implementation always returns `false` as `js.factory` is not yet implemented.
+pub fn hasFactories() bool {
             return false;
         }
 
-        pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
+        /// Returns a slice of N-API property descriptors for static factory methods.
+        ///
+        /// Current implementation returns an empty slice as `js.factory` is not yet implemented.
+pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
             return &[0]napi.c.napi_property_descriptor{};
         }
 

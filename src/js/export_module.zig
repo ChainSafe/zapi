@@ -6,23 +6,56 @@ const wrap_class = @import("wrap_class.zig");
 const class_meta = @import("class_meta.zig");
 const class_runtime = @import("class_runtime.zig");
 
-/// Scans pub decls of `Module` and registers them as JS exports.
+/// Registers a Zig `Module`'s public declarations (functions, classes, namespaces)
+/// as JavaScript exports in the current Node-API environment at compile time.
 ///
-/// Optional second argument for lifecycle hooks:
-///   js.exportModule(@This(), .{
-///       .init     = fn (refcount: u32) !void,       — called during registration
-///       .cleanup  = fn (refcount: u32) void,         — called on env exit
-///       .register = fn (napi.Env, napi.Value) !void, — called with (env, exports) for manual registration
-///   })
+/// This is the primary entry point for integrating ZAPI DSL-based Zig code into
+/// Node.js. It inspects the `Module`'s `pub` declarations and automatically
+/// creates corresponding JavaScript functions, classes, and sub-namespaces.
 ///
-/// The DSL manages an atomic refcount internally:
-///   - .init receives the refcount BEFORE increment (0 = first env)
-///   - .cleanup receives the refcount AFTER decrement (0 = last env)
+/// Optional `options` can be provided to customize module lifecycle hooks:
 ///
-/// Usage:
-///   comptime { js.exportModule(@This()); }
-///   comptime { js.exportModule(@This(), .{ .init = ..., .cleanup = ... }); }
-///   comptime { js.exportModule(@This(), .{ .register = myRegisterFn }); }
+/// - `.init = fn (refcount: u32) !void`: Called when the module is initialized
+///   in a new N-API environment. `refcount` is the number of active environments
+///   *before* the current one is added (0 for the first environment).
+///   Allows for environment-specific setup. Can return an error.
+///
+/// - `.cleanup = fn (refcount: u32) void`: Called when an N-API environment
+///   exits. `refcount` is the number of active environments *after* the current
+///   one is removed (0 for the last environment).
+///   Allows for environment-specific teardown.
+///
+/// - `.register = fn (env: napi.Env, exports: napi.Value) !void`: Allows for
+///   manual registration of exports if the default reflection mechanism is
+///   insufficient. This function is called *after* all automatic DSL exports
+///   have been processed and *before* the module's `init` hook (if present).
+///   `exports` is the JavaScript object that will hold the module's exports.
+///
+/// The DSL internally manages an atomic refcount for module instances across
+/// different N-API environments.
+///
+/// Usage Examples:
+/// ```zig
+/// comptime {
+///     // Basic export of all `pub` functions, classes, and sub-namespaces
+///     js.exportModule(@This());
+/// }
+///
+/// comptime {
+///     // Export with custom initialization and cleanup hooks
+///     js.exportModule(@This(), .{
+///         .init = myInitFunction,
+///         .cleanup = myCleanupFunction,
+///     });
+/// }
+///
+/// comptime {
+///     // Export with a manual registration function
+///     js.exportModule(@This(), .{
+///         .register = myCustomRegisterFunction,
+///     });
+/// }
+/// ```
 pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");

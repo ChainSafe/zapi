@@ -3,8 +3,13 @@ const napi = @import("../napi.zig");
 const context = @import("context.zig");
 
 pub const String = struct {
+    /// The underlying `napi.Value` representing the JavaScript string.
     val: napi.Value,
 
+    /// Validates if the given `napi.Value` is a JavaScript string.
+    ///
+    /// Returns an error if the value is not a string, suitable for argument
+    /// validation in DSL-wrapped functions.
     pub fn validateArg(val: napi.Value) !void {
         if ((try val.typeof()) != .string) return error.TypeMismatch;
     }
@@ -47,6 +52,7 @@ pub const String = struct {
         return .{ .val = val };
     }
 
+    /// Returns the underlying `napi.Value` representation of this JavaScript string.
     pub fn toValue(self: String) napi.Value {
         return self.val;
     }
