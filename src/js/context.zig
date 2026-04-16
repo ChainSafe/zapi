@@ -28,9 +28,24 @@ pub fn restoreEnv(prev: ?napi.Env) void {
 }
 
 /// Thread-local JS `this` value, set by method/getter/setter callback wrappers.
+///
+/// This is the actual JavaScript receiver object for the current call, after JS
+/// binding semantics have been applied. For example, if a method is invoked via
+/// `obj1.method.call(obj2, ...)` or `obj1.method.bind(obj2)(...)`, then
+/// `js.thisArg()` refers to `obj2`, not `obj1`.
+///
+/// In an instance method/getter/setter, the Zig `self` parameter is the native
+/// object unwrapped from this same receiver. That means `self` and
+/// `js.thisArg()` correspond to the same runtime receiver, but at different
+/// levels:
+/// - `self` is the unwrapped native Zig payload
+/// - `js.thisArg()` is the original JS object carrying that payload
+///
 /// Only valid within instance method or getter/setter scope.
 threadlocal var current_this: ?napi.Value = null;
 
+/// Returns the active JavaScript receiver object for the current instance
+/// method/getter/setter invocation.
 pub fn thisArg() napi.Value {
     return current_this orelse @panic("js.thisArg() called outside of an instance method/getter/setter context");
 }

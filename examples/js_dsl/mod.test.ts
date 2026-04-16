@@ -330,6 +330,22 @@ describe("optional parameters", () => {
 		expect(p.hasReceiver(p)).toBe(true);
 		expect(p.hasReceiver(other)).toBe(false);
 	});
+
+	it("hasReceiver follows Function.call receiver rebinding", () => {
+		const p = mod.Point.create(1, 1);
+		const other = mod.Point.create(2, 2);
+		const hasReceiver = p.hasReceiver;
+		expect(hasReceiver.call(other, other)).toBe(true);
+		expect(hasReceiver.call(other, p)).toBe(false);
+	});
+
+	it("hasReceiver follows Function.bind receiver rebinding", () => {
+		const p = mod.Point.create(1, 1);
+		const other = mod.Point.create(2, 2);
+		const bound = p.hasReceiver.bind(other);
+		expect(bound(other)).toBe(true);
+		expect(bound(p)).toBe(false);
+	});
 });
 
 describe("class materialization", () => {
