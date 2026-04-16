@@ -156,6 +156,10 @@ describe("promises", () => {
 		const result = await mod.resolvedPromise(42);
 		expect(result).toEqual(42);
 	});
+
+	it("rejectedPromiseMessage rejects with Error carrying the message", async () => {
+		await expect(mod.rejectedPromiseMessage("boom")).rejects.toThrow("boom");
+	});
 });
 
 // Section 8: Callbacks
