@@ -40,7 +40,7 @@ pub fn add(a: js.Number, b: js.Number) !js.Number {
 pub const Counter = struct {
     pub const js_meta = js.class(.{
         .properties = .{
-            .count = true,
+            .count = js.field(.{ .get = true, .set = false }),
         },
     });
 
