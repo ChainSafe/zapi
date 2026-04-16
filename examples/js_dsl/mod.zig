@@ -24,9 +24,7 @@ pub const math = @import("math.zig");
 
 /// Add two numbers.
 pub fn add(a: Number, b: Number) !Number {
-    var a_n = try a.toI32();
-    var b_n = try b.toI32();
-    return Number.from(a_n + b_n);
+    return Number.from(try a.toI32() + try b.toI32());
 }
 
 /// Return a greeting string.
