@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     module_zapi.addIncludePath(b.path("include"));
-    b.modules.put(b.dupe("zapi"), module_zapi) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("zapi"), module_zapi) catch @panic("OOM");
 
     const module_example_hello_world = b.createModule(.{
         .root_source_file = b.path("examples/hello_world/mod.zig"),
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    b.modules.put(b.dupe("example_hello_world"), module_example_hello_world) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("example_hello_world"), module_example_hello_world) catch @panic("OOM");
 
     const lib_example_hello_world = b.addLibrary(.{
         .name = "example_hello_world",
@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    b.modules.put(b.dupe("example_type_tag"), module_example_type_tag) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("example_type_tag"), module_example_type_tag) catch @panic("OOM");
 
     const lib_example_type_tag = b.addLibrary(.{
         .name = "example_type_tag",
@@ -93,7 +93,6 @@ pub fn build(b: *std.Build) void {
     const run_test_example_hello_world = b.addRunArtifact(test_example_hello_world);
     const tls_run_test_example_hello_world = b.step("test:example_hello_world", "Run the example_hello_world test");
     tls_run_test_example_hello_world.dependOn(&run_test_example_hello_world.step);
-    tls_run_test.dependOn(&run_test_example_hello_world.step);
 
     const test_example_type_tag = b.addTest(.{
         .name = "example_type_tag",
@@ -107,7 +106,6 @@ pub fn build(b: *std.Build) void {
     const run_test_example_type_tag = b.addRunArtifact(test_example_type_tag);
     const tls_run_test_example_type_tag = b.step("test:example_type_tag", "Run the example_type_tag test");
     tls_run_test_example_type_tag.dependOn(&run_test_example_type_tag.step);
-    tls_run_test.dependOn(&run_test_example_type_tag.step);
 
     module_zapi.addImport("build_options", options_module_build_options);
 

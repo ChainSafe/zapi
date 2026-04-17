@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const Env = @import("Env.zig");
 
 pub fn FinalizeCallback(comptime Data: type) type {
@@ -15,7 +15,7 @@ pub fn wrapFinalizeCallback(
             env: c.napi_env,
             data: ?*anyopaque,
             hint: ?*anyopaque,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             if (data == null) return;
             return finalize_cb(
                 Env{ .env = env },

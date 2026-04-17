@@ -1,7 +1,16 @@
 ///! This is an example napi module that exercises various napi features.
 const std = @import("std");
+const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
+
+/// Thread-local single-threaded Io instance — each thread gets its own copy,
+/// so `init_single_threaded` is safe (no cross-thread sharing).
+threadlocal var threaded: Io.Threaded = .init_single_threaded;
+
+fn io() Io {
+    return threaded.io();
+}
 
 comptime {
     // The module must be registered with napi via `register`
@@ -151,20 +160,20 @@ var s: S = S{
     .b = 2,
 };
 
-// Wrapped class example (std.time.Timer)
+// Wrapped class example using Io.Timestamp directly
 
-fn Timer_finalize(_: zapi.Env, timer: *std.time.Timer, _: ?*anyopaque) void {
-    std.debug.print("Destroying timer {any}\n", .{timer});
-    allocator.destroy(timer);
+fn Timer_finalize(_: zapi.Env, ts: *Io.Timestamp, _: ?*anyopaque) void {
+    std.debug.print("Destroying timer {any}\n", .{ts});
+    allocator.destroy(ts);
 }
 
 fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try allocator.create(std.time.Timer);
-    timer.* = try std.time.Timer.start();
+    const ts = try allocator.create(Io.Timestamp);
+    ts.* = Io.Timestamp.now(io(), .awake);
     _ = try env.wrap(
         cb.this(),
-        std.time.Timer,
-        timer,
+        Io.Timestamp,
+        ts,
         Timer_finalize,
         null,
         null,
@@ -173,19 +182,23 @@ fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
 }
 
 fn Timer_reset(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
-    timer.reset();
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    ts.* = Io.Timestamp.now(io(), .awake);
     return try env.getUndefined();
 }
 
 fn Timer_read(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
-    return try env.createInt64(@intCast(timer.read()));
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    const elapsed = ts.durationTo(Io.Timestamp.now(io(), .awake));
+    return try env.createInt64(@intCast(elapsed.nanoseconds));
 }
 
 fn Timer_lap(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
-    return try env.createInt64(@intCast(timer.lap()));
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    const now_ts = Io.Timestamp.now(io(), .awake);
+    const elapsed = ts.durationTo(now_ts);
+    ts.* = now_ts;
+    return try env.createInt64(@intCast(elapsed.nanoseconds));
 }
 
 // Async work example
@@ -199,7 +212,8 @@ const AsyncAddData = struct {
 };
 
 fn asyncAddExecute(_: zapi.Env, data: *AsyncAddData) void {
-    std.time.sleep(1_000_000_000); // 1 second
+    // sleep 1 second using std.Io
+    io().sleep(Io.Duration.fromSeconds(1), .awake) catch {};
     data.result = data.a + data.b;
 }
 
@@ -288,7 +302,8 @@ fn threadMain(tsfn: zapi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
         // Call into JS
         tsfn.call(data, .blocking) catch {};
 
-        std.time.sleep(100 * std.time.ns_per_ms);
+        // sleep 100ms using std.Io
+        io().sleep(Io.Duration.fromMilliseconds(100), .awake) catch {};
     }
 
     // Release the thread-safe function
