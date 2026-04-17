@@ -1,7 +1,39 @@
 ///! This is an example napi module that exercises various napi features.
 const std = @import("std");
+const c = std.c;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
+
+/// A simple monotonic timer using libc clock_gettime,
+/// replacing std.time.Timer which was removed in Zig 0.16.
+const Timer = struct {
+    start_ns: i128,
+
+    fn now() i128 {
+        var ts: c.timespec = undefined;
+        _ = c.clock_gettime(c.CLOCK.MONOTONIC, &ts);
+        return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
+    }
+
+    fn start() Timer {
+        return .{ .start_ns = now() };
+    }
+
+    fn reset(self: *Timer) void {
+        self.start_ns = now();
+    }
+
+    fn read(self: *const Timer) u64 {
+        return @intCast(now() - self.start_ns);
+    }
+
+    fn lap(self: *Timer) u64 {
+        const current = now();
+        const elapsed: u64 = @intCast(current - self.start_ns);
+        self.start_ns = current;
+        return elapsed;
+    }
+};
 
 comptime {
     // The module must be registered with napi via `register`
@@ -151,19 +183,19 @@ var s: S = S{
     .b = 2,
 };
 
-// Wrapped class example (std.time.Timer)
+// Wrapped class example (Timer using libc clock_gettime)
 
-fn Timer_finalize(_: zapi.Env, timer: *std.time.Timer, _: ?*anyopaque) void {
+fn Timer_finalize(_: zapi.Env, timer: *Timer, _: ?*anyopaque) void {
     std.debug.print("Destroying timer {any}\n", .{timer});
     allocator.destroy(timer);
 }
 
 fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try allocator.create(std.time.Timer);
-    timer.* = try std.time.Timer.start();
+    const timer = try allocator.create(Timer);
+    timer.* = Timer.start();
     _ = try env.wrap(
         cb.this(),
-        std.time.Timer,
+        Timer,
         timer,
         Timer_finalize,
         null,
@@ -173,18 +205,18 @@ fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
 }
 
 fn Timer_reset(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
+    const timer = try env.unwrap(Timer, cb.this());
     timer.reset();
     return try env.getUndefined();
 }
 
 fn Timer_read(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
+    const timer = try env.unwrap(Timer, cb.this());
     return try env.createInt64(@intCast(timer.read()));
 }
 
 fn Timer_lap(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(std.time.Timer, cb.this());
+    const timer = try env.unwrap(Timer, cb.this());
     return try env.createInt64(@intCast(timer.lap()));
 }
 
@@ -199,7 +231,9 @@ const AsyncAddData = struct {
 };
 
 fn asyncAddExecute(_: zapi.Env, data: *AsyncAddData) void {
-    std.time.sleep(1_000_000_000); // 1 second
+    // sleep 1 second using libc nanosleep (std.time.sleep removed in 0.16)
+    var ts = c.timespec{ .sec = 1, .nsec = 0 };
+    _ = c.nanosleep(&ts, null);
     data.result = data.a + data.b;
 }
 
@@ -288,7 +322,9 @@ fn threadMain(tsfn: zapi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
         // Call into JS
         tsfn.call(data, .blocking) catch {};
 
-        std.time.sleep(100 * std.time.ns_per_ms);
+        // sleep 100ms using libc nanosleep
+        var ts = c.timespec{ .sec = 0, .nsec = 100 * std.time.ns_per_ms };
+        _ = c.nanosleep(&ts, null);
     }
 
     // Release the thread-safe function

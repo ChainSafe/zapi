@@ -16,9 +16,30 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     module_zapi.addIncludePath(b.path("include"));
-    b.modules.put(b.dupe("zapi"), module_zapi) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("zapi"), module_zapi) catch @panic("OOM");
 
-    // TODO: example_hello_world needs std.time.Timer/sleep migration (moved to std.Io in 0.16)
+    const module_example_hello_world = b.createModule(.{
+        .root_source_file = b.path("examples/hello_world/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    b.modules.put(b.allocator, b.dupe("example_hello_world"), module_example_hello_world) catch @panic("OOM");
+
+    const lib_example_hello_world = b.addLibrary(.{
+        .name = "example_hello_world",
+        .root_module = module_example_hello_world,
+        .linkage = .dynamic,
+    });
+
+    lib_example_hello_world.linker_allow_shlib_undefined = true;
+    const install_lib_example_hello_world = b.addInstallArtifact(lib_example_hello_world, .{
+        .dest_sub_path = "example_hello_world.node",
+    });
+
+    const tls_install_lib_example_hello_world = b.step("build-lib:example_hello_world", "Install the example_hello_world library");
+    tls_install_lib_example_hello_world.dependOn(&install_lib_example_hello_world.step);
+    b.getInstallStep().dependOn(&install_lib_example_hello_world.step);
 
     const module_example_type_tag = b.createModule(.{
         .root_source_file = b.path("examples/type_tag/mod.zig"),
@@ -26,7 +47,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    b.modules.put(b.dupe("example_type_tag"), module_example_type_tag) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("example_type_tag"), module_example_type_tag) catch @panic("OOM");
 
     const lib_example_type_tag = b.addLibrary(.{
         .name = "example_type_tag",
@@ -59,6 +80,20 @@ pub fn build(b: *std.Build) void {
     tls_run_test_zapi.dependOn(&run_test_zapi.step);
     tls_run_test.dependOn(&run_test_zapi.step);
 
+    const test_example_hello_world = b.addTest(.{
+        .name = "example_hello_world",
+        .root_module = module_example_hello_world,
+        .filters = b.option([][]const u8, "example_hello_world.filters", "example_hello_world test filters") orelse &[_][]const u8{},
+    });
+    const install_test_example_hello_world = b.addInstallArtifact(test_example_hello_world, .{});
+    const tls_install_test_example_hello_world = b.step("build-test:example_hello_world", "Install the example_hello_world test");
+    tls_install_test_example_hello_world.dependOn(&install_test_example_hello_world.step);
+
+    const run_test_example_hello_world = b.addRunArtifact(test_example_hello_world);
+    const tls_run_test_example_hello_world = b.step("test:example_hello_world", "Run the example_hello_world test");
+    tls_run_test_example_hello_world.dependOn(&run_test_example_hello_world.step);
+    tls_run_test.dependOn(&run_test_example_hello_world.step);
+
     const test_example_type_tag = b.addTest(.{
         .name = "example_type_tag",
         .root_module = module_example_type_tag,
@@ -74,6 +109,8 @@ pub fn build(b: *std.Build) void {
     tls_run_test.dependOn(&run_test_example_type_tag.step);
 
     module_zapi.addImport("build_options", options_module_build_options);
+
+    module_example_hello_world.addImport("zapi", module_zapi);
 
     module_example_type_tag.addImport("zapi", module_zapi);
 }
