@@ -4,8 +4,11 @@ const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
+/// Explicit single-threaded Io instance for use in NAPI callbacks.
+var threaded: Io.Threaded = .init_single_threaded;
+
 fn io() Io {
-    return Io.Threaded.global_single_threaded.io();
+    return threaded.io();
 }
 
 /// A monotonic timer using std.Io.Timestamp,
