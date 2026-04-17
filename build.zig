@@ -92,7 +92,6 @@ pub fn build(b: *std.Build) void {
     const run_test_example_hello_world = b.addRunArtifact(test_example_hello_world);
     const tls_run_test_example_hello_world = b.step("test:example_hello_world", "Run the example_hello_world test");
     tls_run_test_example_hello_world.dependOn(&run_test_example_hello_world.step);
-    tls_run_test.dependOn(&run_test_example_hello_world.step);
 
     const test_example_type_tag = b.addTest(.{
         .name = "example_type_tag",
@@ -106,7 +105,6 @@ pub fn build(b: *std.Build) void {
     const run_test_example_type_tag = b.addRunArtifact(test_example_type_tag);
     const tls_run_test_example_type_tag = b.step("test:example_type_tag", "Run the example_type_tag test");
     tls_run_test_example_type_tag.dependOn(&run_test_example_type_tag.step);
-    tls_run_test.dependOn(&run_test_example_type_tag.step);
 
     module_zapi.addImport("build_options", options_module_build_options);
 
