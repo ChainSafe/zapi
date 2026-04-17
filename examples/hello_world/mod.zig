@@ -4,11 +4,8 @@ const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
-/// Get a single-threaded Io instance for use in NAPI callbacks.
-var threaded: Io.Threaded = .init_single_threaded;
-
-fn getIo() Io {
-    return threaded.io();
+fn io() Io {
+    return Io.Threaded.global_single_threaded.io();
 }
 
 /// A monotonic timer using std.Io.Timestamp,
@@ -17,20 +14,20 @@ const Timer = struct {
     start_ts: Io.Timestamp,
 
     fn start() Timer {
-        return .{ .start_ts = Io.Timestamp.now(getIo(), .awake) };
+        return .{ .start_ts = Io.Timestamp.now(io(), .awake) };
     }
 
     fn reset(self: *Timer) void {
-        self.start_ts = Io.Timestamp.now(getIo(), .awake);
+        self.start_ts = Io.Timestamp.now(io(), .awake);
     }
 
     fn read(self: *const Timer) u64 {
-        const elapsed = self.start_ts.durationTo(Io.Timestamp.now(getIo(), .awake));
+        const elapsed = self.start_ts.durationTo(Io.Timestamp.now(io(), .awake));
         return @intCast(elapsed.nanoseconds);
     }
 
     fn lap(self: *Timer) u64 {
-        const now_ts = Io.Timestamp.now(getIo(), .awake);
+        const now_ts = Io.Timestamp.now(io(), .awake);
         const elapsed = self.start_ts.durationTo(now_ts);
         self.start_ts = now_ts;
         return @intCast(elapsed.nanoseconds);
@@ -234,7 +231,7 @@ const AsyncAddData = struct {
 
 fn asyncAddExecute(_: zapi.Env, data: *AsyncAddData) void {
     // sleep 1 second using std.Io
-    getIo().sleep(Io.Duration.fromSeconds(1), .awake) catch {};
+    io().sleep(Io.Duration.fromSeconds(1), .awake) catch {};
     data.result = data.a + data.b;
 }
 
@@ -324,7 +321,7 @@ fn threadMain(tsfn: zapi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
         tsfn.call(data, .blocking) catch {};
 
         // sleep 100ms using std.Io
-        getIo().sleep(Io.Duration.fromMilliseconds(100), .awake) catch {};
+        io().sleep(Io.Duration.fromMilliseconds(100), .awake) catch {};
     }
 
     // Release the thread-safe function
