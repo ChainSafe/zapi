@@ -2,7 +2,7 @@
 
 .{
     .name = .zapi,
-    .version = "0.1.0",
+    .version = "0.1.0", // x-release-please-version
     .fingerprint = 0x77829ef951b38aac,
     .minimum_zig_version = "0.14.1",
     .dependencies = .{},

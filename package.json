@@ -17,8 +17,8 @@
 		"lint:fix": "pnpm biome check --write"
 	},
 	"files": [
-		"ts",
-		"js"
+		"lib",
+		"ts"
 	],
 	"bin": "lib/cli.js",
 	"exports": {
