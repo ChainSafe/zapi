@@ -11,32 +11,6 @@ fn io() Io {
     return threaded.io();
 }
 
-/// A monotonic timer using std.Io.Timestamp,
-/// replacing std.time.Timer which was removed in Zig 0.16.
-const Timer = struct {
-    start_ts: Io.Timestamp,
-
-    fn start() Timer {
-        return .{ .start_ts = Io.Timestamp.now(io(), .awake) };
-    }
-
-    fn reset(self: *Timer) void {
-        self.start_ts = Io.Timestamp.now(io(), .awake);
-    }
-
-    fn read(self: *const Timer) u64 {
-        const elapsed = self.start_ts.durationTo(Io.Timestamp.now(io(), .awake));
-        return @intCast(elapsed.nanoseconds);
-    }
-
-    fn lap(self: *Timer) u64 {
-        const now_ts = Io.Timestamp.now(io(), .awake);
-        const elapsed = self.start_ts.durationTo(now_ts);
-        self.start_ts = now_ts;
-        return @intCast(elapsed.nanoseconds);
-    }
-};
-
 comptime {
     // The module must be registered with napi via `register`
     zapi.module.register(exampleMod);
@@ -185,20 +159,20 @@ var s: S = S{
     .b = 2,
 };
 
-// Wrapped class example (Timer using std.Io.Timestamp)
+// Wrapped class example using Io.Timestamp directly
 
-fn Timer_finalize(_: zapi.Env, timer: *Timer, _: ?*anyopaque) void {
-    std.debug.print("Destroying timer {any}\n", .{timer});
-    allocator.destroy(timer);
+fn Timer_finalize(_: zapi.Env, ts: *Io.Timestamp, _: ?*anyopaque) void {
+    std.debug.print("Destroying timer {any}\n", .{ts});
+    allocator.destroy(ts);
 }
 
 fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try allocator.create(Timer);
-    timer.* = Timer.start();
+    const ts = try allocator.create(Io.Timestamp);
+    ts.* = Io.Timestamp.now(io(), .awake);
     _ = try env.wrap(
         cb.this(),
-        Timer,
-        timer,
+        Io.Timestamp,
+        ts,
         Timer_finalize,
         null,
         null,
@@ -207,19 +181,23 @@ fn Timer_ctor(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
 }
 
 fn Timer_reset(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(Timer, cb.this());
-    timer.reset();
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    ts.* = Io.Timestamp.now(io(), .awake);
     return try env.getUndefined();
 }
 
 fn Timer_read(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(Timer, cb.this());
-    return try env.createInt64(@intCast(timer.read()));
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    const elapsed = ts.durationTo(Io.Timestamp.now(io(), .awake));
+    return try env.createInt64(@intCast(elapsed.nanoseconds));
 }
 
 fn Timer_lap(env: zapi.Env, cb: zapi.CallbackInfo(0)) !zapi.Value {
-    const timer = try env.unwrap(Timer, cb.this());
-    return try env.createInt64(@intCast(timer.lap()));
+    const ts = try env.unwrap(Io.Timestamp, cb.this());
+    const now_ts = Io.Timestamp.now(io(), .awake);
+    const elapsed = ts.durationTo(now_ts);
+    ts.* = now_ts;
+    return try env.createInt64(@intCast(elapsed.nanoseconds));
 }
 
 // Async work example
