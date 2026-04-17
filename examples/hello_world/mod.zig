@@ -4,8 +4,9 @@ const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
-/// Explicit single-threaded Io instance for use in NAPI callbacks.
-var threaded: Io.Threaded = .init_single_threaded;
+/// Thread-local single-threaded Io instance — each thread gets its own copy,
+/// so `init_single_threaded` is safe (no cross-thread sharing).
+threadlocal var threaded: Io.Threaded = .init_single_threaded;
 
 fn io() Io {
     return threaded.io();
