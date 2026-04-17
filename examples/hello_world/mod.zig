@@ -1,37 +1,39 @@
 ///! This is an example napi module that exercises various napi features.
 const std = @import("std");
-const c = std.c;
+const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
-/// A simple monotonic timer using libc clock_gettime,
+/// Get a single-threaded Io instance for use in NAPI callbacks.
+var threaded: Io.Threaded = .init_single_threaded;
+
+fn getIo() Io {
+    return threaded.io();
+}
+
+/// A monotonic timer using std.Io.Timestamp,
 /// replacing std.time.Timer which was removed in Zig 0.16.
 const Timer = struct {
-    start_ns: i128,
-
-    fn now() i128 {
-        var ts: c.timespec = undefined;
-        _ = c.clock_gettime(c.CLOCK.MONOTONIC, &ts);
-        return @as(i128, ts.sec) * std.time.ns_per_s + ts.nsec;
-    }
+    start_ts: Io.Timestamp,
 
     fn start() Timer {
-        return .{ .start_ns = now() };
+        return .{ .start_ts = Io.Timestamp.now(getIo(), .awake) };
     }
 
     fn reset(self: *Timer) void {
-        self.start_ns = now();
+        self.start_ts = Io.Timestamp.now(getIo(), .awake);
     }
 
     fn read(self: *const Timer) u64 {
-        return @intCast(now() - self.start_ns);
+        const elapsed = self.start_ts.durationTo(Io.Timestamp.now(getIo(), .awake));
+        return @intCast(elapsed.nanoseconds);
     }
 
     fn lap(self: *Timer) u64 {
-        const current = now();
-        const elapsed: u64 = @intCast(current - self.start_ns);
-        self.start_ns = current;
-        return elapsed;
+        const now_ts = Io.Timestamp.now(getIo(), .awake);
+        const elapsed = self.start_ts.durationTo(now_ts);
+        self.start_ts = now_ts;
+        return @intCast(elapsed.nanoseconds);
     }
 };
 
@@ -183,7 +185,7 @@ var s: S = S{
     .b = 2,
 };
 
-// Wrapped class example (Timer using libc clock_gettime)
+// Wrapped class example (Timer using std.Io.Timestamp)
 
 fn Timer_finalize(_: zapi.Env, timer: *Timer, _: ?*anyopaque) void {
     std.debug.print("Destroying timer {any}\n", .{timer});
@@ -231,9 +233,8 @@ const AsyncAddData = struct {
 };
 
 fn asyncAddExecute(_: zapi.Env, data: *AsyncAddData) void {
-    // sleep 1 second using libc nanosleep (std.time.sleep removed in 0.16)
-    var ts = c.timespec{ .sec = 1, .nsec = 0 };
-    _ = c.nanosleep(&ts, null);
+    // sleep 1 second using std.Io
+    getIo().sleep(Io.Duration.fromSeconds(1), .awake) catch {};
     data.result = data.a + data.b;
 }
 
@@ -322,9 +323,8 @@ fn threadMain(tsfn: zapi.ThreadSafeFunction(TsfnContext, TsfnData)) void {
         // Call into JS
         tsfn.call(data, .blocking) catch {};
 
-        // sleep 100ms using libc nanosleep
-        var ts = c.timespec{ .sec = 0, .nsec = 100 * std.time.ns_per_ms };
-        _ = c.nanosleep(&ts, null);
+        // sleep 100ms using std.Io
+        getIo().sleep(Io.Duration.fromMilliseconds(100), .awake) catch {};
     }
 
     // Release the thread-safe function
