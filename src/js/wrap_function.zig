@@ -308,7 +308,7 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
     const required_argc = comptime requiredArgCount(params);
 
     const wrapper = struct {
-        pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+        pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
             const e = napi.Env{ .env = raw_env };
             const prev = context.setEnv(e);
             defer context.restoreEnv(prev);

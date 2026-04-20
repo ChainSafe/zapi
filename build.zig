@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     module_napi.addIncludePath(b.path("include"));
-    b.modules.put(b.dupe("napi"), module_napi) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("napi"), module_napi) catch @panic("OOM");
 
     const module_zapi = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
@@ -80,7 +80,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
-    b.modules.put(b.dupe("example_js_dsl"), module_example_js_dsl) catch @panic("OOM");
+    b.modules.put(b.allocator, b.dupe("example_js_dsl"), module_example_js_dsl) catch @panic("OOM");
 
     const lib_example_js_dsl = b.addLibrary(.{
         .name = "example_js_dsl",
@@ -132,6 +132,12 @@ pub fn build(b: *std.Build) void {
         .root_module = module_example_hello_world,
         .filters = b.option([][]const u8, "example_hello_world.filters", "example_hello_world test filters") orelse &[_][]const u8{},
     });
+    // Napi C symbols (`napi_wrap`, `napi_typeof`, …) are resolved at
+    // runtime by Node when it loads the `.node` file. Standalone zig test
+    // binaries don't have Node around, so tell the linker not to complain
+    // — the test process satisfies the symbols at dlopen time if it gets
+    // that far, and in practice our test cases don't call into them.
+    test_example_hello_world.linker_allow_shlib_undefined = true;
     const install_test_example_hello_world = b.addInstallArtifact(test_example_hello_world, .{});
     const tls_install_test_example_hello_world = b.step("build-test:example_hello_world", "Install the example_hello_world test");
     tls_install_test_example_hello_world.dependOn(&install_test_example_hello_world.step);
@@ -139,12 +145,14 @@ pub fn build(b: *std.Build) void {
     const run_test_example_hello_world = b.addRunArtifact(test_example_hello_world);
     const tls_run_test_example_hello_world = b.step("test:example_hello_world", "Run the example_hello_world test");
     tls_run_test_example_hello_world.dependOn(&run_test_example_hello_world.step);
+    tls_run_test.dependOn(&run_test_example_hello_world.step);
 
     const test_example_type_tag = b.addTest(.{
         .name = "example_type_tag",
         .root_module = module_example_type_tag,
         .filters = b.option([][]const u8, "example_type_tag.filters", "example_type_tag test filters") orelse &[_][]const u8{},
     });
+    test_example_type_tag.linker_allow_shlib_undefined = true;
     const install_test_example_type_tag = b.addInstallArtifact(test_example_type_tag, .{});
     const tls_install_test_example_type_tag = b.step("build-test:example_type_tag", "Install the example_type_tag test");
     tls_install_test_example_type_tag.dependOn(&install_test_example_type_tag.step);
@@ -152,12 +160,14 @@ pub fn build(b: *std.Build) void {
     const run_test_example_type_tag = b.addRunArtifact(test_example_type_tag);
     const tls_run_test_example_type_tag = b.step("test:example_type_tag", "Run the example_type_tag test");
     tls_run_test_example_type_tag.dependOn(&run_test_example_type_tag.step);
+    tls_run_test.dependOn(&run_test_example_type_tag.step);
 
     const test_example_js_dsl = b.addTest(.{
         .name = "example_js_dsl",
         .root_module = module_example_js_dsl,
         .filters = b.option([][]const u8, "example_js_dsl.filters", "example_js_dsl test filters") orelse &[_][]const u8{},
     });
+    test_example_js_dsl.linker_allow_shlib_undefined = true;
     const install_test_example_js_dsl = b.addInstallArtifact(test_example_js_dsl, .{});
     const tls_install_test_example_js_dsl = b.step("build-test:example_js_dsl", "Install the example_js_dsl test");
     tls_install_test_example_js_dsl.dependOn(&install_test_example_js_dsl.step);

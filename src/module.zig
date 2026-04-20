@@ -7,9 +7,7 @@ extern fn napi_register_module_v1(env: c.napi_env, module: c.napi_value) c.napi_
 pub fn register(comptime f: fn (Env, Value) anyerror!void) void {
     const wrapper = opaque {
         fn napi_register_module_v1(env: c.napi_env, module: c.napi_value) callconv(.c) c.napi_value {
-            const e = Env{
-                .env = env,
-            };
+            const e = Env{ .env = env };
             const v = Value{
                 .env = env,
                 .value = module,

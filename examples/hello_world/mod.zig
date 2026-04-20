@@ -4,9 +4,6 @@ const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
-/// Process-wide single-threaded `Io` instance. stdlib exposes this as
-/// `std.Io.Threaded.global_single_threaded` specifically for examples and
-/// debugging — library code should accept an `Io` parameter instead.
 fn io() Io {
     return Io.Threaded.global_single_threaded.io();
 }

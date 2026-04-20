@@ -507,8 +507,16 @@ pub fn makeToken(value: Number) Token {
     return .{ .value = value.assertI32() + 1 };
 }
 
+/// The DSL requires callers to provide an `Io`. Real napi modules hand in
+/// their application-level Io; this example just uses stdlib's
+/// `global_single_threaded` convenience instance.
+fn exampleIo() std.Io {
+    return std.Io.Threaded.global_single_threaded.io();
+}
+
 comptime {
     js.exportModule(@This(), .{
+        .io = exampleIo,
         .init = struct {
             fn f(refcount: u32) !void {
                 const count = module_init_count.fetchAdd(1, .monotonic);

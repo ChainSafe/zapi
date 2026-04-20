@@ -31,6 +31,10 @@ const class_runtime = @import("class_runtime.zig");
 ///   have been processed and *before* the module's `init` hook (if present).
 ///   `exports` is the JavaScript object that will hold the module's exports.
 ///
+/// - `.io = fn () std.Io`: **Required.** Backs the DSL's class registry
+///   mutex. Called once per `moduleInit`, after `options.init`. Omitting
+///   this field panics at module load.
+///
 /// The DSL internally manages an atomic refcount for module instances across
 /// different N-API environments.
 ///
@@ -60,6 +64,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_register = @hasField(@TypeOf(options), "register");
+    const has_io = @hasField(@TypeOf(options), "io");
     const has_lifecycle = has_init or has_cleanup;
 
     const State = struct {
@@ -70,6 +75,13 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             _dummy: u8 = 0,
         };
         var cleanup_data: CleanupData = .{};
+
+        fn resolveIo() std.Io {
+            if (!has_io) {
+                @panic("zapi.js.exportModule: missing `.io` option — pass `.io = myIoProvider` (fn () std.Io) so the DSL's class registry mutex has a backing Io instance");
+            }
+            return options.io();
+        }
 
         fn cleanupHook(_: *CleanupData) void {
             const prev = env_refcount.fetchSub(1, .acq_rel);
@@ -96,7 +108,9 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                     try options.init(prev_refcount);
                 }
 
-                _ = try registerDecls(Module, env, module, 0);
+                // Resolve `io` *after* `options.init` so the provider can
+                // read any state the init hook set up.
+                _ = try registerDecls(Module, env, module, 0, State.resolveIo());
 
                 if (has_register) {
                     try options.register(env, module);
@@ -114,7 +128,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             }
 
             // Register all pub decls
-            _ = try registerDecls(Module, env, module, 0);
+            _ = try registerDecls(Module, env, module, 0, State.resolveIo());
 
             // Manual registration hook for non-DSL modules
             if (has_register) {
@@ -131,7 +145,7 @@ fn shouldRegisterEnvCleanupHook(has_lifecycle: bool) bool {
 }
 
 /// Iterates module declarations and registers DSL functions and js_meta classes.
-fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, comptime depth: usize) !bool {
+fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, comptime depth: usize, io: std.Io) !bool {
     const decls = @typeInfo(Module).@"struct".decls;
     var exported_any = false;
 
@@ -191,12 +205,12 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
                     ));
 
                     const cls = napi.Value{ .env = env.env, .value = class_val };
-                    try class_runtime.registerClass(InnerType, env, cls);
+                    try class_runtime.registerClass(InnerType, env, cls, io);
                     try module.setNamedProperty(name, cls);
                     exported_any = true;
                 } else {
                     const ns_obj = try env.createObject();
-                    if (try registerDecls(InnerType, env, ns_obj, depth + 1)) {
+                    if (try registerDecls(InnerType, env, ns_obj, depth + 1, io)) {
                         const name: [:0]const u8 = decl.name ++ "";
                         try module.setNamedProperty(name, ns_obj);
                         exported_any = true;
