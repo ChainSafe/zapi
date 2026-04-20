@@ -14,10 +14,16 @@
         },
     },
     .modules = .{
+        .napi = .{
+            .root_source_file = "src/root.zig",
+            .include_paths = .{"include"},
+            .imports = .{.build_options},
+        },
         .zapi = .{
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
             .imports = .{.build_options},
+            .link_libc = true,
         },
     },
     .libraries = .{
@@ -40,6 +46,16 @@
             .linkage = .dynamic,
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_type_tag.node",
+        },
+        .example_js_dsl = .{
+            .root_module = .{
+                .root_source_file = "examples/js_dsl/mod.zig",
+                .imports = .{.zapi},
+                .link_libc = true,
+            },
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "example_js_dsl.node",
         },
     },
 }

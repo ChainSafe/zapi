@@ -8,3 +8,5 @@ test/spec/static_tests.zig
 node_modules/
 lib/
 zig-pkg/
+docs/superpowers/
+.claude/settings.local.json
