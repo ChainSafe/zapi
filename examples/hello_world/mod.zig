@@ -4,12 +4,11 @@ const Io = std.Io;
 const zapi = @import("zapi");
 const allocator = std.heap.page_allocator;
 
-/// Thread-local single-threaded Io instance — each thread gets its own copy,
-/// so `init_single_threaded` is safe (no cross-thread sharing).
-threadlocal var threaded: Io.Threaded = .init_single_threaded;
-
+/// Process-wide single-threaded `Io` instance. stdlib exposes this as
+/// `std.Io.Threaded.global_single_threaded` specifically for examples and
+/// debugging — library code should accept an `Io` parameter instead.
 fn io() Io {
-    return threaded.io();
+    return Io.Threaded.global_single_threaded.io();
 }
 
 comptime {
