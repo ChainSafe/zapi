@@ -1,7 +1,7 @@
 {
 	"name": "@chainsafe/zapi",
 	"license": "MIT",
-	"version": "0.1.1",
+	"version": "1.0.0",
 	"description": "A tool for managing and publishing Zig NAPI packages.",
 	"type": "module",
 	"scripts": {
