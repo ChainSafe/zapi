@@ -6,7 +6,7 @@
 	"homepage": "https://github.com/ChainSafe/zapi/tree/main/#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ChainSafe/zapi.git",
+    "url": "git+https://github.com/ChainSafe/zapi.git"
   },
 	"type": "module",
 	"scripts": {
