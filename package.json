@@ -3,6 +3,11 @@
 	"license": "MIT",
 	"version": "1.0.0",
 	"description": "A tool for managing and publishing Zig NAPI packages.",
+	"homepage": "https://github.com/ChainSafe/zapi/tree/main/#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChainSafe/zapi.git",
+  },
 	"type": "module",
 	"scripts": {
 		"build": "pnpm build:js && pnpm build:zig",
