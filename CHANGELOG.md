@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/ChainSafe/zapi/compare/zapi-v1.0.0...zapi-v1.0.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* package url for provenance ([#17](https://github.com/ChainSafe/zapi/issues/17)) ([893a357](https://github.com/ChainSafe/zapi/commit/893a357e03cedfa0b47dd82f4a748068389cbb1b))
+
 ## [1.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v0.1.0...zapi-v1.0.0) (2026-04-21)
 
 
