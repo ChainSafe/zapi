@@ -671,19 +671,14 @@ zapi publish --dry-run
 
 ### Release Workflow
 
-```bash
-# 1. Build for all targets
-zapi build-artifacts --optimize ReleaseFast
+GitHub releases are managed with release-please:
 
-# 2. Prepare npm packages
-zapi prepublish
-
-# 3. Preview what will be published
-zapi publish --dry-run
-
-# 4. Publish to npm
-zapi publish -- --access public
-```
+1. Conventional commits merged to `main` update or create the release PR.
+2. Merging that PR tags a new GitHub release and bumps `package.json`.
+3. `build.zig.zon` and `zbuild.zon` are kept in sync from the same release-please version.
+4. The release workflow installs dependencies, runs `pnpm build:js`, and publishes the root package directly with `npm publish` via npm trusted publishing.
+5. No `NPM_TOKEN` secret is required for npm publish; GitHub Actions OIDC (`id-token: write`) is used together with `--provenance`.
+6. The published npm package is the JS distribution only (`lib/` and `ts/`).
 
 ### Error Handling
 
