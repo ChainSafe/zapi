@@ -148,6 +148,18 @@ describe("typed arrays", () => {
 		expect(result).toBeInstanceOf(Float64Array);
 		expect(Array.from(result)).toEqual([2.5, 5.0, 7.5]);
 	});
+
+	it("allocUint8 allocates and fills via alloc pattern", () => {
+		const result = mod.allocUint8(5);
+		expect(result).toBeInstanceOf(Uint8Array);
+		expect(Array.from(result)).toEqual([0, 1, 2, 3, 4]);
+	});
+
+	it("allocUint8 with zero length", () => {
+		const result = mod.allocUint8(0);
+		expect(result).toBeInstanceOf(Uint8Array);
+		expect(result.length).toEqual(0);
+	});
 });
 
 // Section 7: Promises
