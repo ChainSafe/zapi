@@ -67,8 +67,8 @@ pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
 pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
     const State = state(T);
 
-    State.mutex.lock();
-    defer State.mutex.unlock();
+    State.lock();
+    defer State.unlock();
 
     if (State.find(env.env) != null) return;
 
@@ -113,8 +113,8 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
 fn getConstructor(comptime T: type, env: napi.Env) !napi.Value {
     const State = state(T);
 
-    State.mutex.lock();
-    defer State.mutex.unlock();
+    State.lock();
+    defer State.unlock();
 
     const entry = State.find(env.env) orelse return error.ClassNotRegistered;
     return try entry.ctor_ref.getValue();
@@ -147,7 +147,17 @@ fn state(comptime T: type) type {
         };
 
         var head: ?*Entry = null;
-        var mutex: std.Thread.Mutex = .{};
+        var locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+        fn lock() void {
+            while (locked.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
+                std.atomic.spinLoopHint();
+            }
+        }
+
+        fn unlock() void {
+            locked.store(false, .release);
+        }
 
         fn find(env_ptr: napi.c.napi_env) ?*Entry {
             var current = head;
@@ -158,8 +168,8 @@ fn state(comptime T: type) type {
         }
 
         fn cleanupHook(entry: *Entry) void {
-            mutex.lock();
-            defer mutex.unlock();
+            lock();
+            defer unlock();
 
             var cursor = &head;
             while (cursor.*) |current| {
