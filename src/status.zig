@@ -54,7 +54,7 @@ pub const NapiError = error{
     CannotRunJS,
 };
 
-pub fn check(code: c_uint) NapiError!void {
+pub fn check(code: c.napi_status) NapiError!void {
     switch (@as(Status, @enumFromInt(code))) {
         .ok => return,
         .invalid_arg => return error.InvalidArg,
