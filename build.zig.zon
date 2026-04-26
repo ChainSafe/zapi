@@ -6,8 +6,8 @@
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
     .dependencies = .{
         .zbuild = .{
-            .url = "git+https://github.com/ChainSafe/zbuild?ref=refactor/comptime-library-rewrite#17c389be7e258dea422f43d5dad996f0f847bd66",
-            .hash = "zbuild-0.4.0-XJFavw5XAgBJ_8U6DHY0D8xHGUAx4Ak4r8pKe2-o_X8Q",
+            .url = "git+https://github.com/ChainSafe/zbuild?ref=refactor/comptime-library-rewrite#7ec852f1c6495b62d964e311bd210b6f9a3015be",
+            .hash = "zbuild-0.4.0-XJFav9lXAgCtcFwxSb5qEkex3kijECLtqo7z9FzrkUaf",
         },
     },
     .options_modules = .{
@@ -73,8 +73,20 @@
     .tests = .{
         .napi = .{ .root_module = .napi },
         .zapi = .{ .root_module = .zapi },
-        .example_hello_world = .{ .root_module = .example_hello_world },
-        .example_type_tag = .{ .root_module = .example_type_tag },
-        .example_js_dsl = .{ .root_module = .example_js_dsl },
+        // Example tests reference napi C symbols (`napi_wrap`, `napi_typeof`, …)
+        // which Node provides at dlopen time. Standalone zig test binaries don't
+        // have Node around, so allow undefined shared-library symbols.
+        .example_hello_world = .{
+            .root_module = .example_hello_world,
+            .linker_allow_shlib_undefined = true,
+        },
+        .example_type_tag = .{
+            .root_module = .example_type_tag,
+            .linker_allow_shlib_undefined = true,
+        },
+        .example_js_dsl = .{
+            .root_module = .example_js_dsl,
+            .linker_allow_shlib_undefined = true,
+        },
     },
 }
