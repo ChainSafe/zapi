@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = status.NapiError;
 const TypedarrayType = @import("value_types.zig").TypedarrayType;

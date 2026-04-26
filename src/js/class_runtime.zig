@@ -64,11 +64,14 @@ pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
     }.f;
 }
 
-pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
+/// Caches `io` in `state(T).io` for later napi callbacks that can't
+/// receive it as a parameter.
+pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value, io: std.Io) !void {
     const State = state(T);
+    State.io = io;
 
-    State.mutex.lock();
-    defer State.mutex.unlock();
+    try State.mutex.lock(io);
+    defer State.mutex.unlock(io);
 
     if (State.find(env.env) != null) return;
 
@@ -113,8 +116,8 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
 fn getConstructor(comptime T: type, env: napi.Env) !napi.Value {
     const State = state(T);
 
-    State.mutex.lock();
-    defer State.mutex.unlock();
+    try State.mutex.lock(State.io);
+    defer State.mutex.unlock(State.io);
 
     const entry = State.find(env.env) orelse return error.ClassNotRegistered;
     return try entry.ctor_ref.getValue();
@@ -147,7 +150,9 @@ fn state(comptime T: type) type {
         };
 
         var head: ?*Entry = null;
-        var mutex: std.Thread.Mutex = .{};
+        var mutex: std.Io.Mutex = .init;
+        /// Set by `registerClass`; read by later callbacks.
+        var io: std.Io = undefined;
 
         fn find(env_ptr: napi.c.napi_env) ?*Entry {
             var current = head;
@@ -158,8 +163,10 @@ fn state(comptime T: type) type {
         }
 
         fn cleanupHook(entry: *Entry) void {
-            mutex.lock();
-            defer mutex.unlock();
+            // Napi callbacks have no way to propagate `error.Canceled`, so
+            // this path must complete — use the uncancelable variant.
+            mutex.lockUncancelable(io);
+            defer mutex.unlock(io);
 
             var cursor = &head;
             while (cursor.*) |current| {

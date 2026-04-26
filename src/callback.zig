@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const status = @import("status.zig");
 const Env = @import("Env.zig");
 const CallbackInfo = @import("callback_info.zig").CallbackInfo;
@@ -18,7 +18,7 @@ pub fn wrapCallback(
         pub fn f(
             env: c.napi_env,
             info: c.napi_callback_info,
-        ) callconv(.C) c.napi_value {
+        ) callconv(.c) c.napi_value {
             const e = Env{ .env = env };
             const cb_info = CallbackInfo(argc_cap).init(env, info) catch |err| {
                 e.throwError(@errorName(err), "CallbackInfo initialization failed") catch {};

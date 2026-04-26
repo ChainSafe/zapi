@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = status.NapiError;
 const Env = @import("Env.zig");
@@ -30,7 +30,7 @@ pub fn wrapCallJsCallback(
             raw_js_callback: c.napi_value,
             raw_context: ?*anyopaque,
             raw_data: ?*anyopaque,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             // If raw_env is null, the TSFN is being torn down.
             if (raw_env == null) return;
             // Context should be present if we customized it
@@ -58,7 +58,7 @@ pub fn wrapFinalizeCallback(
             raw_env: c.napi_env,
             raw_data: ?*anyopaque,
             hint: ?*anyopaque,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             _ = hint;
             if (raw_data == null and Context != void) return;
             const env = Env{ .env = raw_env };
