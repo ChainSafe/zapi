@@ -178,6 +178,18 @@ pub fn float64Scale(data: Float64Array, factor: Number) !Float64Array {
     return Float64Array.from(scaled);
 }
 
+/// Allocate a Uint8Array of given length and fill with 0, 1, 2, ...
+/// Demonstrates the zero-copy alloc + toSlice pattern.
+pub fn allocUint8(len: Number) !Uint8Array {
+    const n: usize = @intCast(len.assertU32());
+    var arr = try Uint8Array.alloc(n);
+    const out = try arr.toSlice();
+    for (out, 0..) |*byte, i| {
+        byte.* = @truncate(i);
+    }
+    return arr;
+}
+
 // ============================================================================
 // Section 7: Promises
 // ============================================================================

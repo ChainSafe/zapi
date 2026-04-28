@@ -67,6 +67,28 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             return .{ .val = val };
         }
 
+        /// Allocates a new JavaScript TypedArray of the given length backed by
+        /// freshly allocated V8 memory. The contents are uninitialized.
+        ///
+        /// Use `toSlice()` on the returned value to get a writable slice into
+        /// the V8 ArrayBuffer backing store, then fill it before returning to JS.
+        ///
+        /// This is the zero-copy construction path for when the size is known
+        /// upfront and the producer can write directly into a target buffer
+        /// (e.g. serialization). For cases where data already exists in a Zig
+        /// slice, use `from(slice)` instead.
+        ///
+        /// WARNING: The same lifetime caveats as `toSlice()` apply — the backing
+        /// store is only valid within the current N-API callback scope.
+        pub fn alloc(len: usize) !Self {
+            const e = context.env();
+            const byte_len = len * @sizeOf(Element);
+            var buf_ptr: [*]u8 = undefined;
+            const arraybuffer = try e.createArrayBuffer(byte_len, &buf_ptr);
+            const val = try e.createTypedarray(array_type, len, arraybuffer, 0);
+            return .{ .val = val };
+        }
+
         /// Returns the underlying `napi.Value` representation of this JavaScript TypedArray.
         pub fn toValue(self: Self) napi.Value {
             return self.val;
