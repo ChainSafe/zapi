@@ -64,14 +64,11 @@ pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
     }.f;
 }
 
-/// Caches `io` in `state(T).io` for later napi callbacks that can't
-/// receive it as a parameter.
-pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value, io: std.Io) !void {
+pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
     const State = state(T);
-    State.io = io;
 
-    try State.mutex.lock(io);
-    defer State.mutex.unlock(io);
+    State.lock();
+    defer State.unlock();
 
     if (State.find(env.env) != null) return;
 
@@ -116,8 +113,8 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
 fn getConstructor(comptime T: type, env: napi.Env) !napi.Value {
     const State = state(T);
 
-    try State.mutex.lock(State.io);
-    defer State.mutex.unlock(State.io);
+    State.lock();
+    defer State.unlock();
 
     const entry = State.find(env.env) orelse return error.ClassNotRegistered;
     return try entry.ctor_ref.getValue();
@@ -150,9 +147,17 @@ fn state(comptime T: type) type {
         };
 
         var head: ?*Entry = null;
-        var mutex: std.Io.Mutex = .init;
-        /// Set by `registerClass`; read by later callbacks.
-        var io: std.Io = undefined;
+        var locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+        fn lock() void {
+            while (locked.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
+                std.atomic.spinLoopHint();
+            }
+        }
+
+        fn unlock() void {
+            locked.store(false, .release);
+        }
 
         fn find(env_ptr: napi.c.napi_env) ?*Entry {
             var current = head;
@@ -163,10 +168,8 @@ fn state(comptime T: type) type {
         }
 
         fn cleanupHook(entry: *Entry) void {
-            // Napi callbacks have no way to propagate `error.Canceled`, so
-            // this path must complete — use the uncancelable variant.
-            mutex.lockUncancelable(io);
-            defer mutex.unlock(io);
+            lock();
+            defer unlock();
 
             var cursor = &head;
             while (cursor.*) |current| {
