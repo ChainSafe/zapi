@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v1.0.1...zapi-v2.0.0) (2026-04-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade to Zig 0.16.0 ([#9](https://github.com/ChainSafe/zapi/issues/9))
+
+### Features
+
+* add memory alloc feature for typed-array ([#21](https://github.com/ChainSafe/zapi/issues/21)) ([56e6812](https://github.com/ChainSafe/zapi/commit/56e6812e7b660e8b0f315686cbfb5c095118f23a))
+
+
+### Miscellaneous Chores
+
+* upgrade to Zig 0.16.0 ([#9](https://github.com/ChainSafe/zapi/issues/9)) ([8e80f1c](https://github.com/ChainSafe/zapi/commit/8e80f1c24a93bbdba312d83e35944b361f3f807f))
+
 ## [1.0.1](https://github.com/ChainSafe/zapi/compare/zapi-v1.0.0...zapi-v1.0.1) (2026-04-21)
 
 
