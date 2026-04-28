@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 
 /// https://nodejs.org/api/n-api.html#napi_status
 pub const Status = enum(c.napi_status) {

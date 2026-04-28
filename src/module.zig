@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const Env = @import("Env.zig");
 const Value = @import("Value.zig");
 
@@ -6,10 +6,8 @@ extern fn napi_register_module_v1(env: c.napi_env, module: c.napi_value) c.napi_
 
 pub fn register(comptime f: fn (Env, Value) anyerror!void) void {
     const wrapper = opaque {
-        fn napi_register_module_v1(env: c.napi_env, module: c.napi_value) callconv(.C) c.napi_value {
-            const e = Env{
-                .env = env,
-            };
+        fn napi_register_module_v1(env: c.napi_env, module: c.napi_value) callconv(.c) c.napi_value {
+            const e = Env{ .env = env };
             const v = Value{
                 .env = env,
                 .value = module,

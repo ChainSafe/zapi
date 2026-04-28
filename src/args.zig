@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const Value = @import("Value.zig");
 
 pub fn tupleToRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".fields.len]c.napi_value {

@@ -1,4 +1,4 @@
-const c = @import("c.zig");
+const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
 

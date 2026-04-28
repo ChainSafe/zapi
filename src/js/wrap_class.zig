@@ -344,7 +344,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             const init_argc = init_params.len;
 
             const cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
                     const e = napi.Env{ .env = raw_env };
                     const prev = context.setEnv(e);
                     defer context.restoreEnv(prev);
@@ -460,7 +460,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             const prefers_receiver_ctor = ReturnClass != null and ReturnClass.? == Class;
 
             const method_cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
                     const e = napi.Env{ .env = raw_env };
                     const prev_env = context.setEnv(e);
                     defer context.restoreEnv(prev_env);
@@ -522,7 +522,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             const prefers_receiver_ctor = ReturnClass != null and ReturnClass.? == Class;
 
             const getter_cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
                     const e = napi.Env{ .env = raw_env };
                     const prev_env = context.setEnv(e);
                     defer context.restoreEnv(prev_env);
@@ -573,7 +573,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             const prefers_this_ctor = ReturnClass != null and ReturnClass.? == Class;
 
             const static_cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
                     const e = napi.Env{ .env = raw_env };
                     const prev_env = context.setEnv(e);
                     defer context.restoreEnv(prev_env);
@@ -624,7 +624,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             const ValueParamType = setter_params[1].type.?;
 
             const setter_cb = struct {
-                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.C) napi.c.napi_value {
+                pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
                     const e = napi.Env{ .env = raw_env };
                     const prev_env = context.setEnv(e);
                     defer context.restoreEnv(prev_env);
