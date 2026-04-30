@@ -1,9 +1,11 @@
 const napi = @import("napi.zig");
 const context = @import("js/context.zig");
+const io_context = @import("js/io.zig");
 const typed_arrays = @import("js/typed_arrays.zig");
 const class_meta = @import("js/class_meta.zig");
 
 pub const env = context.env;
+pub const io = io_context.io;
 pub const allocator = context.allocator;
 pub const setEnv = context.setEnv;
 pub const restoreEnv = context.restoreEnv;
@@ -60,6 +62,7 @@ test {
     // which would force-link free functions (throwError) against C symbols
     // unavailable in the native test runner.
     _ = @import("js/context.zig");
+    _ = @import("js/io.zig");
     _ = @import("js/number.zig");
     _ = @import("js/string.zig");
     _ = @import("js/boolean.zig");

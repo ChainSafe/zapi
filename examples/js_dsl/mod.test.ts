@@ -264,6 +264,13 @@ describe("mixed DSL + N-API", () => {
 		const obj = mod.makeObject("x", 10);
 		expect(obj).toEqual({ x: 10 });
 	});
+
+	it("randomBytes16 uses js.io() to produce a Uint8Array", () => {
+		const bytes = mod.randomBytes16();
+		expect(bytes).toBeInstanceOf(Uint8Array);
+		expect(bytes).toHaveLength(16);
+		expect(Array.from(bytes).some((byte: number) => byte !== 0)).toBe(true);
+	});
 });
 
 // Section 11: Module Lifecycle
