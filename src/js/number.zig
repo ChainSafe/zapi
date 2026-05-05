@@ -34,7 +34,12 @@ pub const Number = struct {
 
     /// Attempts to convert the JavaScript number to a Zig `u32`.
     ///
-    /// Returns an error if the conversion fails (e.g., number is negative or too large).
+    /// Safety: The underlying napi implementation does not reject numbers out of
+    /// the range [0, 2^32). The caller is responsible for bounds checking.
+    ///
+    /// Returns an error if the given `self.val` is not a number.
+    ///
+    /// Source: https://tc39.es/ecma262/#sec-touint32
     pub fn toU32(self: Number) !u32 {
         return self.val.getValueUint32();
     }
