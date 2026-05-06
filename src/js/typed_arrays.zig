@@ -1,3 +1,4 @@
+const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
 const TypedarrayType = napi.value_types.TypedarrayType;
@@ -46,6 +47,42 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             const byte_ptr: [*]u8 = info.data.ptr;
             const typed_ptr: [*]Element = @ptrCast(@alignCast(byte_ptr));
             return typed_ptr[0..info.length];
+        }
+
+        /// Creates a new JavaScript TypedArray backed by an *external* (native-heap)
+        /// ArrayBuffer.
+        ///
+        /// The contents of `slice` are copied into a freshly allocated native buffer
+        /// (via `context.allocator()`).
+        ///
+        /// V8 holds the pointer to manage the JS-side lifetime; the
+        /// native buffer is freed by a finalizer when V8 collects the ArrayBuffer.
+        pub fn fromExternal(slice: []const Element) !Self {
+            const e = context.env();
+            const buf = try context.allocator().dupe(Element, slice);
+
+            const byte_len = slice.len * @sizeOf(Element);
+            const len_hint: ?*anyopaque = @ptrFromInt(slice.len);
+            const finalize_cb = comptime napi.wrapSliceFinalizeCallback(Element, externalFinalizer);
+            const arraybuffer = e.createExternalArrayBuffer(std.mem.sliceAsBytes(buf), finalize_cb, len_hint) catch |err| {
+                context.allocator().free(buf);
+                return err;
+            };
+
+            _ = try e.adjustExternalMemory(@intCast(byte_len));
+            const val = try e.createTypedarray(array_type, slice.len, arraybuffer, 0);
+            return .{ .val = val };
+        }
+
+        /// Finalizer for buffers allocated by `fromExternal`. Frees the native
+        /// allocation and reverses the matching `adjustExternalMemory` accounting.
+        ///
+        /// Caller is responsible for calling a matching `adjustExternalMemory` at
+        /// the appropriate callsite to let V8 know about native heap memory usage.
+        fn externalFinalizer(env: napi.Env, data: []Element) void {
+            const byte_len = data.len * @sizeOf(Element);
+            context.allocator().free(data);
+            _ = env.adjustExternalMemory(-@as(i64, @intCast(byte_len))) catch {};
         }
 
         /// Creates a new JavaScript TypedArray from a Zig slice by copying the data.

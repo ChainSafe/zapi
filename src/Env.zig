@@ -293,7 +293,7 @@ pub fn createDate(self: Env, time: f64) NapiError!Value {
 pub fn createExternal(self: Env, data: [*]const u8, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_create_external(self.env, @constCast(@ptrCast(data)), finalize_cb, finalize_hint, &value),
+        c.napi_create_external(self.env, @ptrCast(@constCast(data)), finalize_cb, finalize_hint, &value),
     );
     return Value{
         .env = self.env,
@@ -305,7 +305,14 @@ pub fn createExternal(self: Env, data: [*]const u8, finalize_cb: c.napi_finalize
 pub fn createExternalArrayBuffer(self: Env, data: []const u8, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_create_external_arraybuffer(self.env, @constCast(@ptrCast(data.ptr)), data.len, finalize_cb, finalize_hint, &value),
+        c.napi_create_external_arraybuffer(
+            self.env,
+            @ptrCast(@constCast(data.ptr)),
+            data.len,
+            finalize_cb,
+            finalize_hint,
+            &value,
+        ),
     );
     return Value{
         .env = self.env,
@@ -317,7 +324,7 @@ pub fn createExternalArrayBuffer(self: Env, data: []const u8, finalize_cb: c.nap
 pub fn createExternalBuffer(self: Env, data: []const u8, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_create_external_buffer(self.env, data.len, @constCast(@ptrCast(data.ptr)), finalize_cb, finalize_hint, &value),
+        c.napi_create_external_buffer(self.env, data.len, @ptrCast(@constCast(data.ptr)), finalize_cb, finalize_hint, &value),
     );
     return Value{
         .env = self.env,
