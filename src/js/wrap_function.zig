@@ -125,6 +125,23 @@ fn validateDslArg(comptime T: type, value: napi.Value) !void {
     }
 }
 
+/// If `T` is a plain struct (or a single-item pointer to one) that is neither a
+/// DSL wrapper nor an N-API class, returns the underlying struct type. The
+/// caller uses this to produce a targeted "missing `js_meta`" diagnostic
+/// instead of the generic "unsupported type" compile error.
+fn missingClassMetaHint(comptime T: type) ?type {
+    const Inner: type = switch (@typeInfo(T)) {
+        .@"struct" => T,
+        .pointer => |ptr| if (ptr.size == .one) ptr.child else return null,
+        else => return null,
+    };
+    if (@typeInfo(Inner) != .@"struct") return null;
+    if (Inner == napi.Value) return null;
+    if (isDslType(Inner)) return null;
+    if (class_meta.isClassType(Inner)) return null;
+    return Inner;
+}
+
 /// Converts a raw `napi.c.napi_value` (JavaScript value) into a Zig type.
 ///
 /// This function handles conversion to `napi.Value`, ZAPI DSL wrapper types
@@ -156,6 +173,9 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
             }
         },
         else => {},
+    }
+    if (comptime missingClassMetaHint(T)) |Inner| {
+        @compileError("convertArg: `" ++ @typeName(Inner) ++ "` is not a recognized JavaScript value. If you intend to use it as a JavaScript class, declare `pub const js_meta = js.class(...)` on the struct.");
     }
     @compileError("convertArg: unsupported type " ++ @typeName(T));
 }
@@ -212,6 +232,9 @@ pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, p
             return null;
         };
         return instance.value;
+    }
+    if (comptime missingClassMetaHint(T)) |Inner| {
+        @compileError("convertReturn: `" ++ @typeName(Inner) ++ "` is not a recognized JavaScript value. If you intend to use it as a JavaScript class, declare `pub const js_meta = js.class(...)` on the struct.");
     }
     @compileError("convertReturn: unsupported return type " ++ @typeName(T));
 }
@@ -366,4 +389,26 @@ test "argTypeDescription names typed arrays and unwraps optionals" {
 
     try std.testing.expectEqualStrings("a number", argTypeDescription(?@import("number.zig").Number));
     try std.testing.expectEqualStrings("a Uint8Array", argTypeDescription(typed_arrays.Uint8Array));
+}
+
+test "missingClassMetaHint flags structs lacking js_meta" {
+    const PlainStruct = struct { count: i32 };
+
+    try std.testing.expect(missingClassMetaHint(PlainStruct) == PlainStruct);
+    try std.testing.expect(missingClassMetaHint(*PlainStruct) == PlainStruct);
+}
+
+test "missingClassMetaHint ignores recognized types" {
+    const FakeDsl = struct { val: napi.Value };
+    const FakeClass = struct {
+        pub const js_meta = class_meta.class(.{});
+        x: i32,
+    };
+
+    try std.testing.expect(missingClassMetaHint(napi.Value) == null);
+    try std.testing.expect(missingClassMetaHint(FakeDsl) == null);
+    try std.testing.expect(missingClassMetaHint(FakeClass) == null);
+    try std.testing.expect(missingClassMetaHint(*FakeClass) == null);
+    try std.testing.expect(missingClassMetaHint(u32) == null);
+    try std.testing.expect(missingClassMetaHint([]const u8) == null);
 }
