@@ -31,8 +31,10 @@ const class_runtime = @import("class_runtime.zig");
 ///   have been processed and *before* the module's `init` hook (if present).
 ///   `exports` is the JavaScript object that will hold the module's exports.
 ///
-/// The DSL internally manages an atomic refcount for module instances across
-/// different N-API environments.
+/// The DSL manages an atomic refcount across N-API environments and
+/// serializes `init`/`cleanup` so concurrent attaches (e.g. Worker threads
+/// loading the same addon) cannot expose exports while init is still
+/// running on another thread.
 ///
 /// Usage Examples:
 /// ```zig
@@ -64,6 +66,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
     const State = struct {
         var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+        var locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
         // addEnvCleanupHook requires a non-null *Data pointer.
         const CleanupData = struct {
@@ -71,7 +74,20 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
         };
         var cleanup_data: CleanupData = .{};
 
+        fn lock() void {
+            while (locked.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
+                std.atomic.spinLoopHint();
+            }
+        }
+
+        fn unlock() void {
+            locked.store(false, .release);
+        }
+
         fn cleanupHook(_: *CleanupData) void {
+            lock();
+            defer unlock();
+
             const prev = env_refcount.fetchSub(1, .acq_rel);
             const new_refcount = prev - 1;
             if (has_cleanup) {
@@ -86,6 +102,9 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             defer context.restoreEnv(prev);
 
             if (has_lifecycle) {
+                State.lock();
+                defer State.unlock();
+
                 const prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
                 var cleanup_hook_registered = false;
                 errdefer if (!cleanup_hook_registered) {
