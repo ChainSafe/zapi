@@ -190,6 +190,24 @@ pub fn allocUint8(len: Number) !Uint8Array {
     return arr;
 }
 
+/// Build a Uint8Array backed by an *external* (native-heap) ArrayBuffer.
+///
+/// Takes a JS array of numbers, copies the bytes into a buffer owned by
+/// `js.allocator()`, and hands the pointer to V8. The DSL wires up a
+/// `SliceFinalizeCallback` so the native buffer is freed automatically when
+/// V8 collects the ArrayBuffer — no manual cleanup needed on the JS side.
+pub fn externalUint8Array(arr: Array) !Uint8Array {
+    const len = try arr.length();
+    const alloc = js.allocator();
+    const tmp = try alloc.alloc(u8, len);
+    defer alloc.free(tmp);
+    var i: u32 = 0;
+    while (i < len) : (i += 1) {
+        tmp[i] = @intCast((try arr.getNumber(i)).assertI32());
+    }
+    return Uint8Array.fromExternal(tmp);
+}
+
 // ============================================================================
 // Section 7: Promises
 // ============================================================================
