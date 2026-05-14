@@ -160,6 +160,18 @@ describe("typed arrays", () => {
 		expect(result).toBeInstanceOf(Uint8Array);
 		expect(result.length).toEqual(0);
 	});
+
+	it("externalUint8Array copies a JS array into a native-backed Uint8Array", () => {
+		const test_cases = [
+			{ input: [] },
+			{ input: [10, 20, 30, 40] },
+		];
+
+		for (const tc of test_cases) {
+			const result = mod.externalUint8Array(tc.input);
+			expect(result).toBeInstanceOf(Uint8Array);
+		}
+	});
 });
 
 // Section 7: Promises
