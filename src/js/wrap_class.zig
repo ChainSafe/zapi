@@ -69,7 +69,7 @@ pub fn wrapClass(comptime T: type) type {
         /// It handles argument conversion, calls the `pub fn init(...)` method of
         /// the Zig struct `T`, and wraps the resulting native object in the JS instance.
         /// It also handles internal placeholder creation for factory methods.
-pub const constructor: napi.c.napi_callback = genConstructor();
+        pub const constructor: napi.c.napi_callback = genConstructor();
 
         /// The default N-API finalizer callback for native objects wrapped by instances of `T`.
         ///
@@ -78,7 +78,7 @@ pub const constructor: napi.c.napi_callback = genConstructor();
         /// It handles cleanup for internal placeholder objects during class
         /// materialization and calls the `deinit()` method (if present) and frees
         /// the native memory for regular class instances.
-pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
+        pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
             if (class_runtime.isInternalPlaceholderHint(T, hint)) {
                 class_runtime.destroyInternalPlaceholder(T, obj);
                 return;
@@ -273,11 +273,12 @@ pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
         /// This function analyzes the `js_meta` definition of `T` at compile time
         /// and constructs the necessary N-API descriptors. This slice is typically
         /// passed to `napi.Env.defineClass()`.
-pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
+        pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
             const descriptor_count = analysis.property_count + analysis.method_count;
             if (descriptor_count == 0) return &[0]napi.c.napi_property_descriptor{};
 
             const descriptors = comptime blk: {
+                @setEvalBranchQuota(@max(50_000, 1000 + descriptor_count * 256));
                 var descs: [descriptor_count]napi.c.napi_property_descriptor = undefined;
                 var idx: usize = 0;
 
@@ -325,14 +326,14 @@ pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
         /// Returns `true` if this class has static factory methods defined via `js.factory`.
         ///
         /// Current implementation always returns `false` as `js.factory` is not yet implemented.
-pub fn hasFactories() bool {
+        pub fn hasFactories() bool {
             return false;
         }
 
         /// Returns a slice of N-API property descriptors for static factory methods.
         ///
         /// Current implementation returns an empty slice as `js.factory` is not yet implemented.
-pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
+        pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
             return &[0]napi.c.napi_property_descriptor{};
         }
 
