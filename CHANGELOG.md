@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.0.0...zapi-v2.1.0) (2026-05-15)
+
+
+### Features
+
+* support create_external_arraybuffer ([#30](https://github.com/ChainSafe/zapi/issues/30)) ([a76b604](https://github.com/ChainSafe/zapi/commit/a76b60430da70950e16359d6f0896e92e44db282))
+
+
+### Bug Fixes
+
+* bump eval branch quota for BeaconStateView ([e522fa4](https://github.com/ChainSafe/zapi/commit/e522fa4beb5eacfb8ee0f9a964b435a88bb8f2ba))
+* bump eval branch quota for BeaconStateView ([5cf7988](https://github.com/ChainSafe/zapi/commit/5cf7988a6c9870bf4a095e001bdc825940ca05a4))
+* doc comments regarding safety for `Number.toU32()` ([4e74585](https://github.com/ChainSafe/zapi/commit/4e74585194233323cee83163431d7f96bb911ce4))
+* doc comments regarding safety for `Number.toU32()` ([7d05b19](https://github.com/ChainSafe/zapi/commit/7d05b197ec50730b48d4e56ebc3e1d8e6fb43ac3))
+* show correct error message ([#25](https://github.com/ChainSafe/zapi/issues/25)) ([baa58f5](https://github.com/ChainSafe/zapi/commit/baa58f57fc9c54132ceb168a2e4203c72169b90d))
+
 ## [2.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v1.0.1...zapi-v2.0.0) (2026-04-28)
 
 
