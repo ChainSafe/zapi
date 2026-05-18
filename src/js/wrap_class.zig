@@ -681,6 +681,62 @@ pub fn wrapClass(comptime T: type) type {
     };
 }
 
+/// Attaches the comptime-known values declared in `T.js_meta.options.static`
+/// as own properties of the just-defined JS class constructor `class_val`.
+///
+/// Called by `export_module.zig` right after `napi_define_class` returns, so
+/// the values land on the constructor itself (i.e. `MyClass.MY_CONST` in JS),
+/// not on instances. Each value is converted to a `napi.Value` per its Zig
+/// type — see `validateStaticFields` in `class_meta.zig` for the accepted set.
+pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value) !void {
+    if (comptime !class_meta.hasStaticFields(T)) return;
+    inline for (comptime class_meta.staticFieldInfos(T)) |field_info| {
+        const value = @field(T.js_meta.options.static, field_info.name);
+        const napi_value = try createStaticFieldValue(env, value);
+        const name: [:0]const u8 = field_info.name ++ "";
+        try class_val.setNamedProperty(name, napi_value);
+    }
+}
+
+fn createStaticFieldValue(env: napi.Env, comptime value: anytype) !napi.Value {
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .comptime_int => {
+            if (value >= 0 and value <= std.math.maxInt(u32)) {
+                return env.createUint32(@intCast(value));
+            }
+            if (value >= std.math.minInt(i32) and value <= std.math.maxInt(i32)) {
+                return env.createInt32(@intCast(value));
+            }
+            return env.createInt64(@intCast(value));
+        },
+        .int => |info| {
+            if (info.signedness == .unsigned and info.bits <= 32) {
+                return env.createUint32(@intCast(value));
+            }
+            if (info.signedness == .signed and info.bits <= 32) {
+                return env.createInt32(@intCast(value));
+            }
+            return env.createInt64(@intCast(value));
+        },
+        .comptime_float, .float => return env.createDouble(@floatCast(value)),
+        .bool => return env.getBoolean(value),
+        .pointer => |ptr| {
+            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) {
+                return env.createStringUtf8(value);
+            }
+            if (ptr.size == .one and @typeInfo(ptr.child) == .array and
+                @typeInfo(ptr.child).array.child == u8)
+            {
+                const arr = @typeInfo(ptr.child).array;
+                return env.createStringUtf8(value[0..arr.len]);
+            }
+            @compileError("createStaticFieldValue: unsupported pointer type " ++ @typeName(T));
+        },
+        else => @compileError("createStaticFieldValue: unsupported type " ++ @typeName(T)),
+    }
+}
+
 test "wrapClass compile-time validation requires class metadata" {
     try std.testing.expect(true);
 }

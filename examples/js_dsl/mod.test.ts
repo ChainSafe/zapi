@@ -538,3 +538,18 @@ describe("module lifecycle - worker threads", () => {
 		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
 	});
 });
+
+// Section 16: Static Class Fields
+describe("static class fields", () => {
+	it("exposes BLS PublicKey sizes as own properties of the constructor", () => {
+		expect(mod.BlsPublicKey.COMPRESS_SIZE).toEqual(48);
+		expect(mod.BlsPublicKey.SERIALIZE_SIZE).toEqual(96);
+	});
+
+	it("statics live on the constructor, not on instances", () => {
+		const pk = new mod.BlsPublicKey();
+		expect(pk.COMPRESS_SIZE).toBeUndefined();
+		expect(Object.prototype.hasOwnProperty.call(mod.BlsPublicKey, "COMPRESS_SIZE")).toBe(true);
+		expect(Object.prototype.hasOwnProperty.call(pk, "COMPRESS_SIZE")).toBe(false);
+	});
+});

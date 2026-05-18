@@ -191,6 +191,7 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
                     ));
 
                     const cls = napi.Value{ .env = env.env, .value = class_val };
+                    try wrap_class.applyStaticFields(InnerType, env, cls);
                     try class_runtime.registerClass(InnerType, env, cls);
                     try module.setNamedProperty(name, cls);
                     exported_any = true;
