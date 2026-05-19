@@ -681,24 +681,39 @@ pub fn wrapClass(comptime T: type) type {
     };
 }
 
-/// Attaches the comptime-known values declared in `T.js_meta.options.static`
-/// as own properties of the just-defined JS class constructor `class_val`.
+/// Walks `T`'s public declarations and attaches each scalar/string `pub const`
+/// as an own property of the just-defined JS class constructor `class_val`.
 ///
 /// Called by `export_module.zig` right after `napi_define_class` returns, so
 /// the values land on the constructor itself (i.e. `MyClass.MY_CONST` in JS),
-/// not on instances. Each value is converted to a `napi.Value` per its Zig
-/// type — see `validateStaticFields` in `class_meta.zig` for the accepted set.
+/// not on instances. A decl is exposed iff its value's type is an int, float,
+/// bool, or string (`[]const u8` or `*const [N]u8`); functions, types, and
+/// other decls are silently skipped — so existing methods/getters and the
+/// `js_meta` decl naturally fall out.
 pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value) !void {
-    if (comptime !class_meta.hasStaticFields(T)) return;
-    inline for (comptime class_meta.staticFieldInfos(T)) |field_info| {
-        const value = @field(T.js_meta.options.static, field_info.name);
+    inline for (@typeInfo(T).@"struct".decls) |decl| {
+        const value = @field(T, decl.name);
+        if (comptime !isStaticValueType(@TypeOf(value))) continue;
         const napi_value = try createStaticFieldValue(env, value);
-        const name: [:0]const u8 = field_info.name ++ "";
+        const name: [:0]const u8 = decl.name ++ "";
         try class_val.setNamedProperty(name, napi_value);
     }
 }
 
-fn createStaticFieldValue(env: napi.Env, comptime value: anytype) !napi.Value {
+fn isStaticValueType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .comptime_int, .int, .comptime_float, .float, .bool => true,
+        .pointer => |ptr| blk: {
+            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) break :blk true;
+            if (ptr.size == .one and @typeInfo(ptr.child) == .array and
+                @typeInfo(ptr.child).array.child == u8) break :blk true;
+            break :blk false;
+        },
+        else => false,
+    };
+}
+
+fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .comptime_int => {

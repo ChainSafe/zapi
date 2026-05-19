@@ -128,19 +128,6 @@ pub fn hasProperties(comptime T: type) bool {
     return @hasField(@TypeOf(T.js_meta.options), "properties");
 }
 
-/// Checks if a ZAPI DSL class type `T` declares static value fields in its `js_meta`.
-pub fn hasStaticFields(comptime T: type) bool {
-    if (!hasClassMeta(T)) return false;
-    return @hasField(@TypeOf(T.js_meta.options), "static");
-}
-
-/// Returns the struct fields describing the static-value entries declared in
-/// `T`'s `js_meta.options.static`. Empty slice if none.
-pub fn staticFieldInfos(comptime T: type) []const std.builtin.Type.StructField {
-    if (comptime !hasStaticFields(T)) return &.{};
-    return @typeInfo(@TypeOf(T.js_meta.options.static)).@"struct".fields;
-}
-
 /// Returns a slice of `std.builtin.Type.StructField` for the properties defined
 /// in a ZAPI DSL class `T`'s `js_meta`.
 ///
@@ -196,11 +183,8 @@ fn validateClassOptions(comptime Opts: type, comptime opts: Opts) void {
     }
 
     inline for (@typeInfo(Opts).@"struct".fields) |field_info| {
-        const is_known = comptime (std.mem.eql(u8, field_info.name, "name") or
-            std.mem.eql(u8, field_info.name, "properties") or
-            std.mem.eql(u8, field_info.name, "static"));
-        if (!is_known) {
-            @compileError("js.class only supports .name, .properties, and .static (got: " ++ field_info.name ++ ")");
+        if (!std.mem.eql(u8, field_info.name, "name") and !std.mem.eql(u8, field_info.name, "properties")) {
+            @compileError("js.class only supports .name and .properties");
         }
     }
 
@@ -216,36 +200,6 @@ fn validateClassOptions(comptime Opts: type, comptime opts: Opts) void {
 
     if (@hasField(Opts, "properties")) {
         validateProperties(@TypeOf(opts.properties), opts.properties);
-    }
-
-    if (@hasField(Opts, "static")) {
-        validateStaticFields(@TypeOf(opts.static), opts.static);
-    }
-}
-
-fn validateStaticFields(comptime Fields: type, comptime fields: Fields) void {
-    if (@typeInfo(Fields) != .@"struct") @compileError("js.class .static must be a struct literal");
-    inline for (@typeInfo(Fields).@"struct".fields) |field_info| {
-        const value = @field(fields, field_info.name);
-        switch (@typeInfo(@TypeOf(value))) {
-            .comptime_int,
-            .int,
-            .comptime_float,
-            .float,
-            .bool,
-            => {},
-            .pointer => |ptr| {
-                const ok_slice = ptr.size == .slice and ptr.child == u8 and ptr.is_const;
-                const ok_array_ptr = ptr.size == .one and @typeInfo(ptr.child) == .array and
-                    @typeInfo(ptr.child).array.child == u8;
-                if (!ok_slice and !ok_array_ptr) {
-                    @compileError("js.class .static value for '" ++ field_info.name ++
-                        "' must be an int, float, bool, or string");
-                }
-            },
-            else => @compileError("js.class .static value for '" ++ field_info.name ++
-                "' must be an int, float, bool, or string"),
-        }
     }
 }
 
@@ -326,40 +280,4 @@ test "js.prop accepts explicit read-only derived getter" {
 
 test "bare bool property specs are invalid" {
     try std.testing.expect(propertyKind(true) == .invalid);
-}
-
-test "js.class accepts .static field map" {
-    const meta = class(.{
-        .static = .{
-            .MAX = 100,
-            .NAME = "demo",
-            .FLAG = true,
-        },
-    });
-    try std.testing.expect(isClassMetaValue(meta));
-}
-
-test "hasStaticFields and staticFieldInfos report declared statics" {
-    const T = struct {
-        pub const js_meta = class(.{
-            .static = .{
-                .COMPRESS_SIZE = 96,
-                .SERIALIZE_SIZE = 192,
-            },
-        });
-    };
-    try std.testing.expect(hasStaticFields(T));
-
-    const fields = staticFieldInfos(T);
-    try std.testing.expectEqual(@as(usize, 2), fields.len);
-    try std.testing.expectEqualStrings("COMPRESS_SIZE", fields[0].name);
-    try std.testing.expectEqualStrings("SERIALIZE_SIZE", fields[1].name);
-}
-
-test "hasStaticFields false when .static is omitted" {
-    const T = struct {
-        pub const js_meta = class(.{});
-    };
-    try std.testing.expect(!hasStaticFields(T));
-    try std.testing.expectEqual(@as(usize, 0), staticFieldInfos(T).len);
 }
