@@ -537,6 +537,27 @@ pub fn makeToken(value: Number) Token {
     return .{ .value = value.assertI32() + 1 };
 }
 
+// ============================================================================
+// Section 16: Static Class Fields
+// ============================================================================
+
+/// Demonstrates auto-exposure of scalar/string `pub const` decls as own
+/// properties of the JS constructor (e.g. `BlsPublicKey.COMPRESS_SIZE`).
+/// BLS12-381 keys and signatures have curve-fixed serialized sizes.
+/// Exposing them as static constants lets callers size buffers, validate hex lengths, etc.
+pub const BlsPublicKey = struct {
+    pub const js_meta = js.class(.{});
+
+    pub const COMPRESS_SIZE = 48;
+    pub const SERIALIZE_SIZE = 96;
+
+    bytes: [96]u8,
+
+    pub fn init() BlsPublicKey {
+        return .{ .bytes = [_]u8{0} ** 96 };
+    }
+};
+
 comptime {
     js.exportModule(@This(), .{
         .init = struct {
