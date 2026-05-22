@@ -366,6 +366,13 @@ pub fn wrapClass(comptime T: type) type {
                         return null;
                     };
 
+                    // Fast path: materializeClassInstance is creating this instance.
+                    // Skip the placeholder alloc/wrap — materialize will wrap directly
+                    // with the real native pointer after napi_new_instance returns.
+                    if (class_runtime.isMaterializing(T)) {
+                        return this_arg;
+                    }
+
                     if (actual_argc == 1) {
                         const internal_arg = napi.Value{ .env = raw_env, .value = raw_args[0] };
                         if ((internal_arg.typeof() catch null) == .external) {

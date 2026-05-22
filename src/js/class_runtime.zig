@@ -85,27 +85,37 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
     try env.addEnvCleanupHook(State.Entry, entry, State.cleanupHook);
 }
 
+/// Per-thread marker set by `materializeClassInstance` to tell the generated
+/// constructor "this `new` call comes from the DSL — don't allocate a placeholder,
+/// I'll wrap with the real object after `napi_new_instance` returns."
+/// Compared by identity against `internalCtorMarkerPtr(T)`.
+threadlocal var materialize_target: ?*const anyopaque = null;
+
+pub fn isMaterializing(comptime T: type) bool {
+    return materialize_target == @as(?*const anyopaque, @ptrCast(internalCtorMarkerPtr(T)));
+}
+
 pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
-    const internal_arg = try env.createExternal(@ptrCast(internalCtorMarkerPtr(T)), null, null);
-    var raw_args = [_]napi.c.napi_value{internal_arg.value};
+
+    const obj_ptr = try std.heap.c_allocator.create(T);
+    errdefer std.heap.c_allocator.destroy(obj_ptr);
+    obj_ptr.* = instance;
+
+    const prev = materialize_target;
+    materialize_target = @ptrCast(internalCtorMarkerPtr(T));
+    defer materialize_target = prev;
 
     var js_instance_raw: napi.c.napi_value = null;
     try napi.status.check(napi.c.napi_new_instance(
         env.env,
         ctor.value,
-        1,
-        &raw_args,
+        0,
+        null,
         &js_instance_raw,
     ));
 
     const js_instance = napi.Value{ .env = env.env, .value = js_instance_raw };
-    const placeholder = try env.removeWrapChecked(T, js_instance, typeTag(T));
-    destroyInternalPlaceholder(T, placeholder);
-
-    const obj_ptr = try std.heap.c_allocator.create(T);
-    obj_ptr.* = instance;
-
     try wrapTaggedObject(T, env, js_instance, obj_ptr, null);
     return js_instance;
 }
