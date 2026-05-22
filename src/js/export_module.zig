@@ -150,7 +150,10 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
                 }
                 break :blk true;
             };
-            if (!is_dsl_fn) continue;
+            if (!is_dsl_fn) {
+                std.log.warn("zapi: skipping non-DSL function {s}.{s}, this will not be exported", .{ @typeName(Module), decl.name });
+                continue;
+            }
 
             // DSL function — wrap and register
             const cb = wrap_function.wrapFunction(field);
