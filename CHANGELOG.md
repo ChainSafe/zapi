@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.1.0...zapi-v2.2.0) (2026-05-19)
+
+
+### Features
+
+* **dsl:** support static value fields on classes ([#35](https://github.com/ChainSafe/zapi/issues/35)) ([f28eb5c](https://github.com/ChainSafe/zapi/commit/f28eb5c02034030f5084c77d9cfc98669e5ce30c))
+
 ## [2.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.0.0...zapi-v2.1.0) (2026-05-15)
 
 
