@@ -150,7 +150,7 @@ fn registerDecls(comptime Module: type, env: napi.Env, module: napi.Value, compt
                 }
                 break :blk true;
             };
-            if (!is_dsl_fn) continue;
+            if (!is_dsl_fn) @compileError("zapi: cannot export non-DSL `pub fn " ++ @typeName(Module) ++ "." ++ decl.name ++ "` — use DSL params (e.g. `js.Number`), drop `pub`, or pass `.register` to `exportModule` to export it manually");
 
             // DSL function — wrap and register
             const cb = wrap_function.wrapFunction(field);
