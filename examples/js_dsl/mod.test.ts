@@ -94,6 +94,24 @@ describe("primitive types", () => {
 		expect(value).toEqual(2 ** 63);
 	});
 
+	describe("getValueBigintWords", () => {
+		it("reads words with null sign_bit (unsigned only)", () => {
+			expect(mod.bigIntFirstWord(0n)).toEqual(0);
+			expect(mod.bigIntFirstWord(1n)).toEqual(1);
+			expect(mod.bigIntFirstWord(0xdeadbeefn)).toEqual(0xdeadbeef);
+		});
+
+		it("reads correct sign (non-null sign_bit path)", () => {
+			expect(mod.bigIntSign(0n)).toEqual(0);
+			expect(mod.bigIntSign(1n)).toEqual(0);
+			expect(mod.bigIntSign(0xffffffffffffffffn)).toEqual(0);
+
+			expect(mod.bigIntSign(-1n)).toEqual(1);
+			expect(mod.bigIntSign(-0xffffffffffffffffn)).toEqual(1);
+		});
+
+	});
+
 	it("tomorrow adds one day", () => {
 		const now = new Date("2025-01-01T00:00:00Z");
 		const result = mod.tomorrow(now);
