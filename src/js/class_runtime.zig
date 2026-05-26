@@ -95,11 +95,21 @@ pub fn isMaterializing(comptime T: type) bool {
     return materialize_target == @as(?*const anyopaque, @ptrCast(internalCtorMarkerPtr(T)));
 }
 
+pub fn hasPendingMaterialization() bool {
+    return materialize_target != null;
+}
+
+pub fn consumeMaterialization(comptime T: type) bool {
+    if (!isMaterializing(T)) return false;
+    materialize_target = null;
+    return true;
+}
+
 pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
 
     const obj_ptr = try std.heap.c_allocator.create(T);
-    errdefer std.heap.c_allocator.destroy(obj_ptr);
+    errdefer destroyNativeObject(T, obj_ptr);
     obj_ptr.* = instance;
 
     const prev = materialize_target;
@@ -116,6 +126,8 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     ));
 
     const js_instance = napi.Value{ .env = env.env, .value = js_instance_raw };
+    if (materialize_target != null) return error.InvalidMaterializationConstructor;
+
     try wrapTaggedObject(T, env, js_instance, obj_ptr, null);
     return js_instance;
 }

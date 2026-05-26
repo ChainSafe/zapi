@@ -369,8 +369,12 @@ pub fn wrapClass(comptime T: type) type {
                     // Fast path: materializeClassInstance is creating this instance.
                     // Skip the placeholder alloc/wrap — materialize will wrap directly
                     // with the real native pointer after napi_new_instance returns.
-                    if (class_runtime.isMaterializing(T)) {
+                    if (class_runtime.consumeMaterialization(T)) {
                         return this_arg;
+                    }
+                    if (class_runtime.hasPendingMaterialization()) {
+                        e.throwTypeError("", "Invalid materialization constructor") catch {};
+                        return null;
                     }
 
                     if (actual_argc == 1) {

@@ -425,6 +425,51 @@ describe("class materialization", () => {
 	it("rejects cross-class static factory binding during materialization", () => {
 		expect(() => mod.Point.create.call(mod.Buffer, 1, 2)).toThrow();
 	});
+
+	it("preserves normal nested construction inside subclass constructors", () => {
+		// Same-class materialization may call a JS subclass constructor via the preferred
+		// receiver constructor. A nested normal `new` inside that constructor must not
+		// inherit the internal materialization marker, otherwise it skips native wrapping.
+		let nested: InstanceType<typeof mod.FactoryResource> | undefined;
+		class DerivedFactoryResource extends mod.FactoryResource {
+			constructor() {
+				super();
+				nested = new mod.FactoryResource();
+			}
+		}
+
+		const resource = DerivedFactoryResource.withByte(5);
+
+		expect(resource).toBeInstanceOf(DerivedFactoryResource);
+		expect(resource.getByte()).toEqual(5);
+		expect(nested?.getByte()).toEqual(0);
+	});
+
+	it("does not run cross-class constructors during failed materialization", () => {
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		expect(() => mod.Point.create.call(mod.FactoryResource, 1, 2)).toThrow();
+
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
+	});
+
+	it("rejects non-zapi constructors during materialization", () => {
+		function FakePoint() {}
+
+		expect(() => mod.Point.create.call(FakePoint, 1, 2)).toThrow();
+	});
+
+	it("deinitializes returned native resources when materialization fails", () => {
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		expect(() => mod.FactoryResource.withByte.call(mod.Point, 7)).toThrow();
+
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 1);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
+	});
 });
 
 // Section 15: Getters and Setters
