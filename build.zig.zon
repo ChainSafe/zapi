@@ -49,11 +49,6 @@
             .imports = .{.zapi},
             .link_libc = true,
         },
-        .example_non_dsl_warning = .{
-            .root_source_file = "examples/non_dsl_warning/mod.zig",
-            .imports = .{.zapi},
-            .link_libc = true,
-        },
     },
     .libraries = .{
         .example_hello_world = .{
@@ -74,12 +69,6 @@
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_js_dsl.node",
         },
-        .example_non_dsl_warning = .{
-            .root_module = .example_non_dsl_warning,
-            .linkage = .dynamic,
-            .linker_allow_shlib_undefined = true,
-            .dest_sub_path = "example_non_dsl_warning.node",
-        },
     },
     .tests = .{
         .napi = .{ .root_module = .napi },
@@ -97,10 +86,6 @@
         },
         .example_js_dsl = .{
             .root_module = .example_js_dsl,
-            .linker_allow_shlib_undefined = true,
-        },
-        .example_non_dsl_warning = .{
-            .root_module = .example_non_dsl_warning,
             .linker_allow_shlib_undefined = true,
         },
     },
