@@ -226,7 +226,7 @@ pub fn getValueBigintUint64(self: Value, lossless: ?*bool) NapiError!u64 {
 /// NOTE: napi's C entry takes `int*` (4-byte aligned). Casting a u1 to int* is UB, since that
 /// is 4-bytes aligned. We use a local `c_int` for the napi call and narrow back to `u1` for the caller.
 ///
-/// Source: /// https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
+/// Source: https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
 pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError![]u64 {
     var word_count: usize = words.len;
     var raw_sign: c_int = 0;
