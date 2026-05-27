@@ -216,12 +216,25 @@ pub fn getValueBigintUint64(self: Value, lossless: ?*bool) NapiError!u64 {
     return bigint;
 }
 
-/// https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
-pub fn getValueBigintWords(self: Value, sign_bit: *u1, words: []u64) NapiError![]u64 {
+/// Reads a JS `BigInt` into `words`.
+///
+/// Pass `null` for `sign_bit` to skip getting the sign result.
+///
+/// In Ethereum's context, this is useful for big integers defined in the spec to be
+/// unsigned.
+///
+/// NOTE: napi's C entry takes `int*` (4-byte aligned). Casting a u1 to int* is UB, since that
+/// is 4-bytes aligned. We use a local `c_int` for the napi call and narrow back to `u1` for the caller.
+///
+/// Source: https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
+pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError![]u64 {
     var word_count: usize = words.len;
+    var raw_sign: c_int = 0;
     try status.check(
-        c.napi_get_value_bigint_words(self.env, self.value, @alignCast(@ptrCast(sign_bit)), &word_count, @ptrCast(words)),
+        c.napi_get_value_bigint_words(self.env, self.value, &raw_sign, &word_count, words.ptr),
     );
+    // napi guarantees raw_sign ∈ {0, 1}
+    if (sign_bit) |s| s.* = @intCast(raw_sign);
     return words[0..word_count];
 }
 

@@ -100,6 +100,24 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
     return BigInt.from(val * 2);
 }
 
+/// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
+///
+/// Throws if word_count > 1.
+pub fn bigIntFirstWord(n: BigInt) !Number {
+    var words: [1]u64 = .{0};
+    const got = try n.toValue().getValueBigintWords(null, &words);
+    if (got.len > 1) return error.BigIntTooLarge;
+    return Number.from(words[0]);
+}
+
+/// Read a BigInt's sign as 0/1 via `getValueBigintWords` passing a non-null `sign_bit`.
+pub fn bigIntSign(n: BigInt) !Number {
+    var sign: u1 = 0;
+    var words: [1]u64 = .{0};
+    _ = try n.toValue().getValueBigintWords(&sign, &words);
+    return Number.from(@as(u32, sign));
+}
+
 /// Add one day (86400000ms) to a Date.
 pub fn tomorrow(d: Date) Date {
     const ts = d.assertTimestamp();
