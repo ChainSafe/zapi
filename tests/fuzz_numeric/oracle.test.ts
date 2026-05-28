@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
-import { edgeNumbers } from "./edges.ts";
+import { edgeNumbers, edgeBigInts } from "./edges.ts";
 
 const require = createRequire(import.meta.url);
 const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
@@ -8,6 +8,8 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtNumberI32(n: number): number;
 	rtNumberU32(n: number): number;
 	rtNumberI64(n: number): bigint;
+	rtBigIntI64(b: bigint): bigint;
+	rtBigIntU64(b: bigint): bigint;
 };
 
 /**
@@ -88,6 +90,32 @@ describe("oracle sanity: rtNumberI64", () => {
 	for (const v of edgeNumbers) {
 		it(`agrees with oracle on ${describeValue(v)}`, () => {
 			expect(mod.rtNumberI64(v)).toBe(oracleI64(v));
+		});
+	}
+});
+
+/** Two's-complement low 64 bits, signed. */
+function oracleBigIntI64(b: bigint): bigint {
+	return BigInt.asIntN(64, b);
+}
+
+/** Low 64 bits, unsigned. */
+function oracleBigIntU64(b: bigint): bigint {
+	return BigInt.asUintN(64, b);
+}
+
+describe("oracle sanity: rtBigIntI64", () => {
+	for (const b of edgeBigInts) {
+		it(`agrees with oracle on ${b}n`, () => {
+			expect(mod.rtBigIntI64(b)).toBe(oracleBigIntI64(b));
+		});
+	}
+});
+
+describe("oracle sanity: rtBigIntU64", () => {
+	for (const b of edgeBigInts) {
+		it(`agrees with oracle on ${b}n`, () => {
+			expect(mod.rtBigIntU64(b)).toBe(oracleBigIntU64(b));
 		});
 	}
 });

@@ -28,5 +28,14 @@ export const edgeNumbers: readonly number[] = [
 ];
 
 export const edgeBigInts: readonly bigint[] = [
-	// Filled in incrementally by BigInt tasks (5–8).
+	0n,
+	1n,
+	-1n,
+	1n << 63n,
+	-(1n << 63n),
+	(1n << 63n) - 1n,
+	-((1n << 63n) - 1n),
+	1n << 64n,
+	(1n << 64n) - 1n,
+	-(1n << 64n),
 ];
