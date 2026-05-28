@@ -369,7 +369,11 @@ pub fn wrapClass(comptime T: type) type {
                     // Fast path: materializeClassInstance is creating this instance.
                     // Skip the placeholder alloc/wrap — materialize will wrap directly
                     // with the real native pointer after napi_new_instance returns.
-                    if (class_runtime.consumeMaterialization(T)) {
+                    const did_consume_materialization = class_runtime.consumeMaterialization(T, e, this_arg) catch {
+                        e.throwError("", "Failed to record materialized instance") catch {};
+                        return null;
+                    };
+                    if (did_consume_materialization) {
                         return this_arg;
                     }
                     if (class_runtime.hasPendingMaterialization()) {

@@ -91,6 +91,17 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
 /// Compared by identity against `internalCtorMarkerPtr(T)`.
 threadlocal var materialize_target: ?*const anyopaque = null;
 
+/// Captures the exact `this` object whose generated base constructor consumed
+/// `materialize_target`. JS derived constructors are allowed to `return {}`
+/// after `super()`, causing `napi_new_instance` to return that replacement
+/// object. Materialization must reject that case instead of wrapping native
+/// state onto an unrelated object with the wrong prototype.
+///
+/// Stored as a temporary N-API reference because nested JS construction can run
+/// before `napi_new_instance` returns; keeping only the raw constructor callback
+/// handle is not stable enough across that nested call stack.
+threadlocal var materialized_instance: ?napi.Ref = null;
+
 pub fn isMaterializing(comptime T: type) bool {
     return materialize_target == @as(?*const anyopaque, @ptrCast(internalCtorMarkerPtr(T)));
 }
@@ -99,9 +110,12 @@ pub fn hasPendingMaterialization() bool {
     return materialize_target != null;
 }
 
-pub fn consumeMaterialization(comptime T: type) bool {
+pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.napi_value) !bool {
     if (!isMaterializing(T)) return false;
+    const this_val = napi.Value{ .env = env.env, .value = this_arg };
+    const this_ref = try env.createReference(this_val, 1);
     materialize_target = null;
+    materialized_instance = this_ref;
     return true;
 }
 
@@ -113,8 +127,14 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     obj_ptr.* = instance;
 
     const prev = materialize_target;
+    const prev_instance = materialized_instance;
     materialize_target = @ptrCast(internalCtorMarkerPtr(T));
+    materialized_instance = null;
     defer materialize_target = prev;
+    defer {
+        if (materialized_instance) |ref| ref.delete() catch {};
+        materialized_instance = prev_instance;
+    }
 
     var js_instance_raw: napi.c.napi_value = null;
     try napi.status.check(napi.c.napi_new_instance(
@@ -127,6 +147,11 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
 
     const js_instance = napi.Value{ .env = env.env, .value = js_instance_raw };
     if (materialize_target != null) return error.InvalidMaterializationConstructor;
+    const expected_instance_ref = materialized_instance orelse return error.InvalidMaterializationConstructor;
+    const expected_instance = try expected_instance_ref.getValue();
+    // The generated constructor must be the object that comes back from
+    // `napi_new_instance`; otherwise a subclass returned a replacement object.
+    if (!(try expected_instance.strictEquals(js_instance))) return error.InvalidMaterializationConstructor;
 
     try wrapTaggedObject(T, env, js_instance, obj_ptr, null);
     return js_instance;

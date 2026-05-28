@@ -445,6 +445,17 @@ describe("class materialization", () => {
 		expect(nested?.getByte()).toEqual(0);
 	});
 
+	it("rejects subclass constructors that return a different object", () => {
+		class ReplacingPoint extends mod.Point {
+			constructor() {
+				super();
+				return {};
+			}
+		}
+
+		expect(() => ReplacingPoint.create(3, 4)).toThrow();
+	});
+
 	it("does not run cross-class constructors during failed materialization", () => {
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
