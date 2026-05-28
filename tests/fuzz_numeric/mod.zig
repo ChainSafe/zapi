@@ -1,14 +1,11 @@
 //! Fuzz harness addon: per-converter round-trip exports for numeric types.
-//!
-//! Each export is a single converter end-to-end (JS → Zig → JS). The JS-side
-//! fast-check harness compares each result against an ECMAScript/NAPI-spec
-//! oracle. See docs/superpowers/specs/2026-05-28-fuzz-testing-design.md.
 
 const js = @import("zapi").js;
 
-/// Smoke-test export: confirms the addon loads and exportModule wires through.
-pub fn ping() js.Number {
-    return js.Number.from(@as(i32, 42));
+/// Round-trip JS number → f64 → JS number. Oracle: identity for all finite
+/// numbers, NaN ↔ NaN, ±0 preserved.
+pub fn rtNumberF64(n: js.Number) !js.Number {
+    return js.Number.from(try n.toF64());
 }
 
 comptime {
