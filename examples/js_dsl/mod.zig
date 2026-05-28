@@ -426,7 +426,7 @@ pub const Point = struct {
     }
 };
 
-/// A resource-owning class used to verify placeholder cleanup in factory paths.
+/// A resource-owning class used to verify cleanup in class materialization paths.
 pub const FactoryResource = struct {
     pub const js_meta = js.class(.{});
     data: []u8,

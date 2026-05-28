@@ -8,15 +8,11 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
-pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T, finalize_hint: ?*anyopaque) !void {
+pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
-    try env.wrap(object, T, native_object, defaultFinalize(T), finalize_hint, null);
+    try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
     errdefer if (env.removeWrap(T, object)) |removed| {
-        if (isInternalPlaceholderHint(T, finalize_hint)) {
-            destroyInternalPlaceholder(T, removed);
-        } else {
-            destroyNativeObject(T, removed);
-        }
+        destroyNativeObject(T, removed);
     } else |_| {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
@@ -48,17 +44,9 @@ pub fn destroyNativeObject(comptime T: type, obj: *T) void {
     std.heap.c_allocator.destroy(obj);
 }
 
-pub fn destroyInternalPlaceholder(comptime T: type, obj: *T) void {
-    std.heap.c_allocator.destroy(obj);
-}
-
 pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
     return struct {
-        fn f(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
-            if (isInternalPlaceholderHint(T, hint)) {
-                destroyInternalPlaceholder(T, obj);
-                return;
-            }
+        fn f(_: napi.Env, obj: *T, _: ?*anyopaque) void {
             destroyNativeObject(T, obj);
         }
     }.f;
@@ -86,8 +74,8 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
 }
 
 /// Per-thread marker set by `materializeClassInstance` to tell the generated
-/// constructor "this `new` call comes from the DSL — don't allocate a placeholder,
-/// I'll wrap with the real object after `napi_new_instance` returns."
+/// constructor "this `new` call comes from the DSL; return the JS instance
+/// without running `init`, and materialization will wrap the native object."
 /// Compared by identity against `internalCtorMarkerPtr(T)`.
 threadlocal var materialize_target: ?*const anyopaque = null;
 
@@ -153,7 +141,7 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     // `napi_new_instance`; otherwise a subclass returned a replacement object.
     if (!(try expected_instance.strictEquals(js_instance))) return error.InvalidMaterializationConstructor;
 
-    try wrapTaggedObject(T, env, js_instance, obj_ptr, null);
+    try wrapTaggedObject(T, env, js_instance, obj_ptr);
     return js_instance;
 }
 
@@ -165,19 +153,6 @@ fn getConstructor(comptime T: type, env: napi.Env) !napi.Value {
 
     const entry = State.find(env.env) orelse return error.ClassNotRegistered;
     return try entry.ctor_ref.getValue();
-}
-
-pub fn isInternalCtorArg(comptime T: type, value: napi.Value) bool {
-    const raw = value.getValueExternal() catch return false;
-    return raw == @as(*anyopaque, @ptrCast(internalCtorMarkerPtr(T)));
-}
-
-pub fn internalPlaceholderHint(comptime T: type) ?*anyopaque {
-    return @ptrCast(&markers(T).placeholder_hint);
-}
-
-pub fn isInternalPlaceholderHint(comptime T: type, hint: ?*anyopaque) bool {
-    return hint == internalPlaceholderHint(T);
 }
 
 fn state(comptime T: type) type {
@@ -240,12 +215,7 @@ fn markers(comptime T: type) type {
         }
 
         var ctor_marker: u8 = 0;
-        var placeholder_hint: u8 = 0;
     };
-}
-
-fn internalCtorMarker(comptime T: type) [*]const u8 {
-    return internalCtorMarkerPtr(T);
 }
 
 fn internalCtorMarkerPtr(comptime T: type) *u8 {

@@ -68,21 +68,15 @@ pub fn wrapClass(comptime T: type) type {
         /// This callback is invoked when `new Class(...)` is called in JavaScript.
         /// It handles argument conversion, calls the `pub fn init(...)` method of
         /// the Zig struct `T`, and wraps the resulting native object in the JS instance.
-        /// It also handles internal placeholder creation for factory methods.
+        /// It also supports direct wrapping for DSL-returned class instances.
         pub const constructor: napi.c.napi_callback = genConstructor();
 
         /// The default N-API finalizer callback for native objects wrapped by instances of `T`.
         ///
         /// This function is registered with `napi.Env.wrap()` and is called by the
         /// JavaScript garbage collector when the wrapped JS object is finalized.
-        /// It handles cleanup for internal placeholder objects during class
-        /// materialization and calls the `deinit()` method (if present) and frees
-        /// the native memory for regular class instances.
-        pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
-            if (class_runtime.isInternalPlaceholderHint(T, hint)) {
-                class_runtime.destroyInternalPlaceholder(T, obj);
-                return;
-            }
+        /// It calls the `deinit()` method (if present) and frees the native memory.
+        pub fn defaultFinalize(_: napi.Env, obj: *T, _: ?*anyopaque) void {
             class_runtime.destroyNativeObject(T, obj);
         }
 
@@ -367,7 +361,7 @@ pub fn wrapClass(comptime T: type) type {
                     };
 
                     // Fast path: materializeClassInstance is creating this instance.
-                    // Skip the placeholder alloc/wrap — materialize will wrap directly
+                    // Skip normal init; materialize will wrap the returned JS instance
                     // with the real native pointer after napi_new_instance returns.
                     const did_consume_materialization = class_runtime.consumeMaterialization(T, e, this_arg) catch {
                         e.throwError("", "Failed to record materialized instance") catch {};
@@ -379,24 +373,6 @@ pub fn wrapClass(comptime T: type) type {
                     if (class_runtime.hasPendingMaterialization()) {
                         e.throwTypeError("", "Invalid materialization constructor") catch {};
                         return null;
-                    }
-
-                    if (actual_argc == 1) {
-                        const internal_arg = napi.Value{ .env = raw_env, .value = raw_args[0] };
-                        if ((internal_arg.typeof() catch null) == .external) {
-                            const obj_ptr = std.heap.c_allocator.create(T) catch {
-                                e.throwError("", "Out of memory allocating internal placeholder") catch {};
-                                return null;
-                            };
-                            obj_ptr.* = std.mem.zeroes(T);
-
-                            const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                            class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, class_runtime.internalPlaceholderHint(T)) catch {
-                                e.throwError("", "Failed to wrap internal placeholder") catch {};
-                                return null;
-                            };
-                            return this_arg;
-                        }
                     }
 
                     const required_init_argc = comptime wrap_function.requiredArgCount(init_params);
@@ -423,7 +399,7 @@ pub fn wrapClass(comptime T: type) type {
                     obj_ptr.* = init_result;
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, null) catch {
+                    class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr) catch {
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
                     };

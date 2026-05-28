@@ -391,7 +391,7 @@ describe("optional parameters", () => {
 });
 
 describe("class materialization", () => {
-	it("static class return avoids constructor placeholder allocation", () => {
+	it("static class return avoids constructor init allocation", () => {
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
 
@@ -402,7 +402,7 @@ describe("class materialization", () => {
 		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
 	});
 
-	it("instance class return avoids constructor placeholder allocation", () => {
+	it("instance class return avoids constructor init allocation", () => {
 		const base = mod.FactoryResource.withByte(1);
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
