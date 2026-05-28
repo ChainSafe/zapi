@@ -17,6 +17,7 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	losslessI64(b: bigint): { value: bigint; lossless: boolean };
 	losslessU64(b: bigint): { value: bigint; lossless: boolean };
 	rtBigIntI128(b: bigint): bigint;
+	rtBigIntWords(b: bigint): bigint;
 };
 
 const FUZZ_RUNS = Number(process.env.FUZZ_RUNS ?? 10_000);
@@ -201,6 +202,27 @@ describe("rtBigIntI128", () => {
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntI128", reviveBigInt),
+			},
+		);
+	});
+});
+
+const bigIntArbWords = fc.oneof(
+	// Keep within the addon's 64-word cap (4096 bits).
+	{
+		arbitrary: fc.bigInt({ min: -(2n ** 4000n), max: 2n ** 4000n }),
+		weight: 4,
+	},
+	{ arbitrary: fc.constantFrom(...edgeBigInts), weight: 1 },
+);
+
+describe("rtBigIntWords", () => {
+	it("is identity for any BigInt under the word-buffer cap", () => {
+		fc.assert(
+			fc.property(bigIntArbWords, (b) => mod.rtBigIntWords(b) === b),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<bigint>("rtBigIntWords", reviveBigInt),
 			},
 		);
 	});

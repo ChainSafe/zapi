@@ -83,6 +83,23 @@ pub fn rtBigIntI128(b: js.BigInt) !js.BigInt {
     return js.BigInt.fromWords(if (is_negative) 1 else 0, &words);
 }
 
+/// Round-trip via getValueBigintWords → createBigintWords (via fromWords).
+/// Identity for any BigInt that fits in the addon's word buffer (64 words =
+/// 4096 bits is the practical cap).
+///
+/// Implementation notes:
+///   - We pass a 64-word buffer to `getValueBigintWords`. The `src/Value.zig`
+///     wrapper now clamps the returned slice to `@min(word_count, buffer.len)`,
+///     so oversized BigInts silently truncate. The 64-word cap covers all
+///     entries in `edgeBigInts` (the largest, `1n << 256n`, is 5 words).
+///   - Sign bit and the populated word slice are forwarded to `fromWords`.
+pub fn rtBigIntWords(b: js.BigInt) !js.BigInt {
+    var sign_bit: u1 = 0;
+    var buf: [64]u64 = @splat(0);
+    const slice = try b.toValue().getValueBigintWords(&sign_bit, &buf);
+    return js.BigInt.fromWords(sign_bit, slice);
+}
+
 comptime {
     js.exportModule(@This(), .{});
 }
