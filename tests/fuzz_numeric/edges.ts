@@ -38,4 +38,8 @@ export const edgeBigInts: readonly bigint[] = [
 	1n << 64n,
 	(1n << 64n) - 1n,
 	-(1n << 64n),
+	// i128 boundary
+	(1n << 127n) - 1n,
+	-(1n << 127n),
+	-((1n << 127n) - 1n),
 ];
