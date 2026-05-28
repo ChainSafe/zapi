@@ -49,6 +49,11 @@
             .imports = .{.zapi},
             .link_libc = true,
         },
+        .test_fuzz_numeric = .{
+            .root_source_file = "tests/fuzz_numeric/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
     },
     .libraries = .{
         .example_hello_world = .{
@@ -68,6 +73,12 @@
             .linkage = .dynamic,
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_js_dsl.node",
+        },
+        .test_fuzz_numeric = .{
+            .root_module = .test_fuzz_numeric,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "test_fuzz_numeric.node",
         },
     },
     .tests = .{
