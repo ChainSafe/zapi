@@ -42,4 +42,11 @@ export const edgeBigInts: readonly bigint[] = [
 	(1n << 127n) - 1n,
 	-(1n << 127n),
 	-((1n << 127n) - 1n),
+	// multi-word (beyond i128)
+	(1n << 128n) - 1n,
+	-((1n << 128n) - 1n),
+	1n << 128n,
+	1n << 191n,
+	(1n << 192n) - 1n,
+	1n << 256n,
 ];

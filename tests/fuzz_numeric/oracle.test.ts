@@ -203,3 +203,15 @@ describe("rtBigIntI128 boundary cases", () => {
 		expect(modI128.rtBigIntI128(-(1n << 128n))).toBe(0n);
 	});
 });
+
+const modW = require("../../zig-out/lib/test_fuzz_numeric.node") as {
+	rtBigIntWords(b: bigint): bigint;
+};
+
+describe("oracle sanity: rtBigIntWords", () => {
+	for (const b of edgeBigInts) {
+		it(`round-trips ${b}n`, () => {
+			expect(modW.rtBigIntWords(b)).toBe(b);
+		});
+	}
+});
