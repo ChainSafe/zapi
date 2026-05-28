@@ -136,6 +136,23 @@ pub const BigInt = struct {
         return .{ .val = val };
     }
 
+    /// Creates a JavaScript `BigInt` from a sign bit and word array.
+    ///
+    /// `sign_bit` is 0 for non-negative, 1 for negative. `words` is the
+    /// little-endian unsigned magnitude. The resulting BigInt equals
+    /// `(sign_bit == 1 ? -1 : 1) * sum(words[i] << (64 * i))`.
+    ///
+    /// Use this for constructing BigInts whose magnitude exceeds `u64` (e.g.,
+    /// i128 or larger). For `i64`/`u64` values, prefer `BigInt.from`.
+    ///
+    /// Panics if N-API operations fail (e.g., invalid environment).
+    pub fn fromWords(sign_bit: u1, words: []const u64) BigInt {
+        const e = context.env();
+        const val = e.createBigintWords(sign_bit, words) catch
+            @panic("BigInt.fromWords: createBigintWords failed");
+        return .{ .val = val };
+    }
+
     /// Returns the underlying `napi.Value` representation of this JavaScript BigInt.
     pub fn toValue(self: BigInt) napi.Value {
         return self.val;
