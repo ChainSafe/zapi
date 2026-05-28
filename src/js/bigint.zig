@@ -36,22 +36,43 @@ pub const BigInt = struct {
 
     /// Attempts to convert the JavaScript BigInt to a Zig `i128`.
     ///
-    /// This function reads the BigInt as two 64-bit words and reconstructs it
-    /// into a Zig `i128`. It handles both positive and negative BigInts.
+    /// In-domain (`b ∈ [-2^127, 2^127)`): returns `b` exactly.
+    ///
+    /// Out-of-domain: returns `BigInt.asIntN(128, b)`, i.e. the low 128 bits
+    /// of the magnitude reinterpreted as a signed i128. This matches the
+    /// ECMAScript `BigInt.asIntN` semantics defined at
+    /// https://tc39.es/ecma262/#sec-bigint.asintn.
+    ///
     /// Returns an error if N-API operations fail.
     pub fn toI128(self: BigInt) !i128 {
         var sign_bit: u1 = 0;
+        // Pre-zeroed: NAPI writes only as many words as the BigInt has; unused
+        // words stay 0. When the value is 0n NAPI returns word_count == 0, so
+        // both words[0] and words[1] remain 0 — magnitude correctly becomes 0.
+        // When the BigInt exceeds 128 bits, getValueBigintWords fills only the
+        // two lower words (truncation to low 128 bits), giving BigInt.asIntN(128)
+        // semantics for out-of-range values.
         var words: [2]u64 = .{ 0, 0 };
-        const result = try self.val.getValueBigintWords(&sign_bit, &words);
-        const lo: u128 = result[0];
-        const hi: u128 = if (result.len > 1) result[1] else 0;
+        _ = try self.val.getValueBigintWords(&sign_bit, &words);
+        const lo: u128 = words[0];
+        const hi: u128 = words[1];
         const magnitude: u128 = (hi << 64) | lo;
         if (sign_bit == 1) {
-            // Negative: negate the magnitude
+            // Negative: result = -magnitude interpreted as i128.
+            // Use wrapping subtraction + bitcast to handle both minInt(i128)
+            // (magnitude == 2^127, which doesn't fit in i128 as positive) and
+            // out-of-range values (magnitude > 2^127, truncated to low 128 bits).
+            // Guard: out-of-range negatives whose low 128 bits are all zero
+            // (e.g. -2^128n → words [0, 0]) give magnitude == 0. asIntN(128)
+            // of such values is 0n; return early rather than relying on the
+            // `0 -% 0 == 0` coincidence below.
             if (magnitude == 0) return 0;
-            return -@as(i128, @intCast(magnitude));
+            return @bitCast(0 -% magnitude);
         }
-        return @intCast(magnitude);
+        // Positive: bitcast u128 → i128 gives BigInt.asIntN(128) semantics.
+        // In-range values have magnitude ≤ 2^127-1 so the sign bit is clear;
+        // out-of-range values have the sign bit set, matching JS asIntN(128).
+        return @bitCast(magnitude);
     }
 
     /// Converts the JavaScript BigInt to a Zig `i64`, panicking on failure.
