@@ -38,6 +38,31 @@ pub fn rtBigIntU64(b: js.BigInt) !js.BigInt {
     return js.BigInt.from(try b.toU64(&lossless));
 }
 
+/// Returns `{ value: BigInt, lossless: Boolean }` exposing toI64's lossless
+/// out-parameter to the fuzzer.
+pub fn losslessI64(b: js.BigInt) !js.Value {
+    var lossless: bool = false;
+    const v = try b.toI64(&lossless);
+    const value = js.BigInt.from(v);
+    const flag = js.Boolean.from(lossless);
+    const obj = try js.env().createObject();
+    try obj.setNamedProperty("value", value.toValue());
+    try obj.setNamedProperty("lossless", flag.toValue());
+    return .{ .val = obj };
+}
+
+/// Returns `{ value: BigInt, lossless: Boolean }` for toU64.
+pub fn losslessU64(b: js.BigInt) !js.Value {
+    var lossless: bool = false;
+    const v = try b.toU64(&lossless);
+    const value = js.BigInt.from(v);
+    const flag = js.Boolean.from(lossless);
+    const obj = try js.env().createObject();
+    try obj.setNamedProperty("value", value.toValue());
+    try obj.setNamedProperty("lossless", flag.toValue());
+    return .{ .val = obj };
+}
+
 comptime {
     js.exportModule(@This(), .{});
 }

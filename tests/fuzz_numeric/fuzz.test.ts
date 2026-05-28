@@ -14,6 +14,8 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtNumberI64(n: number): bigint;
 	rtBigIntI64(b: bigint): bigint;
 	rtBigIntU64(b: bigint): bigint;
+	losslessI64(b: bigint): { value: bigint; lossless: boolean };
+	losslessU64(b: bigint): { value: bigint; lossless: boolean };
 };
 
 const FUZZ_RUNS = Number(process.env.FUZZ_RUNS ?? 10_000);
@@ -141,6 +143,38 @@ describe("rtBigIntU64", () => {
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntU64", reviveBigInt),
+			},
+		);
+	});
+});
+
+describe("losslessI64", () => {
+	it("lossless ⇔ b ∈ [-2^63, 2^63) and value matches asIntN", () => {
+		fc.assert(
+			fc.property(bigIntArbI64, (b) => {
+				const { value, lossless } = mod.losslessI64(b);
+				const inRange = b >= -(1n << 63n) && b < 1n << 63n;
+				return value === BigInt.asIntN(64, b) && lossless === inRange;
+			}),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<bigint>("losslessI64", reviveBigInt),
+			},
+		);
+	});
+});
+
+describe("losslessU64", () => {
+	it("lossless ⇔ b ∈ [0, 2^64) and value matches asUintN", () => {
+		fc.assert(
+			fc.property(bigIntArbI64, (b) => {
+				const { value, lossless } = mod.losslessU64(b);
+				const inRange = b >= 0n && b < 1n << 64n;
+				return value === BigInt.asUintN(64, b) && lossless === inRange;
+			}),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<bigint>("losslessU64", reviveBigInt),
 			},
 		);
 	});

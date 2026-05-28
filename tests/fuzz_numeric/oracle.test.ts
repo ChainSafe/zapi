@@ -119,3 +119,34 @@ describe("oracle sanity: rtBigIntU64", () => {
 		});
 	}
 });
+
+const modL = require("../../zig-out/lib/test_fuzz_numeric.node") as {
+	losslessI64(b: bigint): { value: bigint; lossless: boolean };
+	losslessU64(b: bigint): { value: bigint; lossless: boolean };
+};
+
+function expectedLosslessI64(b: bigint): { value: bigint; lossless: boolean } {
+	const losslessRange = b >= -(1n << 63n) && b < 1n << 63n;
+	return { value: BigInt.asIntN(64, b), lossless: losslessRange };
+}
+
+function expectedLosslessU64(b: bigint): { value: bigint; lossless: boolean } {
+	const losslessRange = b >= 0n && b < 1n << 64n;
+	return { value: BigInt.asUintN(64, b), lossless: losslessRange };
+}
+
+describe("oracle sanity: losslessI64", () => {
+	for (const b of edgeBigInts) {
+		it(`agrees with oracle on ${b}n`, () => {
+			expect(modL.losslessI64(b)).toEqual(expectedLosslessI64(b));
+		});
+	}
+});
+
+describe("oracle sanity: losslessU64", () => {
+	for (const b of edgeBigInts) {
+		it(`agrees with oracle on ${b}n`, () => {
+			expect(modL.losslessU64(b)).toEqual(expectedLosslessU64(b));
+		});
+	}
+});
