@@ -150,3 +150,56 @@ describe("oracle sanity: losslessU64", () => {
 		});
 	}
 });
+
+const modI128 = require("../../zig-out/lib/test_fuzz_numeric.node") as {
+	rtBigIntI128(b: bigint): bigint;
+};
+
+const I128_MIN = -(1n << 127n);
+const I128_MAX = (1n << 127n) - 1n;
+
+describe("oracle sanity: rtBigIntI128", () => {
+	for (const b of edgeBigInts) {
+		// Only assert identity in-range. Out-of-range edges are out of scope
+		// for the oracle test — the property test handles them via the
+		// implementation-defined policy (see fuzz.test.ts).
+		if (b < I128_MIN || b > I128_MAX) continue;
+		it(`round-trips ${b}n`, () => {
+			expect(modI128.rtBigIntI128(b)).toBe(b);
+		});
+	}
+});
+
+describe("rtBigIntI128 boundary cases", () => {
+	it("0n → 0n (zero)", () => {
+		expect(modI128.rtBigIntI128(0n)).toBe(0n);
+	});
+
+	it("I128_MIN = -(1n << 127n) → -(1n << 127n) (in-range lower bound)", () => {
+		const b = -(1n << 127n);
+		expect(modI128.rtBigIntI128(b)).toBe(b);
+	});
+
+	it("I128_MAX = (1n << 127n) - 1n → (1n << 127n) - 1n (in-range upper bound)", () => {
+		const b = (1n << 127n) - 1n;
+		expect(modI128.rtBigIntI128(b)).toBe(b);
+	});
+
+	it("1n << 127n (just out-of-range positive) → BigInt.asIntN(128, 1n << 127n) === -(1n << 127n)", () => {
+		const b = 1n << 127n;
+		expect(modI128.rtBigIntI128(b)).toBe(BigInt.asIntN(128, b));
+	});
+
+	it("-(1n << 127n) - 1n (just out-of-range negative) → BigInt.asIntN(128, -(1n << 127n) - 1n)", () => {
+		const b = -(1n << 127n) - 1n;
+		expect(modI128.rtBigIntI128(b)).toBe(BigInt.asIntN(128, b));
+	});
+
+	it("1n << 128n (oversized positive, low 128 bits zero) → 0n", () => {
+		expect(modI128.rtBigIntI128(1n << 128n)).toBe(0n);
+	});
+
+	it("-(1n << 128n) (oversized negative, low 128 bits zero) → 0n", () => {
+		expect(modI128.rtBigIntI128(-(1n << 128n))).toBe(0n);
+	});
+});

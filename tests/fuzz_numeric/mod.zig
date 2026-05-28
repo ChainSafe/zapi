@@ -1,5 +1,6 @@
 //! Fuzz harness addon: per-converter round-trip exports for numeric types.
 
+const std = @import("std");
 const js = @import("zapi").js;
 
 /// Round-trip JS number → f64 → JS number. Oracle: identity for all finite
@@ -61,6 +62,25 @@ pub fn losslessU64(b: js.BigInt) !js.Value {
     try obj.setNamedProperty("value", value.toValue());
     try obj.setNamedProperty("lossless", flag.toValue());
     return .{ .val = obj };
+}
+
+/// Round-trip JS BigInt → i128 → JS BigInt via fromWords.
+///
+/// In-domain (b ∈ [-2^127, 2^127)) this is identity. Out-of-domain behavior
+/// is determined by `BigInt.toI128` (currently: truncates to low 128 bits).
+/// The fuzzer surfaces any mismatch against the oracle in fuzz.test.ts.
+pub fn rtBigIntI128(b: js.BigInt) !js.BigInt {
+    const v = try b.toI128();
+    const is_negative = v < 0;
+    const magnitude: u128 = if (is_negative)
+        @as(u128, @intCast(-(v + 1))) + 1 // safe for i128.minInt
+    else
+        @as(u128, @intCast(v));
+    const words = [_]u64{
+        @truncate(magnitude),
+        @truncate(magnitude >> 64),
+    };
+    return js.BigInt.fromWords(if (is_negative) 1 else 0, &words);
 }
 
 comptime {

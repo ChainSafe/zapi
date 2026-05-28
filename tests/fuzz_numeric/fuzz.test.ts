@@ -16,6 +16,7 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntU64(b: bigint): bigint;
 	losslessI64(b: bigint): { value: bigint; lossless: boolean };
 	losslessU64(b: bigint): { value: bigint; lossless: boolean };
+	rtBigIntI128(b: bigint): bigint;
 };
 
 const FUZZ_RUNS = Number(process.env.FUZZ_RUNS ?? 10_000);
@@ -175,6 +176,31 @@ describe("losslessU64", () => {
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("losslessU64", reviveBigInt),
+			},
+		);
+	});
+});
+
+const bigIntArbI128 = fc.oneof(
+	{ arbitrary: fc.bigInt({ min: -(2n ** 129n), max: 2n ** 129n }), weight: 4 },
+	{ arbitrary: fc.constantFrom(...edgeBigInts), weight: 1 },
+);
+
+const I128_MIN = -(1n << 127n);
+const I128_MAX = (1n << 127n) - 1n;
+
+describe("rtBigIntI128", () => {
+	it("identity in [-2^127, 2^127); BigInt.asIntN(128, ·) elsewhere", () => {
+		fc.assert(
+			fc.property(bigIntArbI128, (b) => {
+				const result = mod.rtBigIntI128(b);
+				const inRange = b >= I128_MIN && b <= I128_MAX;
+				const expected = inRange ? b : BigInt.asIntN(128, b);
+				return result === expected;
+			}),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<bigint>("rtBigIntI128", reviveBigInt),
 			},
 		);
 	});
