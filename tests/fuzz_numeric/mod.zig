@@ -24,6 +24,20 @@ pub fn rtNumberI64(n: js.Number) !js.BigInt {
     return js.BigInt.from(try n.toI64());
 }
 
+/// Round-trip via NAPI int64. The `lossless` flag is discarded; the result
+/// equals BigInt.asIntN(64, b) regardless. See `losslessI64` (Task 6) for
+/// flag-exposing variants.
+pub fn rtBigIntI64(b: js.BigInt) !js.BigInt {
+    var lossless: bool = false;
+    return js.BigInt.from(try b.toI64(&lossless));
+}
+
+/// Round-trip via NAPI uint64. Result equals BigInt.asUintN(64, b).
+pub fn rtBigIntU64(b: js.BigInt) !js.BigInt {
+    var lossless: bool = false;
+    return js.BigInt.from(try b.toU64(&lossless));
+}
+
 comptime {
     js.exportModule(@This(), .{});
 }
