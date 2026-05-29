@@ -4,8 +4,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as url from "node:url";
 import fc from "fast-check";
-import { edgeNumbers, edgeBigInts } from "./edges.ts";
+import { edgeNumbers, edgeBigInts, edgeUint8Arrays } from "./edges.ts";
 import {
+	equalUint8Array,
 	fitsBigIntI128,
 	fitsBigIntI64,
 	fitsBigIntU64,
@@ -17,6 +18,7 @@ import {
 	oracleNumberI32,
 	oracleNumberI64,
 	oracleNumberU32,
+	oracleUint8Array,
 } from "./oracles.ts";
 
 const require = createRequire(import.meta.url);
@@ -32,6 +34,7 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntI128(b: bigint): bigint;
 	rtBigIntI128LowBits(b: bigint): bigint;
 	rtBigIntWords(b: bigint): bigint;
+	rtUint8Array(value: Uint8Array): Uint8Array;
 };
 
 const FUZZ_RUNS = Number(process.env.FUZZ_RUNS ?? 10_000);
@@ -56,6 +59,13 @@ function reviveBigInt(raw: unknown): bigint {
 		return BigInt((raw as { __bigint: string }).__bigint);
 	}
 	throw new Error(`Cannot revive as bigint: ${JSON.stringify(raw)}`);
+}
+
+function reviveUint8Array(raw: unknown): Uint8Array {
+	if (Array.isArray(raw) && raw.every((v) => Number.isInteger(v))) {
+		return new Uint8Array(raw);
+	}
+	throw new Error(`Cannot revive as Uint8Array: ${JSON.stringify(raw)}`);
 }
 
 const numberArb = fc.oneof(
@@ -261,6 +271,25 @@ describe("rtBigIntWords", () => {
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntWords", reviveBigInt),
+			},
+		);
+	});
+});
+
+const uint8ArrayArb = fc.oneof(
+	{ arbitrary: fc.uint8Array({ maxLength: 4096 }), weight: 4 },
+	{ arbitrary: fc.constantFrom(...edgeUint8Arrays), weight: 1 },
+);
+
+describe("rtUint8Array", () => {
+	it("round-trips bytes unchanged", () => {
+		fc.assert(
+			fc.property(uint8ArrayArb, (value) =>
+				equalUint8Array(mod.rtUint8Array(value), oracleUint8Array(value)),
+			),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<Uint8Array>("rtUint8Array", reviveUint8Array),
 			},
 		);
 	});

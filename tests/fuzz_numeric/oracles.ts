@@ -72,3 +72,15 @@ export function oracleBigIntI128(value: bigint): bigint {
 export function oracleBigIntI128LowBits(value: bigint): bigint {
 	return BigInt.asIntN(128, value);
 }
+
+export function oracleUint8Array(value: Uint8Array): Uint8Array {
+	return new Uint8Array(value);
+}
+
+export function equalUint8Array(a: Uint8Array, b: Uint8Array): boolean {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i += 1) {
+		if (a[i] !== b[i]) return false;
+	}
+	return true;
+}

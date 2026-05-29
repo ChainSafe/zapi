@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
-import { edgeNumbers, edgeBigInts } from "./edges.ts";
+import { edgeNumbers, edgeBigInts, edgeUint8Arrays } from "./edges.ts";
 import {
+	equalUint8Array,
 	fitsBigIntI128,
 	fitsBigIntI64,
 	fitsBigIntU64,
@@ -13,6 +14,7 @@ import {
 	oracleNumberI32,
 	oracleNumberI64,
 	oracleNumberU32,
+	oracleUint8Array,
 } from "./oracles.ts";
 
 const require = createRequire(import.meta.url);
@@ -175,12 +177,23 @@ describe("oracle sanity: rtBigIntI128LowBits", () => {
 
 const modW = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntWords(b: bigint): bigint;
+	rtUint8Array(value: Uint8Array): Uint8Array;
 };
 
 describe("oracle sanity: rtBigIntWords", () => {
 	for (const b of edgeBigInts) {
 		it(`round-trips ${b}n`, () => {
 			expect(modW.rtBigIntWords(b)).toBe(b);
+		});
+	}
+});
+
+describe("oracle sanity: rtUint8Array", () => {
+	for (const value of edgeUint8Arrays) {
+		it(`round-trips ${value.length} byte(s)`, () => {
+			expect(equalUint8Array(modW.rtUint8Array(value), oracleUint8Array(value))).toBe(
+				true,
+			);
 		});
 	}
 });

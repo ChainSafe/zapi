@@ -1,6 +1,6 @@
 # fuzz_numeric
 
-Property-based fuzz tests for zapi's Number and BigInt conversions. Driven from JS through the `test_fuzz_numeric.node` addon (built by `zig build`) using vitest + fast-check.
+Property-based fuzz tests for zapi's Number, BigInt, and selected binary conversion surfaces. Driven from JS through the `test_fuzz_numeric.node` addon (built by `zig build`) using vitest + fast-check.
 
 See `docs/superpowers/specs/2026-05-28-fuzz-testing-design.md` for design rationale.
 
@@ -46,7 +46,7 @@ Once fixed, **persist the counterexample** so it runs forever:
    ```json
    { "__bigint": "170141183460469231731687303715884105728" }
    ```
-   For numbers, use a JSON number directly. NaN and ±Infinity aren't representable in JSON and are not currently supported as persisted seeds — those values are already in `edgeNumbers` and exercised on every run, so persisting them as regression cases adds nothing. If a future fuzz target needs persisted special-number seeds, extend `loadSeeds` and the relevant `revive*` helper at that time.
+   For numbers, use a JSON number directly. For `Uint8Array`, use a JSON array of byte values, e.g. `[0, 255, 1]`. NaN and ±Infinity aren't representable in JSON and are not currently supported as persisted seeds — those values are already in `edgeNumbers` and exercised on every run, so persisting them as regression cases adds nothing. If a future fuzz target needs persisted special-number seeds, extend `loadSeeds` and the relevant `revive*` helper at that time.
 3. Commit with the fix.
 
 ## Adding a new fuzz target

@@ -50,3 +50,11 @@ export const edgeBigInts: readonly bigint[] = [
 	(1n << 192n) - 1n,
 	1n << 256n,
 ];
+
+export const edgeUint8Arrays: readonly Uint8Array[] = [
+	new Uint8Array([]),
+	new Uint8Array([0]),
+	new Uint8Array([255]),
+	new Uint8Array([0, 255, 1, 254]),
+	new Uint8Array(Array.from({ length: 256 }, (_, i) => i)),
+];
