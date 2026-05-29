@@ -1,4 +1,4 @@
-# fuzz_numeric
+# fuzz
 
 Property-based fuzz tests for zapi's Number, BigInt, and selected binary conversion surfaces. Driven from JS through the `test_fuzz_numeric.node` addon (built by `zig build`) using vitest + fast-check.
 
@@ -14,7 +14,7 @@ pnpm test:fuzz
 FUZZ_RUNS=1000 pnpm test:fuzz
 
 # Single property
-pnpm vitest run tests/fuzz_numeric/fuzz.test.ts -t "rtBigIntI128"
+pnpm vitest run tests/fuzz/bigint.fuzz.test.ts -t "rtBigIntI128"
 ```
 
 ## When a property fails
@@ -41,7 +41,7 @@ it.only("repro", () => {
 
 Once fixed, **persist the counterexample** so it runs forever:
 
-1. Create or open `tests/fuzz_numeric/seeds/<target>.json`.
+1. Create or open `tests/fuzz/seeds/<target>.json`.
 2. Append the counterexample to the JSON array. For bigints, use:
    ```json
    { "__bigint": "170141183460469231731687303715884105728" }
@@ -53,6 +53,6 @@ Once fixed, **persist the counterexample** so it runs forever:
 
 1. Add the round-trip export to `mod.zig`.
 2. Add the oracle to `oracle.test.ts` and run it against every entry in the relevant edge list.
-3. Add the fast-check property to `fuzz.test.ts`.
-4. Update `edges.ts` if the target needs new edge values.
+3. Add the fast-check property to the relevant `*.fuzz.test.ts` file.
+4. Update `tests/utils/edge.ts` if the target needs new edge values.
 5. Run `pnpm test:fuzz` and watch it pass (or find a bug).

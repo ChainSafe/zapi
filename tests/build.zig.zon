@@ -6,7 +6,7 @@
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "fuzz_numeric",
+        "fuzz",
     },
     .dependencies = .{
         // Repository builds use --fork so the tests consume the local
@@ -22,7 +22,7 @@
     },
     .modules = .{
         .test_fuzz_numeric = .{
-            .root_source_file = "fuzz_numeric/mod.zig",
+            .root_source_file = "fuzz/mod.zig",
             .imports = .{.zapi},
             .link_libc = true,
         },
