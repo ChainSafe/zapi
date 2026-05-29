@@ -95,8 +95,7 @@ pub fn reverseString(s: String) !String {
 
 /// Double a BigInt value.
 pub fn doubleBigInt(n: BigInt) !BigInt {
-    var lossless: bool = false;
-    const val = try n.toI64(&lossless);
+    const val = try n.toI64();
     return BigInt.from(val * 2);
 }
 

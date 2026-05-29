@@ -14,41 +14,86 @@ pub const BigInt = struct {
         if ((try val.typeof()) != .bigint) return error.TypeMismatch;
     }
 
-    /// Attempts to convert the JavaScript BigInt to a Zig `i64`.
+    /// Attempts to convert the JavaScript BigInt exactly to a Zig `i64`.
     ///
-    /// If `lossless` is provided, it will be set to `true` if the BigInt can be
-    /// represented exactly as an `i64`, and `false` otherwise. Out-of-range
-    /// values are truncated to the low 64 bits, matching N-API BigInt
-    /// conversion semantics.
+    /// Returns `error.InvalidArg` if the value is outside the `i64` range. Use
+    /// `toI64LowBits` when low-64-bit conversion is intended.
+    pub fn toI64(self: BigInt) !i64 {
+        var lossless = false;
+        const value = try self.toI64LowBits(&lossless);
+        if (!lossless) return error.InvalidArg;
+        return value;
+    }
+
+    /// Converts the JavaScript BigInt to the low 64 bits as a Zig `i64`.
     ///
-    /// Returns an error if the conversion fails or the `napi_env` is invalid.
-    pub fn toI64(self: BigInt, lossless: ?*bool) !i64 {
+    /// If `lossless` is provided, it is set to whether the returned `i64`
+    /// represents the original BigInt exactly. Out-of-range values still return
+    /// their low 64 bits, matching N-API BigInt conversion semantics, but set
+    /// `lossless` to false.
+    pub fn toI64LowBits(self: BigInt, lossless: ?*bool) !i64 {
         return self.val.getValueBigintInt64(lossless);
     }
 
-    /// Attempts to convert the JavaScript BigInt to a Zig `u64`.
+    /// Attempts to convert the JavaScript BigInt exactly to a Zig `u64`.
     ///
-    /// If `lossless` is provided, it will be set to `true` if the BigInt can be
-    /// represented exactly as a `u64`, and `false` otherwise. Out-of-range or
-    /// negative values are truncated to the low 64 bits, matching N-API BigInt
-    /// conversion semantics.
+    /// Returns `error.InvalidArg` if the value is negative or outside the `u64`
+    /// range. Use `toU64LowBits` when low-64-bit conversion is intended.
+    pub fn toU64(self: BigInt) !u64 {
+        var lossless = false;
+        const value = try self.toU64LowBits(&lossless);
+        if (!lossless) return error.InvalidArg;
+        return value;
+    }
+
+    /// Converts the JavaScript BigInt to the low 64 bits as a Zig `u64`.
     ///
-    /// Returns an error if the conversion fails or the `napi_env` is invalid.
-    pub fn toU64(self: BigInt, lossless: ?*bool) !u64 {
+    /// If `lossless` is provided, it is set to whether the returned `u64`
+    /// represents the original BigInt exactly. Out-of-range or negative values
+    /// still return their low 64 bits, matching N-API BigInt conversion
+    /// semantics, but set `lossless` to false.
+    pub fn toU64LowBits(self: BigInt, lossless: ?*bool) !u64 {
         return self.val.getValueBigintUint64(lossless);
     }
 
-    /// Attempts to convert the JavaScript BigInt to a Zig `i128`.
+    /// Attempts to convert the JavaScript BigInt exactly to a Zig `i128`.
     ///
-    /// In-domain (`b ∈ [-2^127, 2^127)`): returns `b` exactly.
+    /// Returns `error.InvalidArg` if the value is outside `[-2^127, 2^127)`.
+    /// Use `toI128LowBits` when low-128-bit conversion is intended.
     ///
-    /// Out-of-domain: returns `BigInt.asIntN(128, b)`, i.e. the low 128 bits
+    /// Returns an error if N-API operations fail.
+    pub fn toI128(self: BigInt) !i128 {
+        var sign_bit: u1 = 0;
+        // Three words are enough to distinguish every in-range i128 from any
+        // oversized value, even when the lower 128 bits are zero.
+        var words: [3]u64 = .{ 0, 0, 0 };
+        const result = try self.val.getValueBigintWords(&sign_bit, &words);
+        if (result.len > 2) return error.InvalidArg;
+
+        const lo: u128 = words[0];
+        const hi: u128 = words[1];
+        const magnitude: u128 = (hi << 64) | lo;
+        if (sign_bit == 1) {
+            if (magnitude == 0) return 0;
+            if (magnitude > (@as(u128, 1) << 127)) return error.InvalidArg;
+            return @bitCast(0 -% magnitude);
+        }
+
+        if (magnitude > @as(u128, @intCast(std.math.maxInt(i128)))) {
+            return error.InvalidArg;
+        }
+        return @intCast(magnitude);
+    }
+
+    /// Converts the JavaScript BigInt to the low 128 bits as a Zig `i128`.
+    ///
+    /// This returns `BigInt.asIntN(128, b)`, i.e. the low 128 bits
     /// of the magnitude reinterpreted as a signed i128. This matches the
     /// ECMAScript `BigInt.asIntN` semantics defined at
     /// https://tc39.es/ecma262/#sec-bigint.asintn.
     ///
     /// Returns an error if N-API operations fail.
-    pub fn toI128(self: BigInt) !i128 {
+    pub fn toI128LowBits(self: BigInt) !i128 {
         var sign_bit: u1 = 0;
         // Pre-zeroed: NAPI writes only as many words as the BigInt has; unused
         // words stay 0. When the value is 0n NAPI returns word_count == 0, so
@@ -82,23 +127,23 @@ pub const BigInt = struct {
     /// Converts the JavaScript BigInt to a Zig `i64`, panicking on failure.
     ///
     /// This is a convenience method for cases where the BigInt is guaranteed
-    /// to be representable as an `i64` without loss.
+    /// to be exactly representable as an `i64`.
     pub fn assertI64(self: BigInt) i64 {
-        return self.toI64(null) catch @panic("BigInt.assertI64 failed");
+        return self.toI64() catch @panic("BigInt.assertI64 failed");
     }
 
     /// Converts the JavaScript BigInt to a Zig `u64`, panicking on failure.
     ///
     /// This is a convenience method for cases where the BigInt is guaranteed
-    /// to be representable as a `u64` without loss.
+    /// to be exactly representable as a `u64`.
     pub fn assertU64(self: BigInt) u64 {
-        return self.toU64(null) catch @panic("BigInt.assertU64 failed");
+        return self.toU64() catch @panic("BigInt.assertU64 failed");
     }
 
     /// Converts the JavaScript BigInt to a Zig `i128`, panicking on failure.
     ///
     /// This is a convenience method for cases where the BigInt is guaranteed
-    /// to be representable as an `i128`.
+    /// to be exactly representable as an `i128`.
     pub fn assertI128(self: BigInt) i128 {
         return self.toI128() catch @panic("BigInt.assertI128 failed");
     }

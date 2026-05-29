@@ -25,25 +25,21 @@ pub fn rtNumberI64(n: js.Number) !js.BigInt {
     return js.BigInt.from(try n.toI64());
 }
 
-/// Round-trip via NAPI int64. The `lossless` flag is discarded; the result
-/// equals BigInt.asIntN(64, b) regardless. See `losslessI64` (Task 6) for
-/// flag-exposing variants.
+/// Exact round-trip via i64. Throws for out-of-range inputs.
 pub fn rtBigIntI64(b: js.BigInt) !js.BigInt {
-    var lossless: bool = false;
-    return js.BigInt.from(try b.toI64(&lossless));
+    return js.BigInt.from(try b.toI64());
 }
 
-/// Round-trip via NAPI uint64. Result equals BigInt.asUintN(64, b).
+/// Exact round-trip via u64. Throws for negative or out-of-range inputs.
 pub fn rtBigIntU64(b: js.BigInt) !js.BigInt {
-    var lossless: bool = false;
-    return js.BigInt.from(try b.toU64(&lossless));
+    return js.BigInt.from(try b.toU64());
 }
 
-/// Returns `{ value: BigInt, lossless: Boolean }` exposing toI64's lossless
-/// out-parameter to the fuzzer.
+/// Returns `{ value: BigInt, lossless: Boolean }` exposing the lossy low-bits
+/// conversion flag to the fuzzer.
 pub fn losslessI64(b: js.BigInt) !js.Value {
     var lossless: bool = false;
-    const v = try b.toI64(&lossless);
+    const v = try b.toI64LowBits(&lossless);
     const value = js.BigInt.from(v);
     const flag = js.Boolean.from(lossless);
     const obj = try js.env().createObject();
@@ -52,10 +48,10 @@ pub fn losslessI64(b: js.BigInt) !js.Value {
     return .{ .val = obj };
 }
 
-/// Returns `{ value: BigInt, lossless: Boolean }` for toU64.
+/// Returns `{ value: BigInt, lossless: Boolean }` for the u64 low-bits path.
 pub fn losslessU64(b: js.BigInt) !js.Value {
     var lossless: bool = false;
-    const v = try b.toU64(&lossless);
+    const v = try b.toU64LowBits(&lossless);
     const value = js.BigInt.from(v);
     const flag = js.Boolean.from(lossless);
     const obj = try js.env().createObject();
@@ -64,13 +60,7 @@ pub fn losslessU64(b: js.BigInt) !js.Value {
     return .{ .val = obj };
 }
 
-/// Round-trip JS BigInt → i128 → JS BigInt via fromWords.
-///
-/// In-domain (b ∈ [-2^127, 2^127)) this is identity. Out-of-domain behavior
-/// is determined by `BigInt.toI128` (currently: truncates to low 128 bits).
-/// The fuzzer surfaces any mismatch against the oracle in fuzz.test.ts.
-pub fn rtBigIntI128(b: js.BigInt) !js.BigInt {
-    const v = try b.toI128();
+fn i128ToBigInt(v: i128) !js.BigInt {
     const is_negative = v < 0;
     const magnitude: u128 = if (is_negative)
         @as(u128, @intCast(-(v + 1))) + 1 // safe for i128.minInt
@@ -81,6 +71,21 @@ pub fn rtBigIntI128(b: js.BigInt) !js.BigInt {
         @truncate(magnitude >> 64),
     };
     return js.BigInt.fromWords(if (is_negative) 1 else 0, &words);
+}
+
+/// Round-trip JS BigInt → i128 → JS BigInt via fromWords.
+///
+/// In-domain (b ∈ [-2^127, 2^127)) this is identity. Out-of-domain values
+/// throw instead of silently dropping high bits.
+pub fn rtBigIntI128(b: js.BigInt) !js.BigInt {
+    return i128ToBigInt(try b.toI128());
+}
+
+/// Round-trip JS BigInt → low 128 bits → JS BigInt.
+///
+/// Oracle: `BigInt.asIntN(128, b)`.
+pub fn rtBigIntI128LowBits(b: js.BigInt) !js.BigInt {
+    return i128ToBigInt(try b.toI128LowBits());
 }
 
 /// Round-trip via getValueBigintWords → createBigintWords (via fromWords).
