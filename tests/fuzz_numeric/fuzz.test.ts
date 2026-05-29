@@ -5,6 +5,17 @@ import * as path from "node:path";
 import * as url from "node:url";
 import fc from "fast-check";
 import { edgeNumbers, edgeBigInts } from "./edges.ts";
+import {
+	oracleBigIntI128,
+	oracleBigIntI64,
+	oracleBigIntU64,
+	oracleLosslessI64,
+	oracleLosslessU64,
+	oracleNumberF64,
+	oracleNumberI32,
+	oracleNumberI64,
+	oracleNumberU32,
+} from "./oracles.ts";
 
 const require = createRequire(import.meta.url);
 const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
@@ -54,8 +65,9 @@ describe("rtNumberF64", () => {
 		fc.assert(
 			fc.property(numberArb, (n) => {
 				const result = mod.rtNumberF64(n);
-				if (Number.isNaN(n)) return Number.isNaN(result);
-				return Object.is(result, n);
+				const expected = oracleNumberF64(n);
+				if (Number.isNaN(expected)) return Number.isNaN(result);
+				return Object.is(result, expected);
 			}),
 			{
 				numRuns: FUZZ_RUNS,
@@ -64,9 +76,6 @@ describe("rtNumberF64", () => {
 		);
 	});
 });
-
-const I64_MAX = (1n << 63n) - 1n;
-const I64_MIN = -(1n << 63n);
 
 const numberIntArb = fc.oneof(
 	{ arbitrary: fc.integer({ min: -(2 ** 33), max: 2 ** 33 }), weight: 3 },
@@ -77,7 +86,7 @@ const numberIntArb = fc.oneof(
 describe("rtNumberI32", () => {
 	it("matches ECMAScript ToInt32 (`| 0`)", () => {
 		fc.assert(
-			fc.property(numberIntArb, (n) => mod.rtNumberI32(n) === (n | 0)),
+			fc.property(numberIntArb, (n) => mod.rtNumberI32(n) === oracleNumberI32(n)),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<number>("rtNumberI32", (r) => r as number),
@@ -89,7 +98,7 @@ describe("rtNumberI32", () => {
 describe("rtNumberU32", () => {
 	it("matches ECMAScript ToUint32 (`>>> 0`)", () => {
 		fc.assert(
-			fc.property(numberIntArb, (n) => mod.rtNumberU32(n) === (n >>> 0)),
+			fc.property(numberIntArb, (n) => mod.rtNumberU32(n) === oracleNumberU32(n)),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<number>("rtNumberU32", (r) => r as number),
@@ -101,14 +110,10 @@ describe("rtNumberU32", () => {
 describe("rtNumberI64", () => {
 	it("matches NAPI int64 semantics (clamped)", () => {
 		fc.assert(
-			fc.property(numberIntArb, (n) => {
-				let expected: bigint;
-				if (Number.isNaN(n) || !Number.isFinite(n)) expected = 0n;
-				else if (n >= 2 ** 63) expected = I64_MAX;
-				else if (n < -(2 ** 63)) expected = I64_MIN;
-				else expected = BigInt(Math.trunc(n));
-				return mod.rtNumberI64(n) === expected;
-			}),
+			fc.property(
+				numberIntArb,
+				(n) => mod.rtNumberI64(n) === oracleNumberI64(n),
+			),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<number>("rtNumberI64", (r) => r as number),
@@ -126,7 +131,7 @@ describe("rtBigIntI64", () => {
 	it("matches BigInt.asIntN(64, ·)", () => {
 		fc.assert(
 			fc.property(bigIntArbI64, (b) =>
-				mod.rtBigIntI64(b) === BigInt.asIntN(64, b),
+				mod.rtBigIntI64(b) === oracleBigIntI64(b),
 			),
 			{
 				numRuns: FUZZ_RUNS,
@@ -140,7 +145,7 @@ describe("rtBigIntU64", () => {
 	it("matches BigInt.asUintN(64, ·)", () => {
 		fc.assert(
 			fc.property(bigIntArbI64, (b) =>
-				mod.rtBigIntU64(b) === BigInt.asUintN(64, b),
+				mod.rtBigIntU64(b) === oracleBigIntU64(b),
 			),
 			{
 				numRuns: FUZZ_RUNS,
@@ -155,8 +160,8 @@ describe("losslessI64", () => {
 		fc.assert(
 			fc.property(bigIntArbI64, (b) => {
 				const { value, lossless } = mod.losslessI64(b);
-				const inRange = b >= -(1n << 63n) && b < 1n << 63n;
-				return value === BigInt.asIntN(64, b) && lossless === inRange;
+				const expected = oracleLosslessI64(b);
+				return value === expected.value && lossless === expected.lossless;
 			}),
 			{
 				numRuns: FUZZ_RUNS,
@@ -171,8 +176,8 @@ describe("losslessU64", () => {
 		fc.assert(
 			fc.property(bigIntArbI64, (b) => {
 				const { value, lossless } = mod.losslessU64(b);
-				const inRange = b >= 0n && b < 1n << 64n;
-				return value === BigInt.asUintN(64, b) && lossless === inRange;
+				const expected = oracleLosslessU64(b);
+				return value === expected.value && lossless === expected.lossless;
 			}),
 			{
 				numRuns: FUZZ_RUNS,
@@ -187,17 +192,12 @@ const bigIntArbI128 = fc.oneof(
 	{ arbitrary: fc.constantFrom(...edgeBigInts), weight: 1 },
 );
 
-const I128_MIN = -(1n << 127n);
-const I128_MAX = (1n << 127n) - 1n;
-
 describe("rtBigIntI128", () => {
 	it("identity in [-2^127, 2^127); BigInt.asIntN(128, ·) elsewhere", () => {
 		fc.assert(
 			fc.property(bigIntArbI128, (b) => {
 				const result = mod.rtBigIntI128(b);
-				const inRange = b >= I128_MIN && b <= I128_MAX;
-				const expected = inRange ? b : BigInt.asIntN(128, b);
-				return result === expected;
+				return result === oracleBigIntI128(b);
 			}),
 			{
 				numRuns: FUZZ_RUNS,
