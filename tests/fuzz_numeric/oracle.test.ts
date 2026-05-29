@@ -1,6 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 import { edgeNumbers, edgeBigInts } from "./edges.ts";
+import {
+	I128_MAX,
+	I128_MIN,
+	oracleBigIntI128,
+	oracleBigIntI64,
+	oracleBigIntU64,
+	oracleLosslessI64,
+	oracleLosslessU64,
+	oracleNumberF64,
+	oracleNumberI32,
+	oracleNumberI64,
+	oracleNumberU32,
+} from "./oracles.ts";
 
 const require = createRequire(import.meta.url);
 const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
@@ -12,14 +25,6 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntU64(b: bigint): bigint;
 };
 
-/**
- * Oracle for rtNumberF64: identity over all finite JS numbers; NaN ↔ NaN;
- * ±0 preserved (distinguished via Object.is).
- */
-function oracleF64(value: number): number {
-	return value;
-}
-
 function describeValue(v: number): string {
 	if (Number.isNaN(v)) return "NaN";
 	if (Object.is(v, -0)) return "-0";
@@ -29,7 +34,7 @@ function describeValue(v: number): string {
 describe("oracle sanity: rtNumberF64", () => {
 	for (const v of edgeNumbers) {
 		it(`agrees with oracle on ${describeValue(v)}`, () => {
-			const expected = oracleF64(v);
+			const expected = oracleNumberF64(v);
 			const actual = mod.rtNumberF64(v);
 			if (Number.isNaN(expected)) {
 				expect(Number.isNaN(actual)).toBe(true);
@@ -40,40 +45,10 @@ describe("oracle sanity: rtNumberF64", () => {
 	}
 });
 
-/** ECMAScript ToInt32: `value | 0`. NaN/±Inf → 0. */
-function oracleI32(value: number): number {
-	return value | 0;
-}
-
-/** ECMAScript ToUint32: `value >>> 0`. NaN/±Inf → 0. */
-function oracleU32(value: number): number {
-	return value >>> 0;
-}
-
-/**
- * NAPI napi_get_value_int64 semantics (per Node.js NAPI docs):
- *   - NaN, ±Infinity → 0
- *   - value >= 2^63 → INT64_MAX (clamped, not zero)
- *   - value < -2^63 → INT64_MIN (clamped)
- *   - exact -2^63 → INT64_MIN (representable, returned faithfully)
- *   - otherwise: BigInt(Math.trunc(value)) interpreted as i64
- *
- * Returned as a JS bigint so the JS comparison stays lossless.
- */
-const I64_MAX = (1n << 63n) - 1n;
-const I64_MIN = -(1n << 63n);
-
-function oracleI64(value: number): bigint {
-	if (Number.isNaN(value) || !Number.isFinite(value)) return 0n;
-	if (value >= 2 ** 63) return I64_MAX;
-	if (value < -(2 ** 63)) return I64_MIN;
-	return BigInt(Math.trunc(value));
-}
-
 describe("oracle sanity: rtNumberI32", () => {
 	for (const v of edgeNumbers) {
 		it(`agrees with oracle on ${describeValue(v)}`, () => {
-			expect(mod.rtNumberI32(v)).toBe(oracleI32(v));
+			expect(mod.rtNumberI32(v)).toBe(oracleNumberI32(v));
 		});
 	}
 });
@@ -81,7 +56,7 @@ describe("oracle sanity: rtNumberI32", () => {
 describe("oracle sanity: rtNumberU32", () => {
 	for (const v of edgeNumbers) {
 		it(`agrees with oracle on ${describeValue(v)}`, () => {
-			expect(mod.rtNumberU32(v)).toBe(oracleU32(v));
+			expect(mod.rtNumberU32(v)).toBe(oracleNumberU32(v));
 		});
 	}
 });
@@ -89,20 +64,10 @@ describe("oracle sanity: rtNumberU32", () => {
 describe("oracle sanity: rtNumberI64", () => {
 	for (const v of edgeNumbers) {
 		it(`agrees with oracle on ${describeValue(v)}`, () => {
-			expect(mod.rtNumberI64(v)).toBe(oracleI64(v));
+			expect(mod.rtNumberI64(v)).toBe(oracleNumberI64(v));
 		});
 	}
 });
-
-/** Two's-complement low 64 bits, signed. */
-function oracleBigIntI64(b: bigint): bigint {
-	return BigInt.asIntN(64, b);
-}
-
-/** Low 64 bits, unsigned. */
-function oracleBigIntU64(b: bigint): bigint {
-	return BigInt.asUintN(64, b);
-}
 
 describe("oracle sanity: rtBigIntI64", () => {
 	for (const b of edgeBigInts) {
@@ -125,20 +90,10 @@ const modL = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	losslessU64(b: bigint): { value: bigint; lossless: boolean };
 };
 
-function expectedLosslessI64(b: bigint): { value: bigint; lossless: boolean } {
-	const losslessRange = b >= -(1n << 63n) && b < 1n << 63n;
-	return { value: BigInt.asIntN(64, b), lossless: losslessRange };
-}
-
-function expectedLosslessU64(b: bigint): { value: bigint; lossless: boolean } {
-	const losslessRange = b >= 0n && b < 1n << 64n;
-	return { value: BigInt.asUintN(64, b), lossless: losslessRange };
-}
-
 describe("oracle sanity: losslessI64", () => {
 	for (const b of edgeBigInts) {
 		it(`agrees with oracle on ${b}n`, () => {
-			expect(modL.losslessI64(b)).toEqual(expectedLosslessI64(b));
+			expect(modL.losslessI64(b)).toEqual(oracleLosslessI64(b));
 		});
 	}
 });
@@ -146,7 +101,7 @@ describe("oracle sanity: losslessI64", () => {
 describe("oracle sanity: losslessU64", () => {
 	for (const b of edgeBigInts) {
 		it(`agrees with oracle on ${b}n`, () => {
-			expect(modL.losslessU64(b)).toEqual(expectedLosslessU64(b));
+			expect(modL.losslessU64(b)).toEqual(oracleLosslessU64(b));
 		});
 	}
 });
@@ -154,9 +109,6 @@ describe("oracle sanity: losslessU64", () => {
 const modI128 = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntI128(b: bigint): bigint;
 };
-
-const I128_MIN = -(1n << 127n);
-const I128_MAX = (1n << 127n) - 1n;
 
 describe("oracle sanity: rtBigIntI128", () => {
 	for (const b of edgeBigInts) {
@@ -187,12 +139,12 @@ describe("rtBigIntI128 boundary cases", () => {
 
 	it("1n << 127n (just out-of-range positive) → BigInt.asIntN(128, 1n << 127n) === -(1n << 127n)", () => {
 		const b = 1n << 127n;
-		expect(modI128.rtBigIntI128(b)).toBe(BigInt.asIntN(128, b));
+		expect(modI128.rtBigIntI128(b)).toBe(oracleBigIntI128(b));
 	});
 
 	it("-(1n << 127n) - 1n (just out-of-range negative) → BigInt.asIntN(128, -(1n << 127n) - 1n)", () => {
 		const b = -(1n << 127n) - 1n;
-		expect(modI128.rtBigIntI128(b)).toBe(BigInt.asIntN(128, b));
+		expect(modI128.rtBigIntI128(b)).toBe(oracleBigIntI128(b));
 	});
 
 	it("1n << 128n (oversized positive, low 128 bits zero) → 0n", () => {

@@ -17,7 +17,7 @@
 		"build:zig:tests": "cd tests && zig build --fork=.. --prefix ../zig-out",
 		"test:zig": "zig build test:zapi",
 		"test:js": "vitest run examples/**/*.test.ts",
-		"test:fuzz": "vitest run tests/**/*.test.ts",
+		"test:fuzz": "pnpm build:zig && vitest run tests/**/*.test.ts",
 		"test": "pnpm test:zig && pnpm test:js",
 		"lint:zig": "zig fmt src",
 		"lint:js": "pnpm biome check",
