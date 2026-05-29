@@ -2,11 +2,11 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 import { edgeNumbers, edgeBigInts } from "./edges.ts";
 import {
-	I128_MAX,
-	I128_MIN,
+	fitsBigIntI128,
+	fitsBigIntI64,
+	fitsBigIntU64,
 	oracleBigIntI128,
-	oracleBigIntI64,
-	oracleBigIntU64,
+	oracleBigIntI128LowBits,
 	oracleLosslessI64,
 	oracleLosslessU64,
 	oracleNumberF64,
@@ -71,16 +71,24 @@ describe("oracle sanity: rtNumberI64", () => {
 
 describe("oracle sanity: rtBigIntI64", () => {
 	for (const b of edgeBigInts) {
-		it(`agrees with oracle on ${b}n`, () => {
-			expect(mod.rtBigIntI64(b)).toBe(oracleBigIntI64(b));
+		it(`is exact-or-throw on ${b}n`, () => {
+			if (fitsBigIntI64(b)) {
+				expect(mod.rtBigIntI64(b)).toBe(b);
+			} else {
+				expect(() => mod.rtBigIntI64(b)).toThrow();
+			}
 		});
 	}
 });
 
 describe("oracle sanity: rtBigIntU64", () => {
 	for (const b of edgeBigInts) {
-		it(`agrees with oracle on ${b}n`, () => {
-			expect(mod.rtBigIntU64(b)).toBe(oracleBigIntU64(b));
+		it(`is exact-or-throw on ${b}n`, () => {
+			if (fitsBigIntU64(b)) {
+				expect(mod.rtBigIntU64(b)).toBe(b);
+			} else {
+				expect(() => mod.rtBigIntU64(b)).toThrow();
+			}
 		});
 	}
 });
@@ -108,16 +116,17 @@ describe("oracle sanity: losslessU64", () => {
 
 const modI128 = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	rtBigIntI128(b: bigint): bigint;
+	rtBigIntI128LowBits(b: bigint): bigint;
 };
 
 describe("oracle sanity: rtBigIntI128", () => {
 	for (const b of edgeBigInts) {
-		// Only assert identity in-range. Out-of-range edges are out of scope
-		// for the oracle test — the property test handles them via the
-		// implementation-defined policy (see fuzz.test.ts).
-		if (b < I128_MIN || b > I128_MAX) continue;
-		it(`round-trips ${b}n`, () => {
-			expect(modI128.rtBigIntI128(b)).toBe(b);
+		it(`is exact-or-throw on ${b}n`, () => {
+			if (fitsBigIntI128(b)) {
+				expect(modI128.rtBigIntI128(b)).toBe(oracleBigIntI128(b));
+			} else {
+				expect(() => modI128.rtBigIntI128(b)).toThrow();
+			}
 		});
 	}
 });
@@ -137,23 +146,31 @@ describe("rtBigIntI128 boundary cases", () => {
 		expect(modI128.rtBigIntI128(b)).toBe(b);
 	});
 
-	it("1n << 127n (just out-of-range positive) → BigInt.asIntN(128, 1n << 127n) === -(1n << 127n)", () => {
+	it("1n << 127n (just out-of-range positive) throws", () => {
 		const b = 1n << 127n;
-		expect(modI128.rtBigIntI128(b)).toBe(oracleBigIntI128(b));
+		expect(() => modI128.rtBigIntI128(b)).toThrow();
 	});
 
-	it("-(1n << 127n) - 1n (just out-of-range negative) → BigInt.asIntN(128, -(1n << 127n) - 1n)", () => {
+	it("-(1n << 127n) - 1n (just out-of-range negative) throws", () => {
 		const b = -(1n << 127n) - 1n;
-		expect(modI128.rtBigIntI128(b)).toBe(oracleBigIntI128(b));
+		expect(() => modI128.rtBigIntI128(b)).toThrow();
 	});
 
-	it("1n << 128n (oversized positive, low 128 bits zero) → 0n", () => {
-		expect(modI128.rtBigIntI128(1n << 128n)).toBe(0n);
+	it("1n << 128n (oversized positive) throws", () => {
+		expect(() => modI128.rtBigIntI128(1n << 128n)).toThrow();
 	});
 
-	it("-(1n << 128n) (oversized negative, low 128 bits zero) → 0n", () => {
-		expect(modI128.rtBigIntI128(-(1n << 128n))).toBe(0n);
+	it("-(1n << 128n) (oversized negative) throws", () => {
+		expect(() => modI128.rtBigIntI128(-(1n << 128n))).toThrow();
 	});
+});
+
+describe("oracle sanity: rtBigIntI128LowBits", () => {
+	for (const b of edgeBigInts) {
+		it(`agrees with low-bits oracle on ${b}n`, () => {
+			expect(modI128.rtBigIntI128LowBits(b)).toBe(oracleBigIntI128LowBits(b));
+		});
+	}
 });
 
 const modW = require("../../zig-out/lib/test_fuzz_numeric.node") as {

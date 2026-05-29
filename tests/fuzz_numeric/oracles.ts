@@ -33,15 +33,23 @@ export function oracleBigIntI64(value: bigint): bigint {
 	return BigInt.asIntN(64, value);
 }
 
+export function fitsBigIntI64(value: bigint): boolean {
+	return value >= I64_MIN && value <= I64_MAX;
+}
+
 export function oracleBigIntU64(value: bigint): bigint {
 	return BigInt.asUintN(64, value);
+}
+
+export function fitsBigIntU64(value: bigint): boolean {
+	return value >= 0n && value < 1n << 64n;
 }
 
 export function oracleLosslessI64(value: bigint): {
 	value: bigint;
 	lossless: boolean;
 } {
-	const lossless = value >= I64_MIN && value <= I64_MAX;
+	const lossless = fitsBigIntI64(value);
 	return { value: oracleBigIntI64(value), lossless };
 }
 
@@ -49,12 +57,18 @@ export function oracleLosslessU64(value: bigint): {
 	value: bigint;
 	lossless: boolean;
 } {
-	const lossless = value >= 0n && value < 1n << 64n;
+	const lossless = fitsBigIntU64(value);
 	return { value: oracleBigIntU64(value), lossless };
 }
 
+export function fitsBigIntI128(value: bigint): boolean {
+	return value >= I128_MIN && value <= I128_MAX;
+}
+
 export function oracleBigIntI128(value: bigint): bigint {
-	return value >= I128_MIN && value <= I128_MAX
-		? value
-		: BigInt.asIntN(128, value);
+	return value;
+}
+
+export function oracleBigIntI128LowBits(value: bigint): bigint {
+	return BigInt.asIntN(128, value);
 }

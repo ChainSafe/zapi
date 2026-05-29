@@ -6,9 +6,11 @@ import * as url from "node:url";
 import fc from "fast-check";
 import { edgeNumbers, edgeBigInts } from "./edges.ts";
 import {
+	fitsBigIntI128,
+	fitsBigIntI64,
+	fitsBigIntU64,
 	oracleBigIntI128,
-	oracleBigIntI64,
-	oracleBigIntU64,
+	oracleBigIntI128LowBits,
 	oracleLosslessI64,
 	oracleLosslessU64,
 	oracleNumberF64,
@@ -28,6 +30,7 @@ const mod = require("../../zig-out/lib/test_fuzz_numeric.node") as {
 	losslessI64(b: bigint): { value: bigint; lossless: boolean };
 	losslessU64(b: bigint): { value: bigint; lossless: boolean };
 	rtBigIntI128(b: bigint): bigint;
+	rtBigIntI128LowBits(b: bigint): bigint;
 	rtBigIntWords(b: bigint): bigint;
 };
 
@@ -128,11 +131,18 @@ const bigIntArbI64 = fc.oneof(
 );
 
 describe("rtBigIntI64", () => {
-	it("matches BigInt.asIntN(64, ·)", () => {
+	it("is exact in [-2^63, 2^63) and throws outside that range", () => {
 		fc.assert(
-			fc.property(bigIntArbI64, (b) =>
-				mod.rtBigIntI64(b) === oracleBigIntI64(b),
-			),
+			fc.property(bigIntArbI64, (b) => {
+				if (fitsBigIntI64(b)) return mod.rtBigIntI64(b) === b;
+
+				try {
+					mod.rtBigIntI64(b);
+					return false;
+				} catch {
+					return true;
+				}
+			}),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntI64", reviveBigInt),
@@ -142,11 +152,18 @@ describe("rtBigIntI64", () => {
 });
 
 describe("rtBigIntU64", () => {
-	it("matches BigInt.asUintN(64, ·)", () => {
+	it("is exact in [0, 2^64) and throws outside that range", () => {
 		fc.assert(
-			fc.property(bigIntArbI64, (b) =>
-				mod.rtBigIntU64(b) === oracleBigIntU64(b),
-			),
+			fc.property(bigIntArbI64, (b) => {
+				if (fitsBigIntU64(b)) return mod.rtBigIntU64(b) === b;
+
+				try {
+					mod.rtBigIntU64(b);
+					return false;
+				} catch {
+					return true;
+				}
+			}),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntU64", reviveBigInt),
@@ -193,15 +210,36 @@ const bigIntArbI128 = fc.oneof(
 );
 
 describe("rtBigIntI128", () => {
-	it("identity in [-2^127, 2^127); BigInt.asIntN(128, ·) elsewhere", () => {
+	it("is exact in [-2^127, 2^127) and throws outside that range", () => {
 		fc.assert(
 			fc.property(bigIntArbI128, (b) => {
-				const result = mod.rtBigIntI128(b);
-				return result === oracleBigIntI128(b);
+				if (fitsBigIntI128(b)) return mod.rtBigIntI128(b) === oracleBigIntI128(b);
+
+				try {
+					mod.rtBigIntI128(b);
+					return false;
+				} catch {
+					return true;
+				}
 			}),
 			{
 				numRuns: FUZZ_RUNS,
 				examples: loadSeeds<bigint>("rtBigIntI128", reviveBigInt),
+			},
+		);
+	});
+});
+
+describe("rtBigIntI128LowBits", () => {
+	it("matches BigInt.asIntN(128, ·)", () => {
+		fc.assert(
+			fc.property(
+				bigIntArbI128,
+				(b) => mod.rtBigIntI128LowBits(b) === oracleBigIntI128LowBits(b),
+			),
+			{
+				numRuns: FUZZ_RUNS,
+				examples: loadSeeds<bigint>("rtBigIntI128LowBits", reviveBigInt),
 			},
 		);
 	});
