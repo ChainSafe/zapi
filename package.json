@@ -15,7 +15,7 @@
 		"build:zig": "zig build",
 		"test:zig": "zig build test:zapi",
 		"test:js": "vitest run examples/**/*.test.ts",
-		"test:fuzz": "pnpm build:zig && vitest run tests/**/*.test.ts",
+		"test:fuzz:round_trip": "pnpm build:zig && vitest run tests/**/*.test.ts",
 		"test": "pnpm test:zig && pnpm test:js",
 		"lint:zig": "zig fmt src",
 		"lint:js": "pnpm biome check",
