@@ -46,11 +46,7 @@ Once fixed, **persist the counterexample** so it runs forever:
    ```json
    { "__bigint": "170141183460469231731687303715884105728" }
    ```
-   For numbers, use a JSON number directly. Note that NaN/Infinity aren't representable in JSON; for those, use:
-   ```json
-   { "__special": "NaN" } | { "__special": "Infinity" } | { "__special": "-Infinity" }
-   ```
-   (and extend the corresponding `reviveX` helper in `fuzz.test.ts` if you add a new special form).
+   For numbers, use a JSON number directly. NaN and ±Infinity aren't representable in JSON and are not currently supported as persisted seeds — those values are already in `edgeNumbers` and exercised on every run, so persisting them as regression cases adds nothing. If a future fuzz target needs persisted special-number seeds, extend `loadSeeds` and the relevant `revive*` helper at that time.
 3. Commit with the fix.
 
 ## Adding a new fuzz target
