@@ -8,10 +8,10 @@ See `docs/superpowers/specs/2026-05-28-fuzz-testing-design.md` for design ration
 
 ```bash
 # Full run (10 000 cases per property)
-pnpm test:fuzz
+pnpm test:fuzz:round_trip
 
 # CI-equivalent (1 000 cases per property)
-FUZZ_RUNS=1000 pnpm test:fuzz
+FUZZ_RUNS=1000 pnpm test:fuzz:round_trip
 
 # Single property
 pnpm vitest run tests/fuzz/bigint.fuzz.test.ts -t "rtBigIntI128"
@@ -55,4 +55,4 @@ Once fixed, **persist the counterexample** so it runs forever:
 2. Add the oracle to `oracle.test.ts` and run it against every entry in the relevant edge list.
 3. Add the fast-check property to the relevant `*.fuzz.test.ts` file.
 4. Update `tests/utils/edge.ts` if the target needs new edge values.
-5. Run `pnpm test:fuzz` and watch it pass (or find a bug).
+5. Run `pnpm test:fuzz:round_trip` and watch it pass (or find a bug).
