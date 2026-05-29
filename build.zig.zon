@@ -50,7 +50,7 @@
             .link_libc = true,
         },
         .test_fuzz_numeric = .{
-            .root_source_file = "tests/fuzz_numeric/mod.zig",
+            .root_source_file = "tests/fuzz/mod.zig",
             .imports = .{.zapi},
             .link_libc = true,
         },
