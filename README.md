@@ -84,7 +84,7 @@ c.count; // 1 (getter, not a method call)
 | `Number` | `number` | `toI32()`, `toF64()`, `assertI32()`, `from(anytype)` |
 | `String` | `string` | `toSlice(buf)`, `toOwnedSlice(alloc)`, `len()`, `from([]const u8)` |
 | `Boolean` | `boolean` | `toBool()`, `assertBool()`, `from(bool)` |
-| `BigInt` | `bigint` | `toI64()`, `toU64()`, `toI128()`, `from(anytype)` |
+| `BigInt` | `bigint` | `toI64()`, `toU64()`, `toI128()`, `from(anytype)`, `fromWords(sign, words)` |
 | `Date` | `Date` | `toTimestamp()`, `from(f64)` |
 | `Array` | `Array` | `get(i)`, `getNumber(i)`, `length()`, `set(i, val)` |
 | `Object(T)` | `object` | `get()`, `set(value)` — `T` fields must be DSL types |
