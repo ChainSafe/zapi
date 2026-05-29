@@ -105,6 +105,11 @@ pub fn rtBigIntWords(b: js.BigInt) !js.BigInt {
     return js.BigInt.fromWords(sign_bit, slice);
 }
 
+/// Round-trip JS Uint8Array → []u8 → JS Uint8Array.
+pub fn rtUint8Array(value: js.Uint8Array) !js.Uint8Array {
+    return js.Uint8Array.from(try value.toSlice());
+}
+
 comptime {
     js.exportModule(@This(), .{});
 }
