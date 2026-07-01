@@ -329,6 +329,13 @@ pub fn makeObject(key: String, value: Number) !Value {
     return .{ .val = obj };
 }
 
+/// Generate 16 random bytes using the DSL-managed shared std.Io instance.
+pub fn randomBytes16() Uint8Array {
+    var bytes: [16]u8 = undefined;
+    js.io().random(&bytes);
+    return Uint8Array.from(&bytes);
+}
+
 // ============================================================================
 // Section 11: Module Lifecycle (init/cleanup with env refcounting)
 // ============================================================================

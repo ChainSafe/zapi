@@ -359,6 +359,7 @@ pub fn advanced() !Value {
 | Function | Description |
 |----------|-------------|
 | `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
+| `js.io()` | Shared `std.Io` handle retained for the addon while at least one N-API environment is active |
 | `js.allocator()` | C allocator for native allocations |
 | `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
 
