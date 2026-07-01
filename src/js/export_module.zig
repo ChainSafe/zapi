@@ -209,6 +209,16 @@ test "exportModule comptime smoke test" {
     try std.testing.expect(true);
 }
 
-test "exportModule cleanup hook now also backs shared js.io lifecycle" {
-    try std.testing.expect(true);
+test "exportModule shares a single js.io across the env lifecycle" {
+    // moduleInit retains the shared io and the env cleanup hook releases it.
+    // Mirror one env's lifecycle here: while retained, every io() call must
+    // hand back the same backing instance (not a fresh one), and the balanced
+    // release must return the lifecycle to its starting state.
+    io_context.retain();
+    defer io_context.release();
+
+    const a = io_context.io();
+    const b = io_context.io();
+    try std.testing.expectEqual(a.userdata, b.userdata);
+    try std.testing.expectEqual(a.vtable, b.vtable);
 }
