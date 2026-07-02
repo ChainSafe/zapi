@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.2.0...zapi-v3.0.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* error on non-DSL pub fn in exportModule ([#38](https://github.com/ChainSafe/zapi/issues/38))
+
+### Features
+
+* error on non-DSL pub fn in exportModule ([#38](https://github.com/ChainSafe/zapi/issues/38)) ([d72deb7](https://github.com/ChainSafe/zapi/commit/d72deb7612316d6900d8e7d20b7bfd6fdce37d13))
+* **js:** add lifecycle-managed js.io() to the JS DSL ([#26](https://github.com/ChainSafe/zapi/issues/26)) ([fbb0801](https://github.com/ChainSafe/zapi/commit/fbb0801f3b96b3c4068ec2006638b2e0ae2dbe02))
+
+
+### Bug Fixes
+
+* fix UB in getValueBigintWords ([#40](https://github.com/ChainSafe/zapi/issues/40)) ([1dbe7c7](https://github.com/ChainSafe/zapi/commit/1dbe7c74968a4733555446bbf71293234b17f024))
+
+
+### Performance Improvements
+
+* **dsl:** skip placeholder pattern in materializeClassInstance ([#37](https://github.com/ChainSafe/zapi/issues/37)) ([35016d1](https://github.com/ChainSafe/zapi/commit/35016d1c94e13a0384f4cca542f1944352f3359a))
+
 ## [2.2.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.1.0...zapi-v2.2.0) (2026-05-19)
 
 
