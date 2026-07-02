@@ -8,10 +8,6 @@
         {
           "path": "build.zig.zon",
           "type": "generic"
-        },
-        {
-          "path": "zbuild.zon",
-          "type": "generic"
         }
       ]
     }

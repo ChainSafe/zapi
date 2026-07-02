@@ -6,8 +6,8 @@
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
     .dependencies = .{
         .zbuild = .{
-            .url = "git+https://github.com/ChainSafe/zbuild?ref=refactor/comptime-library-rewrite#7ec852f1c6495b62d964e311bd210b6f9a3015be",
-            .hash = "zbuild-0.4.0-XJFav9lXAgCtcFwxSb5qEkex3kijECLtqo7z9FzrkUaf",
+            .url = "git+https://github.com/chainsafe/zbuild.git#f7d5f19de09f2808e54acf599605f9e18c9bd804",
+            .hash = "zbuild-0.4.0-XJFav-1nAgDmfVY1nVSIIzbkcbuHZj7yMb7Fv8yvznPO",
         },
     },
     .options_modules = .{
