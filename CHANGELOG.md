@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.0.0...zapi-v3.1.0) (2026-07-10)
+
+
+### Features
+
+* support ARM64 musl targets ([#47](https://github.com/ChainSafe/zapi/issues/47)) ([0bf4375](https://github.com/ChainSafe/zapi/commit/0bf4375b36a91f24db13aedeefef71494f089666))
+
 ## [3.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.2.0...zapi-v3.0.0) (2026-07-02)
 
 
