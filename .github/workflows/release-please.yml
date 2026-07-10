@@ -2,7 +2,7 @@ name: Release Please
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'zapi-v2.x.0']
 
 permissions:
   contents: write
