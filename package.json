@@ -10,6 +10,7 @@
 	},
 	"type": "module",
 	"scripts": {
+		"prepare": "tsc --outDir lib",
 		"build": "pnpm build:js && pnpm build:zig",
 		"build:js": "tsc --outDir lib",
 		"build:zig": "zig build",
