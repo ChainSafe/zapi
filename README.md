@@ -544,6 +544,7 @@ Add a `zapi` field to your `package.json`:
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl",
       "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-pc-windows-msvc"
@@ -559,6 +560,7 @@ Add a `zapi` field to your `package.json`:
 | `aarch64-apple-darwin` | macOS | arm64 | - |
 | `x86_64-apple-darwin` | macOS | x64 | - |
 | `aarch64-unknown-linux-gnu` | Linux | arm64 | glibc |
+| `aarch64-unknown-linux-musl` | Linux | arm64 | musl |
 | `x86_64-unknown-linux-gnu` | Linux | x64 | glibc |
 | `x86_64-unknown-linux-musl` | Linux | x64 | musl |
 | `x86_64-pc-windows-msvc` | Windows | x64 | msvc |
