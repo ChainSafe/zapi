@@ -227,6 +227,19 @@ describe("Counter class", () => {
 		expect(c.getCount()).toEqual(2);
 	});
 
+	it("passes class pointers to exported functions", () => {
+		const c = new mod.Counter(3);
+		mod.incrementCounter(c);
+		expect(c.getCount()).toEqual(4);
+	});
+
+	it("rejects the wrong class for pointer arguments", () => {
+		expectTypeErrorWithMessage(
+			() => mod.incrementCounter(new mod.Buffer(4)),
+			"Argument 1 must be an instance of mod.Counter",
+		);
+	});
+
 	it("isAbove returns boolean", () => {
 		const c = new mod.Counter(10);
 		expect(c.isAbove(5)).toBe(true);
