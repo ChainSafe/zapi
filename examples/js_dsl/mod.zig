@@ -100,6 +100,24 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
     return BigInt.from(val * 2);
 }
 
+/// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
+///
+/// Throws if word_count > 1.
+pub fn bigIntFirstWord(n: BigInt) !Number {
+    var words: [1]u64 = .{0};
+    const got = try n.toValue().getValueBigintWords(null, &words);
+    if (got.len > 1) return error.BigIntTooLarge;
+    return Number.from(words[0]);
+}
+
+/// Read a BigInt's sign as 0/1 via `getValueBigintWords` passing a non-null `sign_bit`.
+pub fn bigIntSign(n: BigInt) !Number {
+    var sign: u1 = 0;
+    var words: [1]u64 = .{0};
+    _ = try n.toValue().getValueBigintWords(&sign, &words);
+    return Number.from(@as(u32, sign));
+}
+
 /// Add one day (86400000ms) to a Date.
 pub fn tomorrow(d: Date) Date {
     const ts = d.assertTimestamp();
@@ -190,6 +208,24 @@ pub fn allocUint8(len: Number) !Uint8Array {
     return arr;
 }
 
+/// Build a Uint8Array backed by an *external* (native-heap) ArrayBuffer.
+///
+/// Takes a JS array of numbers, copies the bytes into a buffer owned by
+/// `js.allocator()`, and hands the pointer to V8. The DSL wires up a
+/// `SliceFinalizeCallback` so the native buffer is freed automatically when
+/// V8 collects the ArrayBuffer — no manual cleanup needed on the JS side.
+pub fn externalUint8Array(arr: Array) !Uint8Array {
+    const len = try arr.length();
+    const alloc = js.allocator();
+    const tmp = try alloc.alloc(u8, len);
+    defer alloc.free(tmp);
+    var i: u32 = 0;
+    while (i < len) : (i += 1) {
+        tmp[i] = @intCast((try arr.getNumber(i)).assertI32());
+    }
+    return Uint8Array.fromExternal(tmp);
+}
+
 // ============================================================================
 // Section 7: Promises
 // ============================================================================
@@ -235,6 +271,11 @@ pub const Counter = struct {
         return Boolean.from(self.count > threshold.assertI32());
     }
 };
+
+/// Increment a counter passed as a class pointer argument.
+pub fn incrementCounter(counter: *Counter) void {
+    counter.count += 1;
+}
 
 /// A resource-owning buffer class demonstrating deinit.
 pub const Buffer = struct {
@@ -291,6 +332,13 @@ pub fn makeObject(key: String, value: Number) !Value {
     const name: [:0]const u8 = name_buf[0..key_slice.len :0];
     try obj.setNamedProperty(name, value.toValue());
     return .{ .val = obj };
+}
+
+/// Generate 16 random bytes using the DSL-managed shared std.Io instance.
+pub fn randomBytes16() Uint8Array {
+    var bytes: [16]u8 = undefined;
+    js.io().random(&bytes);
+    return Uint8Array.from(&bytes);
 }
 
 // ============================================================================
@@ -390,7 +438,7 @@ pub const Point = struct {
     }
 };
 
-/// A resource-owning class used to verify placeholder cleanup in factory paths.
+/// A resource-owning class used to verify cleanup in class materialization paths.
 pub const FactoryResource = struct {
     pub const js_meta = js.class(.{});
     data: []u8,
@@ -518,6 +566,27 @@ pub const TokenIssuer = struct {
 pub fn makeToken(value: Number) Token {
     return .{ .value = value.assertI32() + 1 };
 }
+
+// ============================================================================
+// Section 16: Static Class Fields
+// ============================================================================
+
+/// Demonstrates auto-exposure of scalar/string `pub const` decls as own
+/// properties of the JS constructor (e.g. `BlsPublicKey.COMPRESS_SIZE`).
+/// BLS12-381 keys and signatures have curve-fixed serialized sizes.
+/// Exposing them as static constants lets callers size buffers, validate hex lengths, etc.
+pub const BlsPublicKey = struct {
+    pub const js_meta = js.class(.{});
+
+    pub const COMPRESS_SIZE = 48;
+    pub const SERIALIZE_SIZE = 96;
+
+    bytes: [96]u8,
+
+    pub fn init() BlsPublicKey {
+        return .{ .bytes = [_]u8{0} ** 96 };
+    }
+};
 
 comptime {
     js.exportModule(@This(), .{

@@ -359,6 +359,7 @@ pub fn advanced() !Value {
 | Function | Description |
 |----------|-------------|
 | `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
+| `js.io()` | Shared `std.Io` handle retained for the addon while at least one N-API environment is active |
 | `js.allocator()` | C allocator for native allocations |
 | `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
 
@@ -544,6 +545,7 @@ Add a `zapi` field to your `package.json`:
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl",
       "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-pc-windows-msvc"
@@ -559,6 +561,7 @@ Add a `zapi` field to your `package.json`:
 | `aarch64-apple-darwin` | macOS | arm64 | - |
 | `x86_64-apple-darwin` | macOS | x64 | - |
 | `aarch64-unknown-linux-gnu` | Linux | arm64 | glibc |
+| `aarch64-unknown-linux-musl` | Linux | arm64 | musl |
 | `x86_64-unknown-linux-gnu` | Linux | x64 | glibc |
 | `x86_64-unknown-linux-musl` | Linux | x64 | musl |
 | `x86_64-pc-windows-msvc` | Windows | x64 | msvc |
@@ -675,7 +678,7 @@ GitHub releases are managed with release-please:
 
 1. Conventional commits merged to `main` update or create the release PR.
 2. Merging that PR tags a new GitHub release and bumps `package.json`.
-3. `build.zig.zon` and `zbuild.zon` are kept in sync from the same release-please version.
+3. `build.zig.zon` is kept in sync from the same release-please version.
 4. The release workflow installs dependencies, runs `pnpm build:js`, and publishes the root package directly with `npm publish` via npm trusted publishing.
 5. No `NPM_TOKEN` secret is required for npm publish; GitHub Actions OIDC (`id-token: write`) is used together with `--provenance`.
 6. The published npm package is the JS distribution only (`lib/` and `ts/`).

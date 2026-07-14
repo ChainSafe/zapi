@@ -100,6 +100,11 @@ export function getTargetParts(target: Target): {platform: NodeJS.Platform; arch
       arch = "arm64";
       abi = "gnu";
       break;
+    case "aarch64-unknown-linux-musl":
+      platform = "linux";
+      arch = "arm64";
+      abi = "musl";
+      break;
     case "x86_64-apple-darwin":
       platform = "darwin";
       arch = "x64";

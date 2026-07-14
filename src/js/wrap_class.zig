@@ -68,21 +68,15 @@ pub fn wrapClass(comptime T: type) type {
         /// This callback is invoked when `new Class(...)` is called in JavaScript.
         /// It handles argument conversion, calls the `pub fn init(...)` method of
         /// the Zig struct `T`, and wraps the resulting native object in the JS instance.
-        /// It also handles internal placeholder creation for factory methods.
-pub const constructor: napi.c.napi_callback = genConstructor();
+        /// It also supports direct wrapping for DSL-returned class instances.
+        pub const constructor: napi.c.napi_callback = genConstructor();
 
         /// The default N-API finalizer callback for native objects wrapped by instances of `T`.
         ///
         /// This function is registered with `napi.Env.wrap()` and is called by the
         /// JavaScript garbage collector when the wrapped JS object is finalized.
-        /// It handles cleanup for internal placeholder objects during class
-        /// materialization and calls the `deinit()` method (if present) and frees
-        /// the native memory for regular class instances.
-pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
-            if (class_runtime.isInternalPlaceholderHint(T, hint)) {
-                class_runtime.destroyInternalPlaceholder(T, obj);
-                return;
-            }
+        /// It calls the `deinit()` method (if present) and frees the native memory.
+        pub fn defaultFinalize(_: napi.Env, obj: *T, _: ?*anyopaque) void {
             class_runtime.destroyNativeObject(T, obj);
         }
 
@@ -273,11 +267,12 @@ pub fn defaultFinalize(_: napi.Env, obj: *T, hint: ?*anyopaque) void {
         /// This function analyzes the `js_meta` definition of `T` at compile time
         /// and constructs the necessary N-API descriptors. This slice is typically
         /// passed to `napi.Env.defineClass()`.
-pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
+        pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
             const descriptor_count = analysis.property_count + analysis.method_count;
             if (descriptor_count == 0) return &[0]napi.c.napi_property_descriptor{};
 
             const descriptors = comptime blk: {
+                @setEvalBranchQuota(@max(50_000, 1000 + descriptor_count * 256));
                 var descs: [descriptor_count]napi.c.napi_property_descriptor = undefined;
                 var idx: usize = 0;
 
@@ -325,14 +320,14 @@ pub fn getPropertyDescriptors() []const napi.c.napi_property_descriptor {
         /// Returns `true` if this class has static factory methods defined via `js.factory`.
         ///
         /// Current implementation always returns `false` as `js.factory` is not yet implemented.
-pub fn hasFactories() bool {
+        pub fn hasFactories() bool {
             return false;
         }
 
         /// Returns a slice of N-API property descriptors for static factory methods.
         ///
         /// Current implementation returns an empty slice as `js.factory` is not yet implemented.
-pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
+        pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_descriptor {
             return &[0]napi.c.napi_property_descriptor{};
         }
 
@@ -365,22 +360,19 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
                         return null;
                     };
 
-                    if (actual_argc == 1) {
-                        const internal_arg = napi.Value{ .env = raw_env, .value = raw_args[0] };
-                        if ((internal_arg.typeof() catch null) == .external) {
-                            const obj_ptr = std.heap.c_allocator.create(T) catch {
-                                e.throwError("", "Out of memory allocating internal placeholder") catch {};
-                                return null;
-                            };
-                            obj_ptr.* = std.mem.zeroes(T);
-
-                            const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                            class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, class_runtime.internalPlaceholderHint(T)) catch {
-                                e.throwError("", "Failed to wrap internal placeholder") catch {};
-                                return null;
-                            };
-                            return this_arg;
-                        }
+                    // Fast path: materializeClassInstance is creating this instance.
+                    // Skip normal init; materialize will wrap the returned JS instance
+                    // with the real native pointer after napi_new_instance returns.
+                    const did_consume_materialization = class_runtime.consumeMaterialization(T, e, this_arg) catch {
+                        e.throwError("", "Failed to record materialized instance") catch {};
+                        return null;
+                    };
+                    if (did_consume_materialization) {
+                        return this_arg;
+                    }
+                    if (class_runtime.hasPendingMaterialization()) {
+                        e.throwTypeError("", "Invalid materialization constructor") catch {};
+                        return null;
                     }
 
                     const required_init_argc = comptime wrap_function.requiredArgCount(init_params);
@@ -407,7 +399,7 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
                     obj_ptr.* = init_result;
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr, null) catch {
+                    class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr) catch {
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
                     };
@@ -678,6 +670,77 @@ pub fn getFactoryDescriptors(_: napi.c.napi_value) []const napi.c.napi_property_
             return setter_cb.callback;
         }
     };
+}
+
+/// Walks `T`'s public declarations and attaches each scalar/string `pub const`
+/// as an own property of the just-defined JS class constructor `class_val`.
+///
+/// Called by `export_module.zig` right after `napi_define_class` returns, so
+/// the values land on the constructor itself (i.e. `MyClass.MY_CONST` in JS),
+/// not on instances. A decl is exposed iff its value's type is an int, float,
+/// bool, or string (`[]const u8` or `*const [N]u8`); functions, types, and
+/// other decls are silently skipped — so existing methods/getters and the
+/// `js_meta` decl naturally fall out.
+pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value) !void {
+    inline for (@typeInfo(T).@"struct".decls) |decl| {
+        const value = @field(T, decl.name);
+        if (comptime !isStaticValueType(@TypeOf(value))) continue;
+        const napi_value = try createStaticFieldValue(env, value);
+        const name: [:0]const u8 = decl.name ++ "";
+        try class_val.setNamedProperty(name, napi_value);
+    }
+}
+
+fn isStaticValueType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .comptime_int, .int, .comptime_float, .float, .bool => true,
+        .pointer => |ptr| blk: {
+            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) break :blk true;
+            if (ptr.size == .one and @typeInfo(ptr.child) == .array and
+                @typeInfo(ptr.child).array.child == u8) break :blk true;
+            break :blk false;
+        },
+        else => false,
+    };
+}
+
+fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
+    const T = @TypeOf(value);
+    switch (@typeInfo(T)) {
+        .comptime_int => {
+            if (value >= 0 and value <= std.math.maxInt(u32)) {
+                return env.createUint32(@intCast(value));
+            }
+            if (value >= std.math.minInt(i32) and value <= std.math.maxInt(i32)) {
+                return env.createInt32(@intCast(value));
+            }
+            return env.createInt64(@intCast(value));
+        },
+        .int => |info| {
+            if (info.signedness == .unsigned and info.bits <= 32) {
+                return env.createUint32(@intCast(value));
+            }
+            if (info.signedness == .signed and info.bits <= 32) {
+                return env.createInt32(@intCast(value));
+            }
+            return env.createInt64(@intCast(value));
+        },
+        .comptime_float, .float => return env.createDouble(@floatCast(value)),
+        .bool => return env.getBoolean(value),
+        .pointer => |ptr| {
+            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) {
+                return env.createStringUtf8(value);
+            }
+            if (ptr.size == .one and @typeInfo(ptr.child) == .array and
+                @typeInfo(ptr.child).array.child == u8)
+            {
+                const arr = @typeInfo(ptr.child).array;
+                return env.createStringUtf8(value[0..arr.len]);
+            }
+            @compileError("createStaticFieldValue: unsupported pointer type " ++ @typeName(T));
+        },
+        else => @compileError("createStaticFieldValue: unsupported type " ++ @typeName(T)),
+    }
 }
 
 test "wrapClass compile-time validation requires class metadata" {

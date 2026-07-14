@@ -94,6 +94,24 @@ describe("primitive types", () => {
 		expect(value).toEqual(2 ** 63);
 	});
 
+	describe("getValueBigintWords", () => {
+		it("reads words with null sign_bit (unsigned only)", () => {
+			expect(mod.bigIntFirstWord(0n)).toEqual(0);
+			expect(mod.bigIntFirstWord(1n)).toEqual(1);
+			expect(mod.bigIntFirstWord(0xdeadbeefn)).toEqual(0xdeadbeef);
+		});
+
+		it("reads correct sign (non-null sign_bit path)", () => {
+			expect(mod.bigIntSign(0n)).toEqual(0);
+			expect(mod.bigIntSign(1n)).toEqual(0);
+			expect(mod.bigIntSign(0xffffffffffffffffn)).toEqual(0);
+
+			expect(mod.bigIntSign(-1n)).toEqual(1);
+			expect(mod.bigIntSign(-0xffffffffffffffffn)).toEqual(1);
+		});
+
+	});
+
 	it("tomorrow adds one day", () => {
 		const now = new Date("2025-01-01T00:00:00Z");
 		const result = mod.tomorrow(now);
@@ -160,6 +178,18 @@ describe("typed arrays", () => {
 		expect(result).toBeInstanceOf(Uint8Array);
 		expect(result.length).toEqual(0);
 	});
+
+	it("externalUint8Array copies a JS array into a native-backed Uint8Array", () => {
+		const test_cases = [
+			{ input: [] },
+			{ input: [10, 20, 30, 40] },
+		];
+
+		for (const tc of test_cases) {
+			const result = mod.externalUint8Array(tc.input);
+			expect(result).toBeInstanceOf(Uint8Array);
+		}
+	});
 });
 
 // Section 7: Promises
@@ -195,6 +225,19 @@ describe("Counter class", () => {
 		c.increment();
 		c.increment();
 		expect(c.getCount()).toEqual(2);
+	});
+
+	it("passes class pointers to exported functions", () => {
+		const c = new mod.Counter(3);
+		mod.incrementCounter(c);
+		expect(c.getCount()).toEqual(4);
+	});
+
+	it("rejects the wrong class for pointer arguments", () => {
+		expectTypeErrorWithMessage(
+			() => mod.incrementCounter(new mod.Buffer(4)),
+			"Argument 1 must be an instance of mod.Counter",
+		);
 	});
 
 	it("isAbove returns boolean", () => {
@@ -233,6 +276,13 @@ describe("mixed DSL + N-API", () => {
 	it("makeObject creates object with property", () => {
 		const obj = mod.makeObject("x", 10);
 		expect(obj).toEqual({ x: 10 });
+	});
+
+	it("randomBytes16 uses js.io() to produce a Uint8Array", () => {
+		const bytes = mod.randomBytes16();
+		expect(bytes).toBeInstanceOf(Uint8Array);
+		expect(bytes).toHaveLength(16);
+		expect(Array.from(bytes).some((byte: number) => byte !== 0)).toBe(true);
 	});
 });
 
@@ -361,7 +411,7 @@ describe("optional parameters", () => {
 });
 
 describe("class materialization", () => {
-	it("static class return avoids constructor placeholder allocation", () => {
+	it("static class return avoids constructor init allocation", () => {
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
 
@@ -372,7 +422,7 @@ describe("class materialization", () => {
 		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
 	});
 
-	it("instance class return avoids constructor placeholder allocation", () => {
+	it("instance class return avoids constructor init allocation", () => {
 		const base = mod.FactoryResource.withByte(1);
 		const initBefore = mod.getFactoryResourceInitCount();
 		const deinitBefore = mod.getFactoryResourceDeinitCount();
@@ -394,6 +444,62 @@ describe("class materialization", () => {
 
 	it("rejects cross-class static factory binding during materialization", () => {
 		expect(() => mod.Point.create.call(mod.Buffer, 1, 2)).toThrow();
+	});
+
+	it("preserves normal nested construction inside subclass constructors", () => {
+		// Same-class materialization may call a JS subclass constructor via the preferred
+		// receiver constructor. A nested normal `new` inside that constructor must not
+		// inherit the internal materialization marker, otherwise it skips native wrapping.
+		let nested: InstanceType<typeof mod.FactoryResource> | undefined;
+		class DerivedFactoryResource extends mod.FactoryResource {
+			constructor() {
+				super();
+				nested = new mod.FactoryResource();
+			}
+		}
+
+		const resource = DerivedFactoryResource.withByte(5);
+
+		expect(resource).toBeInstanceOf(DerivedFactoryResource);
+		expect(resource.getByte()).toEqual(5);
+		expect(nested?.getByte()).toEqual(0);
+	});
+
+	it("rejects subclass constructors that return a different object", () => {
+		class ReplacingPoint extends mod.Point {
+			constructor() {
+				super();
+				return {};
+			}
+		}
+
+		expect(() => ReplacingPoint.create(3, 4)).toThrow();
+	});
+
+	it("does not run cross-class constructors during failed materialization", () => {
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		expect(() => mod.Point.create.call(mod.FactoryResource, 1, 2)).toThrow();
+
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore);
+	});
+
+	it("rejects non-zapi constructors during materialization", () => {
+		function FakePoint() {}
+
+		expect(() => mod.Point.create.call(FakePoint, 1, 2)).toThrow();
+	});
+
+	it("deinitializes returned native resources when materialization fails", () => {
+		const initBefore = mod.getFactoryResourceInitCount();
+		const deinitBefore = mod.getFactoryResourceDeinitCount();
+
+		expect(() => mod.FactoryResource.withByte.call(mod.Point, 7)).toThrow();
+
+		expect(mod.getFactoryResourceInitCount()).toEqual(initBefore + 1);
+		expect(mod.getFactoryResourceDeinitCount()).toEqual(deinitBefore + 1);
 	});
 });
 
@@ -524,5 +630,20 @@ describe("module lifecycle - worker threads", () => {
 		// Give a small delay for cleanup hook to fire
 		await new Promise((resolve) => setTimeout(resolve, 100));
 		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
+	});
+});
+
+// Section 16: Static Class Fields
+describe("static class fields", () => {
+	it("exposes BLS PublicKey sizes as own properties of the constructor", () => {
+		expect(mod.BlsPublicKey.COMPRESS_SIZE).toEqual(48);
+		expect(mod.BlsPublicKey.SERIALIZE_SIZE).toEqual(96);
+	});
+
+	it("statics live on the constructor, not on instances", () => {
+		const pk = new mod.BlsPublicKey();
+		expect(pk.COMPRESS_SIZE).toBeUndefined();
+		expect(Object.prototype.hasOwnProperty.call(mod.BlsPublicKey, "COMPRESS_SIZE")).toBe(true);
+		expect(Object.prototype.hasOwnProperty.call(pk, "COMPRESS_SIZE")).toBe(false);
 	});
 });

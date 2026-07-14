@@ -1,5 +1,57 @@
 # Changelog
 
+## [3.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.0.0...zapi-v3.1.0) (2026-07-10)
+
+
+### Features
+
+* support ARM64 musl targets ([#47](https://github.com/ChainSafe/zapi/issues/47)) ([0bf4375](https://github.com/ChainSafe/zapi/commit/0bf4375b36a91f24db13aedeefef71494f089666))
+
+## [3.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.2.0...zapi-v3.0.0) (2026-07-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* error on non-DSL pub fn in exportModule ([#38](https://github.com/ChainSafe/zapi/issues/38))
+
+### Features
+
+* error on non-DSL pub fn in exportModule ([#38](https://github.com/ChainSafe/zapi/issues/38)) ([d72deb7](https://github.com/ChainSafe/zapi/commit/d72deb7612316d6900d8e7d20b7bfd6fdce37d13))
+* **js:** add lifecycle-managed js.io() to the JS DSL ([#26](https://github.com/ChainSafe/zapi/issues/26)) ([fbb0801](https://github.com/ChainSafe/zapi/commit/fbb0801f3b96b3c4068ec2006638b2e0ae2dbe02))
+
+
+### Bug Fixes
+
+* fix UB in getValueBigintWords ([#40](https://github.com/ChainSafe/zapi/issues/40)) ([1dbe7c7](https://github.com/ChainSafe/zapi/commit/1dbe7c74968a4733555446bbf71293234b17f024))
+
+
+### Performance Improvements
+
+* **dsl:** skip placeholder pattern in materializeClassInstance ([#37](https://github.com/ChainSafe/zapi/issues/37)) ([35016d1](https://github.com/ChainSafe/zapi/commit/35016d1c94e13a0384f4cca542f1944352f3359a))
+
+## [2.2.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.1.0...zapi-v2.2.0) (2026-05-19)
+
+
+### Features
+
+* **dsl:** support static value fields on classes ([#35](https://github.com/ChainSafe/zapi/issues/35)) ([f28eb5c](https://github.com/ChainSafe/zapi/commit/f28eb5c02034030f5084c77d9cfc98669e5ce30c))
+
+## [2.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v2.0.0...zapi-v2.1.0) (2026-05-15)
+
+
+### Features
+
+* support create_external_arraybuffer ([#30](https://github.com/ChainSafe/zapi/issues/30)) ([a76b604](https://github.com/ChainSafe/zapi/commit/a76b60430da70950e16359d6f0896e92e44db282))
+
+
+### Bug Fixes
+
+* bump eval branch quota for BeaconStateView ([e522fa4](https://github.com/ChainSafe/zapi/commit/e522fa4beb5eacfb8ee0f9a964b435a88bb8f2ba))
+* bump eval branch quota for BeaconStateView ([5cf7988](https://github.com/ChainSafe/zapi/commit/5cf7988a6c9870bf4a095e001bdc825940ca05a4))
+* doc comments regarding safety for `Number.toU32()` ([4e74585](https://github.com/ChainSafe/zapi/commit/4e74585194233323cee83163431d7f96bb911ce4))
+* doc comments regarding safety for `Number.toU32()` ([7d05b19](https://github.com/ChainSafe/zapi/commit/7d05b197ec50730b48d4e56ebc3e1d8e6fb43ac3))
+* show correct error message ([#25](https://github.com/ChainSafe/zapi/issues/25)) ([baa58f5](https://github.com/ChainSafe/zapi/commit/baa58f57fc9c54132ceb168a2e4203c72169b90d))
+
 ## [2.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v1.0.1...zapi-v2.0.0) (2026-04-28)
 
 
