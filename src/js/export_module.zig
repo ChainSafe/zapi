@@ -77,8 +77,9 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
         fn cleanupHook(_: *CleanupData) void {
             if (has_lifecycle) {
-                std.Io.Threaded.mutexLock(&lifecycle_mutex);
-                defer std.Io.Threaded.mutexUnlock(&lifecycle_mutex);
+                const io = io_context.io();
+                lifecycle_mutex.lockUncancelable(io);
+                defer lifecycle_mutex.unlock(io);
 
                 const prev = env_refcount.fetchSub(1, .acq_rel);
                 const new_refcount = prev - 1;
@@ -95,16 +96,17 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             const prev = context.setEnv(env);
             defer context.restoreEnv(prev);
 
-            if (has_lifecycle) {
-                std.Io.Threaded.mutexLock(&State.lifecycle_mutex);
-            }
-            defer if (has_lifecycle) std.Io.Threaded.mutexUnlock(&State.lifecycle_mutex);
-
             io_context.retain();
             var cleanup_hook_registered = false;
             errdefer if (!cleanup_hook_registered) {
                 io_context.release();
             };
+
+            const io = io_context.io();
+            if (has_lifecycle) {
+                State.lifecycle_mutex.lockUncancelable(io);
+            }
+            defer if (has_lifecycle) State.lifecycle_mutex.unlock(io);
 
             var prev_refcount: u32 = 0;
             if (has_lifecycle) {
