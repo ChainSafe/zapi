@@ -67,7 +67,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
     const State = struct {
         var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
-        var locked: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+        var lifecycle_mutex: std.Io.Mutex = .init;
 
         // addEnvCleanupHook requires a non-null *Data pointer.
         const CleanupData = struct {
@@ -75,20 +75,10 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
         };
         var cleanup_data: CleanupData = .{};
 
-        fn lock() void {
-            while (locked.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
-                std.atomic.spinLoopHint();
-            }
-        }
-
-        fn unlock() void {
-            locked.store(false, .release);
-        }
-
         fn cleanupHook(_: *CleanupData) void {
             if (has_lifecycle) {
-                lock();
-                defer unlock();
+                std.Io.Threaded.mutexLock(&lifecycle_mutex);
+                defer std.Io.Threaded.mutexUnlock(&lifecycle_mutex);
 
                 const prev = env_refcount.fetchSub(1, .acq_rel);
                 const new_refcount = prev - 1;
@@ -106,9 +96,9 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             defer context.restoreEnv(prev);
 
             if (has_lifecycle) {
-                State.lock();
+                std.Io.Threaded.mutexLock(&State.lifecycle_mutex);
             }
-            defer if (has_lifecycle) State.unlock();
+            defer if (has_lifecycle) std.Io.Threaded.mutexUnlock(&State.lifecycle_mutex);
 
             io_context.retain();
             var cleanup_hook_registered = false;
