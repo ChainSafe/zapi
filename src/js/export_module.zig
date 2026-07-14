@@ -75,7 +75,10 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
         fn cleanupHook(_: *CleanupData) void {
             if (has_lifecycle) {
-                releaseLifecycleRef(options, &env_refcount, true);
+                releaseLifecycleRef(
+                    &env_refcount,
+                    if (has_cleanup) options.cleanup else null,
+                );
             }
             io_context.release();
         }
@@ -93,18 +96,21 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             };
 
             var prev_refcount: u32 = 0;
+            var init_succeeded = false;
             if (has_lifecycle) {
                 prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
-                if (has_init) {
-                    options.init(prev_refcount) catch |err| {
-                        releaseLifecycleRef(options, &State.env_refcount, false);
-                        return err;
-                    };
-                }
             }
-            errdefer if (has_lifecycle) {
-                releaseLifecycleRef(options, &State.env_refcount, has_init);
+            errdefer if (has_lifecycle and !cleanup_hook_registered) {
+                releaseLifecycleRef(
+                    &State.env_refcount,
+                    if (has_cleanup and init_succeeded) options.cleanup else null,
+                );
             };
+
+            if (has_init) {
+                try options.init(prev_refcount);
+                init_succeeded = true;
+            }
 
             _ = try registerDecls(Module, env, module, 0);
 
@@ -118,6 +124,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 State.cleanupHook,
             );
             cleanup_hook_registered = true;
+            errdefer comptime unreachable;
         }
     };
 
@@ -125,17 +132,14 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 }
 
 fn releaseLifecycleRef(
-    comptime options: anytype,
     env_refcount: *std.atomic.Value(u32),
-    run_cleanup: bool,
+    cleanup: ?*const fn (u32) void,
 ) void {
     const prev = env_refcount.fetchSub(1, .acq_rel);
     std.debug.assert(prev > 0);
     const new_refcount = prev - 1;
-    if (@hasField(@TypeOf(options), "cleanup")) {
-        if (run_cleanup) {
-            options.cleanup(new_refcount);
-        }
+    if (cleanup) |callback| {
+        callback(new_refcount);
     }
 }
 
@@ -248,18 +252,16 @@ test "exportModule rolls back lifecycle state only after init succeeds" {
             cleanup_refcount = refcount;
         }
     };
-    const options = .{ .cleanup = Hooks.cleanup };
-
     Hooks.cleanup_calls = 0;
     Hooks.cleanup_refcount = 0;
 
     var env_refcount = std.atomic.Value(u32).init(2);
-    releaseLifecycleRef(options, &env_refcount, false);
+    releaseLifecycleRef(&env_refcount, null);
     try std.testing.expectEqual(1, env_refcount.load(.monotonic));
     try std.testing.expectEqual(0, Hooks.cleanup_calls);
 
     env_refcount.store(2, .monotonic);
-    releaseLifecycleRef(options, &env_refcount, true);
+    releaseLifecycleRef(&env_refcount, Hooks.cleanup);
     try std.testing.expectEqual(1, env_refcount.load(.monotonic));
     try std.testing.expectEqual(1, Hooks.cleanup_calls);
     try std.testing.expectEqual(1, Hooks.cleanup_refcount);
