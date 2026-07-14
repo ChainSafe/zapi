@@ -63,6 +63,14 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_register = @hasField(@TypeOf(options), "register");
     const has_lifecycle = has_init or has_cleanup;
+    const cleanup: ?*const fn (u32) void = if (has_cleanup) options.cleanup else null;
+
+    const AttachState = enum {
+        io_retained,
+        lifecycle_retained,
+        lifecycle_initialized,
+        cleanup_hook_registered,
+    };
 
     const State = struct {
         var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
@@ -75,10 +83,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
         fn cleanupHook(_: *CleanupData) void {
             if (has_lifecycle) {
-                releaseLifecycleRef(
-                    &env_refcount,
-                    if (has_cleanup) options.cleanup else null,
-                );
+                releaseLifecycleRef(&env_refcount, cleanup);
             }
             io_context.release();
         }
@@ -90,26 +95,29 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             defer context.restoreEnv(prev);
 
             io_context.retain();
-            var cleanup_hook_registered = false;
-            errdefer if (!cleanup_hook_registered) {
-                io_context.release();
+            var attach_state: AttachState = .io_retained;
+            errdefer switch (attach_state) {
+                .io_retained => io_context.release(),
+                .lifecycle_retained => {
+                    releaseLifecycleRef(&State.env_refcount, null);
+                    io_context.release();
+                },
+                .lifecycle_initialized => {
+                    releaseLifecycleRef(&State.env_refcount, cleanup);
+                    io_context.release();
+                },
+                .cleanup_hook_registered => unreachable,
             };
 
             var prev_refcount: u32 = 0;
-            var init_succeeded = false;
             if (has_lifecycle) {
                 prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
+                attach_state = .lifecycle_retained;
             }
-            errdefer if (has_lifecycle and !cleanup_hook_registered) {
-                releaseLifecycleRef(
-                    &State.env_refcount,
-                    if (has_cleanup and init_succeeded) options.cleanup else null,
-                );
-            };
 
             if (has_init) {
                 try options.init(prev_refcount);
-                init_succeeded = true;
+                attach_state = .lifecycle_initialized;
             }
 
             _ = try registerDecls(Module, env, module, 0);
@@ -123,7 +131,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 &State.cleanup_data,
                 State.cleanupHook,
             );
-            cleanup_hook_registered = true;
+            attach_state = .cleanup_hook_registered;
             errdefer comptime unreachable;
         }
     };
