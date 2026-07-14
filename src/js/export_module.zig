@@ -64,13 +64,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_register = @hasField(@TypeOf(options), "register");
     const has_lifecycle = has_init or has_cleanup;
     const cleanup: ?*const fn (u32) void = if (has_cleanup) options.cleanup else null;
-
-    const AttachState = enum {
-        io_retained,
-        lifecycle_retained,
-        lifecycle_initialized,
-        cleanup_hook_registered,
-    };
+    const rollback_cleanup_after_init: ?*const fn (u32) void = if (has_init) cleanup else null;
 
     const State = struct {
         var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
@@ -95,30 +89,21 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             defer context.restoreEnv(prev);
 
             io_context.retain();
-            var attach_state: AttachState = .io_retained;
-            errdefer switch (attach_state) {
-                .io_retained => io_context.release(),
-                .lifecycle_retained => {
-                    releaseLifecycleRef(&State.env_refcount, null);
-                    io_context.release();
-                },
-                .lifecycle_initialized => {
-                    releaseLifecycleRef(&State.env_refcount, cleanup);
-                    io_context.release();
-                },
-                .cleanup_hook_registered => unreachable,
-            };
+            errdefer io_context.release();
 
+            var rollback_cleanup: ?*const fn (u32) void = null;
             var prev_refcount: u32 = 0;
             if (has_lifecycle) {
                 prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
-                attach_state = .lifecycle_retained;
             }
+            errdefer if (has_lifecycle) {
+                releaseLifecycleRef(&State.env_refcount, rollback_cleanup);
+            };
 
             if (has_init) {
                 try options.init(prev_refcount);
-                attach_state = .lifecycle_initialized;
             }
+            rollback_cleanup = rollback_cleanup_after_init;
 
             _ = try registerDecls(Module, env, module, 0);
 
@@ -131,7 +116,6 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 &State.cleanup_data,
                 State.cleanupHook,
             );
-            attach_state = .cleanup_hook_registered;
             errdefer comptime unreachable;
         }
     };
@@ -248,9 +232,8 @@ test "exportModule shares a single js.io across the env lifecycle" {
     try std.testing.expectEqual(a.vtable, b.vtable);
 }
 
-test "exportModule rolls back lifecycle state only after init succeeds" {
-    // Model failures before and after init returns to verify cleanup is paired only with a
-    // successfully initialized environment while the refcount is restored in both cases.
+test "releaseLifecycleRef optionally runs cleanup" {
+    // The caller arms cleanup only after init succeeds. Refcount restoration is unconditional.
     const Hooks = struct {
         var cleanup_calls: u32 = 0;
         var cleanup_refcount: u32 = 0;
