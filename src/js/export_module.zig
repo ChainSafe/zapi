@@ -63,8 +63,6 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_register = @hasField(@TypeOf(options), "register");
     const has_lifecycle = has_init or has_cleanup;
-    const cleanup: ?*const fn (u32) void = if (has_cleanup) options.cleanup else null;
-    const rollback_cleanup_after_init: ?*const fn (u32) void = if (has_init) cleanup else null;
 
     const State = struct {
         var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
@@ -77,7 +75,11 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 
         fn cleanupHook(_: *CleanupData) void {
             if (has_lifecycle) {
-                releaseLifecycleRef(&env_refcount, cleanup);
+                const prev = env_refcount.fetchSub(1, .acq_rel);
+                const new_refcount = prev - 1;
+                if (has_cleanup) {
+                    options.cleanup(new_refcount);
+                }
             }
             io_context.release();
         }
@@ -89,21 +91,34 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
             defer context.restoreEnv(prev);
 
             io_context.retain();
-            errdefer io_context.release();
+            var cleanup_hook_registered = false;
+            errdefer if (!cleanup_hook_registered) {
+                io_context.release();
+            };
 
-            var rollback_cleanup: ?*const fn (u32) void = null;
             var prev_refcount: u32 = 0;
+            var init_succeeded = false;
             if (has_lifecycle) {
                 prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
             }
-            errdefer if (has_lifecycle) {
-                releaseLifecycleRef(&State.env_refcount, rollback_cleanup);
+            errdefer if (!cleanup_hook_registered) {
+                if (has_lifecycle) {
+                    const prev_refcount_rollback = State.env_refcount.fetchSub(1, .acq_rel);
+                    std.debug.assert(prev_refcount_rollback > 0);
+                    const new_refcount = prev_refcount_rollback - 1;
+
+                    if (has_cleanup) {
+                        if (init_succeeded) {
+                            options.cleanup(new_refcount);
+                        }
+                    }
+                }
             };
 
             if (has_init) {
                 try options.init(prev_refcount);
+                init_succeeded = true;
             }
-            rollback_cleanup = rollback_cleanup_after_init;
 
             _ = try registerDecls(Module, env, module, 0);
 
@@ -116,23 +131,11 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 &State.cleanup_data,
                 State.cleanupHook,
             );
-            errdefer comptime unreachable;
+            cleanup_hook_registered = true;
         }
     };
 
     napi.module.register(init.moduleInit);
-}
-
-fn releaseLifecycleRef(
-    env_refcount: *std.atomic.Value(u32),
-    cleanup: ?*const fn (u32) void,
-) void {
-    const prev = env_refcount.fetchSub(1, .acq_rel);
-    std.debug.assert(prev > 0);
-    const new_refcount = prev - 1;
-    if (cleanup) |callback| {
-        callback(new_refcount);
-    }
 }
 
 /// Iterates module declarations and registers DSL functions and js_meta classes.
@@ -230,30 +233,4 @@ test "exportModule shares a single js.io across the env lifecycle" {
     const b = io_context.io();
     try std.testing.expectEqual(a.userdata, b.userdata);
     try std.testing.expectEqual(a.vtable, b.vtable);
-}
-
-test "releaseLifecycleRef optionally runs cleanup" {
-    // The caller arms cleanup only after init succeeds. Refcount restoration is unconditional.
-    const Hooks = struct {
-        var cleanup_calls: u32 = 0;
-        var cleanup_refcount: u32 = 0;
-
-        fn cleanup(refcount: u32) void {
-            cleanup_calls += 1;
-            cleanup_refcount = refcount;
-        }
-    };
-    Hooks.cleanup_calls = 0;
-    Hooks.cleanup_refcount = 0;
-
-    var env_refcount = std.atomic.Value(u32).init(2);
-    releaseLifecycleRef(&env_refcount, null);
-    try std.testing.expectEqual(1, env_refcount.load(.monotonic));
-    try std.testing.expectEqual(0, Hooks.cleanup_calls);
-
-    env_refcount.store(2, .monotonic);
-    releaseLifecycleRef(&env_refcount, Hooks.cleanup);
-    try std.testing.expectEqual(1, env_refcount.load(.monotonic));
-    try std.testing.expectEqual(1, Hooks.cleanup_calls);
-    try std.testing.expectEqual(1, Hooks.cleanup_refcount);
 }
