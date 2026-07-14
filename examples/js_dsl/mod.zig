@@ -272,6 +272,11 @@ pub const Counter = struct {
     }
 };
 
+/// Increment a counter passed as a class pointer argument.
+pub fn incrementCounter(counter: *Counter) void {
+    counter.count += 1;
+}
+
 /// A resource-owning buffer class demonstrating deinit.
 pub const Buffer = struct {
     pub const js_meta = js.class(.{});
