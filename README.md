@@ -339,6 +339,13 @@ comptime {
 }
 ```
 
+Module initialization is transactional:
+
+- If `init` fails, the environment refcount is restored and `cleanup` is not called.
+- If `init` succeeds but module registration fails, the environment refcount is restored and
+  `cleanup` is called.
+- After successful registration, `cleanup` runs when the environment exits.
+
 This enables safe shared-state initialization for worker thread scenarios.
 
 ---
