@@ -1,13 +1,21 @@
 const std = @import("std");
+const lifecycle = @import("lifecycle.zig");
 
 const gpa: std.mem.Allocator = std.heap.page_allocator;
 
-const State = struct {
-    var mutex: std.Io.Mutex = .init;
-    var instance: std.Io.Threaded = undefined;
-    var initialized: bool = false;
-    var refcount: u32 = 0;
+const hooks = struct {
+    fn init(instance: *std.Io.Threaded, prev_refcount: u32) !void {
+        if (prev_refcount == 0) instance.* = std.Io.Threaded.init(gpa, .{});
+    }
+    fn cleanup(instance: *std.Io.Threaded, new_refcount: u32) void {
+        if (new_refcount == 0) instance.deinit();
+    }
 };
+
+const SharedIo = lifecycle.SharedResource(std.Io.Threaded, .{
+    .init = hooks.init,
+    .cleanup = hooks.cleanup,
+});
 
 /// Retains the shared DSL `std.Io` instance for an active N-API environment.
 ///
@@ -15,14 +23,7 @@ const State = struct {
 /// The underlying `std.Io.Threaded` is initialized lazily on the first retain
 /// and torn down after the last matching `release()`.
 pub fn retain() void {
-    std.Io.Threaded.mutexLock(&State.mutex);
-    defer std.Io.Threaded.mutexUnlock(&State.mutex);
-
-    if (State.refcount == 0) {
-        State.instance = std.Io.Threaded.init(gpa, .{});
-        State.initialized = true;
-    }
-    State.refcount += 1;
+    _ = SharedIo.retain() catch unreachable;
 }
 
 /// Releases one active N-API environment's hold on the shared DSL `std.Io`.
@@ -30,16 +31,7 @@ pub fn retain() void {
 /// Called internally from the env cleanup hook installed by
 /// `js.exportModule(...)`.
 pub fn release() void {
-    std.Io.Threaded.mutexLock(&State.mutex);
-    defer std.Io.Threaded.mutexUnlock(&State.mutex);
-
-    std.debug.assert(State.refcount > 0);
-    State.refcount -= 1;
-
-    if (State.refcount == 0 and State.initialized) {
-        State.instance.deinit();
-        State.initialized = false;
-    }
+    SharedIo.release();
 }
 
 /// Returns the shared `std.Io` handle managed by the JS DSL.
@@ -52,32 +44,24 @@ pub fn release() void {
 /// SAFETY: `js.io()` panics if called before the addon has been registered in a
 /// JS environment or after the last environment has been cleaned up.
 pub fn io() std.Io {
-    std.Io.Threaded.mutexLock(&State.mutex);
-    defer std.Io.Threaded.mutexUnlock(&State.mutex);
-
-    if (!State.initialized) {
+    const instance = SharedIo.get() orelse
         @panic("js.io() called before DSL module registration or after env cleanup");
-    }
-    return State.instance.io();
+    return instance.io();
 }
 
 test "shared io retains and releases across env registrations" {
-    try std.testing.expect(!State.initialized);
-    try std.testing.expectEqual(@as(u32, 0), State.refcount);
+    try std.testing.expect(SharedIo.get() == null);
 
     retain();
-    try std.testing.expect(State.initialized);
-    try std.testing.expectEqual(@as(u32, 1), State.refcount);
+    const a = io();
+
+    retain();
+    const b = io();
+    try std.testing.expectEqual(a.userdata, b.userdata);
+
+    release();
     _ = io();
 
-    retain();
-    try std.testing.expectEqual(@as(u32, 2), State.refcount);
-
     release();
-    try std.testing.expect(State.initialized);
-    try std.testing.expectEqual(@as(u32, 1), State.refcount);
-
-    release();
-    try std.testing.expect(!State.initialized);
-    try std.testing.expectEqual(@as(u32, 0), State.refcount);
+    try std.testing.expect(SharedIo.get() == null);
 }

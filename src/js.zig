@@ -62,6 +62,7 @@ test {
     // which would force-link free functions (throwError) against C symbols
     // unavailable in the native test runner.
     _ = @import("js/context.zig");
+    _ = @import("js/lifecycle.zig");
     _ = @import("js/io.zig");
     _ = @import("js/number.zig");
     _ = @import("js/string.zig");
