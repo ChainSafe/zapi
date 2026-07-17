@@ -42,6 +42,9 @@ pub fn SharedResource(comptime T: type, comptime hooks: anytype) type {
         }
 
         /// Returns the shared instance, or null when no holder is active.
+        ///
+        /// The pointer is only valid while the caller holds a retain; without
+        /// one, a concurrent last `release()` may tear the instance down.
         pub fn get() ?*T {
             std.Io.Threaded.mutexLock(&mutex);
             defer std.Io.Threaded.mutexUnlock(&mutex);
@@ -115,5 +118,55 @@ test "SharedResource exposes the instance only while retained" {
     _ = try S.retain();
     try std.testing.expectEqual(@as(u32, 42), S.get().?.*);
     S.release();
+    try std.testing.expect(S.get() == null);
+}
+
+test "SharedResource serializes hooks across threads" {
+    const thread_count = 4;
+    const iterations = 100;
+
+    const Hooks = struct {
+        var busy: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+        var overlapped: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+        // Non-atomic on purpose: serialized hooks must not race on these.
+        var init_count: u32 = 0;
+        var cleanup_count: u32 = 0;
+
+        fn enter() void {
+            if (busy.swap(true, .acquire)) overlapped.store(true, .seq_cst);
+        }
+        fn exit() void {
+            busy.store(false, .release);
+        }
+        fn init(_: *void, _: u32) !void {
+            enter();
+            defer exit();
+            init_count += 1;
+        }
+        fn cleanup(_: *void, _: u32) void {
+            enter();
+            defer exit();
+            cleanup_count += 1;
+        }
+    };
+    const S = SharedResource(void, .{ .init = Hooks.init, .cleanup = Hooks.cleanup });
+
+    const worker = struct {
+        fn run() void {
+            for (0..iterations) |_| {
+                _ = S.retain() catch unreachable;
+                std.debug.assert(S.get() != null);
+                S.release();
+            }
+        }
+    };
+
+    var threads: [thread_count]std.Thread = undefined;
+    for (&threads) |*t| t.* = try std.Thread.spawn(.{}, worker.run, .{});
+    for (threads) |t| t.join();
+
+    try std.testing.expect(!Hooks.overlapped.load(.seq_cst));
+    try std.testing.expectEqual(@as(u32, thread_count * iterations), Hooks.init_count);
+    try std.testing.expectEqual(@as(u32, thread_count * iterations), Hooks.cleanup_count);
     try std.testing.expect(S.get() == null);
 }
