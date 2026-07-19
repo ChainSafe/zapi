@@ -1,3 +1,4 @@
+const std = @import("std");
 const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
@@ -142,8 +143,12 @@ pub const TypedarrayInfo = struct {
     byte_offset: usize,
 };
 
+pub const TypedarrayInfoError = NapiError || error{
+    UnsupportedTypedarrayType,
+};
+
 /// https://nodejs.org/api/n-api.html#napi_get_typedarray_info
-pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
+pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
     var array_type_raw: c.napi_typedarray_type = undefined;
     var length: usize = undefined;
     var data: [*]u8 = undefined;
@@ -160,7 +165,8 @@ pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
             &byte_offset,
         ),
     );
-    const array_type: TypedarrayType = @enumFromInt(array_type_raw);
+    const array_type = std.enums.fromInt(TypedarrayType, array_type_raw) orelse
+        return error.UnsupportedTypedarrayType;
     return .{
         .array_type = array_type,
         .length = length,
