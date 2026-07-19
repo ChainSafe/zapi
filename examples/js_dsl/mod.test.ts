@@ -283,6 +283,30 @@ describe("mixed DSL + N-API", () => {
 		expect(mod.nodeRelease()).toEqual(process.release.name);
 	});
 
+	it("returns a TypedArray's backing ArrayBuffer and range", () => {
+		const backing = new ArrayBuffer(16);
+		const view = new Uint16Array(backing, 4, 3);
+
+		expect(mod.typedArrayInfoMatches(view, backing, 3, 4)).toBe(true);
+	});
+
+	it("rejects unsupported TypedArray element types", () => {
+		const Float16ArrayCtor = Reflect.get(globalThis, "Float16Array");
+		if (typeof Float16ArrayCtor !== "function") return;
+		const view = Reflect.construct(Float16ArrayCtor, [3]) as Uint16Array;
+
+		expect(() =>
+			mod.typedArrayInfoMatches(view, view.buffer, 3, 0),
+		).toThrow("UnsupportedTypedarrayType");
+	});
+
+	it("returns a DataView's backing ArrayBuffer and range", () => {
+		const backing = new ArrayBuffer(16);
+		const view = new DataView(backing, 4, 6);
+
+		expect(mod.dataViewInfoMatches(view, backing, 6, 4)).toBe(true);
+	});
+
 	it("randomBytes16 uses js.io() to produce a Uint8Array", () => {
 		const bytes = mod.randomBytes16();
 		expect(bytes).toBeInstanceOf(Uint8Array);
