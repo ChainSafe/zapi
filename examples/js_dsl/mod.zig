@@ -350,36 +350,6 @@ pub fn nodeRelease() !String {
     return String.from(std.mem.span(release));
 }
 
-pub fn typedArrayInfoMatches(
-    value: Value,
-    expected_arraybuffer: Value,
-    expected_length: Number,
-    expected_byte_offset: Number,
-) !Boolean {
-    const info = try value.toValue().getTypedarrayInfo();
-    const length: usize = @intCast(expected_length.assertU32());
-    const byte_offset: usize = @intCast(expected_byte_offset.assertU32());
-    if (info.length != length) return Boolean.from(false);
-    if (info.byte_offset != byte_offset) return Boolean.from(false);
-    if (info.data.len != length * info.array_type.elementSize()) return Boolean.from(false);
-    return Boolean.from(try info.arraybuffer.strictEquals(expected_arraybuffer.toValue()));
-}
-
-pub fn dataViewInfoMatches(
-    value: Value,
-    expected_arraybuffer: Value,
-    expected_byte_length: Number,
-    expected_byte_offset: Number,
-) !Boolean {
-    const info = try value.toValue().getDataviewInfo();
-    const byte_length: usize = @intCast(expected_byte_length.assertU32());
-    const byte_offset: usize = @intCast(expected_byte_offset.assertU32());
-    if (info.byte_length != byte_length) return Boolean.from(false);
-    if (info.byte_offset != byte_offset) return Boolean.from(false);
-    if (info.data.len != byte_length) return Boolean.from(false);
-    return Boolean.from(try info.arraybuffer.strictEquals(expected_arraybuffer.toValue()));
-}
-
 /// Generate 16 random bytes using the DSL-managed shared std.Io instance.
 pub fn randomBytes16() Uint8Array {
     var bytes: [16]u8 = undefined;
