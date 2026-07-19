@@ -144,13 +144,33 @@ pub const TypedarrayInfo = struct {
 
 /// https://nodejs.org/api/n-api.html#napi_get_typedarray_info
 pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
-    var info: TypedarrayInfo = undefined;
+    var array_type_raw: c.napi_typedarray_type = undefined;
+    var length: usize = undefined;
     var data: [*]u8 = undefined;
+    var arraybuffer: c.napi_value = undefined;
+    var byte_offset: usize = undefined;
     try status.check(
-        c.napi_get_typedarray_info(self.env, self.value, @ptrCast(&info.array_type), &info.length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
+        c.napi_get_typedarray_info(
+            self.env,
+            self.value,
+            &array_type_raw,
+            &length,
+            @ptrCast(&data),
+            &arraybuffer,
+            &byte_offset,
+        ),
     );
-    info.data = data[0 .. info.length * info.array_type.elementSize()];
-    return info;
+    const array_type: TypedarrayType = @enumFromInt(array_type_raw);
+    return .{
+        .array_type = array_type,
+        .length = length,
+        .data = data[0 .. length * array_type.elementSize()],
+        .arraybuffer = .{
+            .env = self.env,
+            .value = arraybuffer,
+        },
+        .byte_offset = byte_offset,
+    };
 }
 
 pub const DataViewInfo = struct {
@@ -162,13 +182,29 @@ pub const DataViewInfo = struct {
 
 /// https://nodejs.org/api/n-api.html#napi_get_dataview_info
 pub fn getDataviewInfo(self: Value) NapiError!DataViewInfo {
-    var info: DataViewInfo = undefined;
+    var byte_length: usize = undefined;
     var data: [*]u8 = undefined;
+    var arraybuffer: c.napi_value = undefined;
+    var byte_offset: usize = undefined;
     try status.check(
-        c.napi_get_dataview_info(self.env, self.value, &info.byte_length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
+        c.napi_get_dataview_info(
+            self.env,
+            self.value,
+            &byte_length,
+            @ptrCast(&data),
+            &arraybuffer,
+            &byte_offset,
+        ),
     );
-    info.data = data[0..info.byte_length];
-    return info;
+    return .{
+        .byte_length = byte_length,
+        .data = data[0..byte_length],
+        .arraybuffer = .{
+            .env = self.env,
+            .value = arraybuffer,
+        },
+        .byte_offset = byte_offset,
+    };
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_date_value
