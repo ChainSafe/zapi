@@ -13,7 +13,7 @@ value: c.napi_value,
 
 const Value = @This();
 
-fn napiByteSlice(data: ?*anyopaque, byte_length: usize) []u8 {
+fn byteSlice(data: ?*anyopaque, byte_length: usize) []u8 {
     if (byte_length == 0) return &.{};
     // The N-API zero-length case, where data may be null or arbitrary, was handled above.
     const byte_ptr: [*]u8 = @ptrCast(data.?);
@@ -119,7 +119,7 @@ pub fn getArrayBufferInfo(self: Value) NapiError![]u8 {
     try status.check(
         c.napi_get_arraybuffer_info(self.env, self.value, &data, &byte_length),
     );
-    return napiByteSlice(data, byte_length);
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_buffer_info
@@ -129,7 +129,7 @@ pub fn getBufferInfo(self: Value) NapiError![]u8 {
     try status.check(
         c.napi_get_buffer_info(self.env, self.value, &data, &byte_length),
     );
-    return napiByteSlice(data, byte_length);
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_prototype
@@ -177,7 +177,7 @@ pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
     return .{
         .array_type = array_type,
         .length = length,
-        .data = napiByteSlice(data, length * array_type.elementSize()),
+        .data = byteSlice(data, length * array_type.elementSize()),
         .arraybuffer = .{
             .env = self.env,
             .value = arraybuffer,
@@ -211,7 +211,7 @@ pub fn getDataviewInfo(self: Value) NapiError!DataViewInfo {
     );
     return .{
         .byte_length = byte_length,
-        .data = napiByteSlice(data, byte_length),
+        .data = byteSlice(data, byte_length),
         .arraybuffer = .{
             .env = self.env,
             .value = arraybuffer,
@@ -577,8 +577,8 @@ pub fn objectSeal(self: Value) NapiError!void {
     );
 }
 
-test "napiByteSlice normalizes null data for zero byte length" {
-    const bytes = napiByteSlice(null, 0);
+test "byteSlice normalizes null data for zero byte length" {
+    const bytes = byteSlice(null, 0);
 
     try std.testing.expectEqual(@as(usize, 0), bytes.len);
 }
