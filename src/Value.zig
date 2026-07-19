@@ -15,6 +15,7 @@ const Value = @This();
 
 fn napiByteSlice(data: ?*anyopaque, byte_length: usize) []u8 {
     if (byte_length == 0) return &.{};
+    // The N-API zero-length case, where data may be null or arbitrary, was handled above.
     const byte_ptr: [*]u8 = @ptrCast(data.?);
     return byte_ptr[0..byte_length];
 }

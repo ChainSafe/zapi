@@ -350,6 +350,16 @@ pub fn nodeRelease() !String {
     return String.from(std.mem.span(release));
 }
 
+pub fn arrayBufferByteLength(value: Value) !Number {
+    const bytes = try value.toValue().getArrayBufferInfo();
+    return Number.from(bytes.len);
+}
+
+pub fn bufferByteLength(value: Value) !Number {
+    const bytes = try value.toValue().getBufferInfo();
+    return Number.from(bytes.len);
+}
+
 pub fn typedArrayInfoMatches(
     value: Value,
     expected_arraybuffer: Value,
