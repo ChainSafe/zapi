@@ -235,7 +235,11 @@ pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError!
     );
     // napi guarantees raw_sign ∈ {0, 1}
     if (sign_bit) |s| s.* = @intCast(raw_sign);
-    return words[0..word_count];
+    // `word_count` is set by NAPI to the actual number of 64-bit words in the
+    // BigInt, which may exceed `words.len` when the value is larger than the
+    // buffer. NAPI fills `words` up to `words.len`; clamp the returned slice
+    // so callers get only the words that were actually written.
+    return words[0..@min(word_count, words.len)];
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_value_external
