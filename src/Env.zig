@@ -253,6 +253,17 @@ pub fn createArrayBuffer(self: Env, size: usize, out: ?*[*]u8) NapiError!Value {
     };
 }
 
+/// Creates an ArrayBuffer containing a copy of `data`.
+/// The returned ArrayBuffer owns its backing memory and may be mutated independently of `data`.
+pub fn createArrayBufferCopy(self: Env, data: []const u8) NapiError!Value {
+    if (data.len == 0) return self.createArrayBuffer(0, null);
+
+    var output: [*]u8 = undefined;
+    const value = try self.createArrayBuffer(data.len, &output);
+    @memcpy(output[0..data.len], data);
+    return value;
+}
+
 /// https://nodejs.org/api/n-api.html#napi_create_buffer
 pub fn createBuffer(self: Env, size: usize, out: ?*[*]u8) NapiError!Value {
     var value: c.napi_value = undefined;
@@ -265,6 +276,8 @@ pub fn createBuffer(self: Env, size: usize, out: ?*[*]u8) NapiError!Value {
     };
 }
 
+/// Creates a Buffer containing a copy of `data`.
+/// The returned Buffer owns its backing memory and may be mutated independently of `data`.
 /// https://nodejs.org/api/n-api.html#napi_create_buffer_copy
 pub fn createBufferCopy(self: Env, data: []const u8, out: ?*[*]u8) NapiError!Value {
     var value: c.napi_value = undefined;
@@ -301,13 +314,21 @@ pub fn createExternal(self: Env, data: [*]const u8, finalize_cb: c.napi_finalize
     };
 }
 
+/// Creates an ArrayBuffer backed by caller-owned mutable memory.
+/// JavaScript may mutate `data`. It must remain valid until `finalize_cb` runs, or until the
+/// end of the ArrayBuffer's lifetime when no finalizer is provided.
 /// https://nodejs.org/api/n-api.html#napi_create_external_arraybuffer
-pub fn createExternalArrayBuffer(self: Env, data: []const u8, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Value {
+pub fn createExternalArrayBuffer(
+    self: Env,
+    data: []u8,
+    finalize_cb: c.napi_finalize,
+    finalize_hint: ?*anyopaque,
+) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
         c.napi_create_external_arraybuffer(
             self.env,
-            @ptrCast(@constCast(data.ptr)),
+            @ptrCast(data.ptr),
             data.len,
             finalize_cb,
             finalize_hint,
@@ -320,11 +341,26 @@ pub fn createExternalArrayBuffer(self: Env, data: []const u8, finalize_cb: c.nap
     };
 }
 
+/// Creates a Buffer backed by caller-owned mutable memory.
+/// JavaScript may mutate `data`. It must remain valid until `finalize_cb` runs, or until the
+/// end of the Buffer's lifetime when no finalizer is provided.
 /// https://nodejs.org/api/n-api.html#napi_create_external_buffer
-pub fn createExternalBuffer(self: Env, data: []const u8, finalize_cb: c.napi_finalize, finalize_hint: ?*anyopaque) NapiError!Value {
+pub fn createExternalBuffer(
+    self: Env,
+    data: []u8,
+    finalize_cb: c.napi_finalize,
+    finalize_hint: ?*anyopaque,
+) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_create_external_buffer(self.env, data.len, @ptrCast(@constCast(data.ptr)), finalize_cb, finalize_hint, &value),
+        c.napi_create_external_buffer(
+            self.env,
+            data.len,
+            @ptrCast(data.ptr),
+            finalize_cb,
+            finalize_hint,
+            &value,
+        ),
     );
     return Value{
         .env = self.env,

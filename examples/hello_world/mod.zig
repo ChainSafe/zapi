@@ -62,6 +62,36 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
+    try module.setNamedProperty("copyArrayBuffer", try env.createFunction(
+        "copyArrayBuffer",
+        1,
+        copy_arraybuffer,
+        null,
+    ));
+
+    try module.setNamedProperty("copyBuffer", try env.createFunction(
+        "copyBuffer",
+        0,
+        copy_buffer,
+        null,
+    ));
+
+    try module.setNamedProperty("externalBuffer", try env.createFunction(
+        "externalBuffer",
+        0,
+        zapi.createCallback(0, external_buffer, .{
+            .returns = .external_buffer,
+        }),
+        null,
+    ));
+
+    try module.setNamedProperty("externalBufferFirstByte", try env.createFunction(
+        "externalBufferFirstByte",
+        0,
+        zapi.createCallback(0, external_buffer_first_byte, .{}),
+        null,
+    ));
+
     try module.setNamedProperty("update", try env.createFunction(
         "update",
         1,
@@ -137,6 +167,25 @@ fn add_semimanual(env: zapi.Env, a: i32, b: zapi.Value) !zapi.Value {
 
 fn surprise() []const u8 {
     return "Surprise!";
+}
+
+fn copy_arraybuffer(env: zapi.Env, cb: zapi.CallbackInfo(1)) !zapi.Value {
+    if (try cb.arg(0).getValueBool()) return try env.createArrayBufferCopy("");
+    return try env.createArrayBufferCopy("copy me");
+}
+
+fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {
+    return try env.createBufferCopy("copy me", null);
+}
+
+var external_buffer_data = [_]u8{ 1, 2, 3 };
+
+fn external_buffer() []u8 {
+    return &external_buffer_data;
+}
+
+fn external_buffer_first_byte() u8 {
+    return external_buffer_data[0];
 }
 
 const S = struct {
