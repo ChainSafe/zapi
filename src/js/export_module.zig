@@ -2,6 +2,7 @@ const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
 const io_context = @import("io.zig");
+const lifecycle = @import("lifecycle.zig");
 const wrap_function = @import("wrap_function.zig");
 const wrap_class = @import("wrap_class.zig");
 const class_meta = @import("class_meta.zig");
@@ -32,9 +33,11 @@ const class_runtime = @import("class_runtime.zig");
 ///   have been processed and *before* the module's `init` hook (if present).
 ///   `exports` is the JavaScript object that will hold the module's exports.
 ///
-/// The DSL internally manages an atomic refcount for module instances across
+/// The DSL internally manages a refcount for module instances across
 /// different N-API environments, and uses the same env lifecycle to retain a
-/// shared `js.io()` handle for the addon.
+/// shared `js.io()` handle for the addon. Lifecycle hooks are serialized
+/// across environments; if export registration fails after a successful
+/// `init`, `cleanup` runs before the error propagates.
 ///
 /// Usage Examples:
 /// ```zig
@@ -62,10 +65,20 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_register = @hasField(@TypeOf(options), "register");
-    const has_lifecycle = has_init or has_cleanup;
 
     const State = struct {
-        var env_refcount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0);
+        const Lifecycle = lifecycle.SharedResource(void, .{
+            .init = lifecycleInit,
+            .cleanup = lifecycleCleanup,
+        });
+
+        fn lifecycleInit(_: *void, prev_refcount: u32) !void {
+            if (has_init) try options.init(prev_refcount);
+        }
+
+        fn lifecycleCleanup(_: *void, new_refcount: u32) void {
+            if (has_cleanup) options.cleanup(new_refcount);
+        }
 
         // addEnvCleanupHook requires a non-null *Data pointer.
         const CleanupData = struct {
@@ -74,13 +87,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
         var cleanup_data: CleanupData = .{};
 
         fn cleanupHook(_: *CleanupData) void {
-            if (has_lifecycle) {
-                const prev = env_refcount.fetchSub(1, .acq_rel);
-                const new_refcount = prev - 1;
-                if (has_cleanup) {
-                    options.cleanup(new_refcount);
-                }
-            }
+            Lifecycle.release();
             io_context.release();
         }
     };
@@ -96,17 +103,12 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 io_context.release();
             };
 
-            var prev_refcount: u32 = 0;
-            if (has_lifecycle) {
-                prev_refcount = State.env_refcount.fetchAdd(1, .monotonic);
-                errdefer if (!cleanup_hook_registered) {
-                    _ = State.env_refcount.fetchSub(1, .acq_rel);
-                };
-
-                if (has_init) {
-                    try options.init(prev_refcount);
-                }
-            }
+            // On init failure the refcount is untouched; on later registration
+            // failure the rollback release runs `cleanup` with the right count.
+            _ = try State.Lifecycle.retain();
+            errdefer if (!cleanup_hook_registered) {
+                State.Lifecycle.release();
+            };
 
             _ = try registerDecls(Module, env, module, 0);
 
