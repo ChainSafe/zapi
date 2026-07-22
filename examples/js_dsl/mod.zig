@@ -316,6 +316,18 @@ pub const Buffer = struct {
 // Section 10: Mixed DSL + N-API
 // ============================================================================
 
+/// Narrow an untyped value to a Number via the `js.Value` narrowing API.
+pub fn narrowToNumber(v: Value) !Number {
+    return v.asNumber();
+}
+
+/// Narrow an untyped value to a Uint8Array and return its length.
+pub fn narrowToUint8ArrayLen(v: Value) !Number {
+    const arr = try v.asUint8Array();
+    const slice = try arr.toSlice();
+    return Number.from(@as(u32, @intCast(slice.len)));
+}
+
 /// Return the JS typeof string for any value.
 /// Demonstrates dropping down to low-level napi to call raw N-API methods.
 pub fn getTypeOf(val: Value) !String {

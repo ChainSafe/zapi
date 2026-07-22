@@ -147,6 +147,25 @@ describe("primitive types", () => {
 	});
 });
 
+describe("value narrowing", () => {
+	it("narrows numbers", () => {
+		expect(mod.narrowToNumber(42)).toEqual(42);
+	});
+
+	it("rejects non-numbers", () => {
+		expect(() => mod.narrowToNumber("42")).toThrow();
+		expect(() => mod.narrowToNumber({})).toThrow();
+		expect(() => mod.narrowToNumber(42n)).toThrow();
+	});
+
+	it("narrows typed arrays by exact subtype", () => {
+		expect(mod.narrowToUint8ArrayLen(new Uint8Array(3))).toEqual(3);
+		expect(() => mod.narrowToUint8ArrayLen(new Int8Array(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen(new Uint8ClampedArray(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen([1, 2, 3])).toThrow();
+	});
+});
+
 // Section 4: Typed Objects
 describe("typed objects", () => {
 	it("formatConfig returns formatted string", () => {

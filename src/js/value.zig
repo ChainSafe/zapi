@@ -245,4 +245,15 @@ pub const Value = struct {
     pub fn toValue(self: Value) napi.Value {
         return self.val;
     }
+
+    fn expectType(self: Value, expected: ValueType) TypeError!void {
+        const actual = self.val.typeof() catch return error.TypeMismatch;
+        if (actual != expected) return error.TypeMismatch;
+    }
+
+    fn expectTypedArrayOfType(self: Value, expected: TypedarrayType) TypeError!void {
+        if (!(self.val.isTypedarray() catch return error.TypeMismatch)) return error.TypeMismatch;
+        const info = self.val.getTypedarrayInfo() catch return error.TypeMismatch;
+        if (info.array_type != expected) return error.TypeMismatch;
+    }
 };
