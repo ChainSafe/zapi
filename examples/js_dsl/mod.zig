@@ -102,11 +102,10 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
 
 /// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
 ///
-/// Throws if word_count > 1.
+/// Throws `Overflow` if the BigInt needs more than one word.
 pub fn bigIntFirstWord(n: BigInt) !Number {
     var words: [1]u64 = .{0};
-    const got = try n.toValue().getValueBigintWords(null, &words);
-    if (got.len > 1) return error.BigIntTooLarge;
+    _ = try n.toValue().getValueBigintWords(null, &words);
     return Number.from(words[0]);
 }
 
@@ -116,6 +115,14 @@ pub fn bigIntSign(n: BigInt) !Number {
     var words: [1]u64 = .{0};
     _ = try n.toValue().getValueBigintWords(&sign, &words);
     return Number.from(@as(u32, sign));
+}
+
+/// Convert a BigInt to an i128 and render it as a decimal string.
+pub fn bigIntToI128String(n: BigInt) !String {
+    const v = try n.toI128();
+    var buf: [48]u8 = undefined;
+    const s = std.fmt.bufPrint(&buf, "{d}", .{v}) catch return error.FormatError;
+    return String.from(s);
 }
 
 /// Add one day (86400000ms) to a Date.

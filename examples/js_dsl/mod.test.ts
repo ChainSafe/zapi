@@ -110,6 +110,28 @@ describe("primitive types", () => {
 			expect(mod.bigIntSign(-0xffffffffffffffffn)).toEqual(1);
 		});
 
+		it("rejects BigInts wider than the provided word buffer", () => {
+			expect(() => mod.bigIntFirstWord(2n ** 64n)).toThrow();
+			expect(() => mod.bigIntFirstWord(2n ** 200n)).toThrow();
+		});
+	});
+
+	describe("toI128", () => {
+		it("round-trips values across the i128 range", () => {
+			expect(mod.bigIntToI128String(0n)).toEqual("0");
+			expect(mod.bigIntToI128String(123n)).toEqual("123");
+			expect(mod.bigIntToI128String(-123n)).toEqual("-123");
+			expect(mod.bigIntToI128String(2n ** 127n - 1n)).toEqual((2n ** 127n - 1n).toString());
+			expect(mod.bigIntToI128String(-(2n ** 127n))).toEqual((-(2n ** 127n)).toString());
+		});
+
+		it("rejects BigInts outside the i128 range instead of crashing", () => {
+			expect(() => mod.bigIntToI128String(2n ** 127n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 127n) - 1n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 128n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 200n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 200n))).toThrow();
+		});
 	});
 
 	it("tomorrow adds one day", () => {
