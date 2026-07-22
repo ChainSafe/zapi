@@ -411,6 +411,7 @@ pub fn wrapClass(comptime T: type) type {
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
                     class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr) catch {
+                        class_runtime.destroyNativeObject(T, obj_ptr);
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
                     };

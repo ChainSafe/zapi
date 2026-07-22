@@ -8,12 +8,12 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
+/// On error the caller keeps ownership of `native_object`: the wrap is
+/// detached so the finalizer cannot fire, but the object is not destroyed.
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
-    errdefer if (env.removeWrap(T, object)) |removed| {
-        destroyNativeObject(T, removed);
-    } else |_| {};
+    errdefer _ = env.removeWrap(T, object) catch {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
@@ -68,9 +68,12 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
         .ctor_ref = try env.createReference(ctor, 1),
         .next = State.head,
     };
-    State.head = entry;
+    errdefer entry.ctor_ref.delete() catch {};
 
+    // Link only after the cleanup hook is registered: a hook failure must not
+    // leave a freed entry reachable from the list head.
     try env.addEnvCleanupHook(State.Entry, entry, State.cleanupHook);
+    State.head = entry;
 }
 
 /// Per-thread marker set by `materializeClassInstance` to tell the generated
