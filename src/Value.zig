@@ -149,7 +149,8 @@ pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
     try status.check(
         c.napi_get_typedarray_info(self.env, self.value, @ptrCast(&info.array_type), &info.length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
     );
-    info.data = data[0 .. info.length * info.array_type.elementSize()];
+    const elem_size = info.array_type.elementSize() orelse return error.GenericFailure;
+    info.data = data[0 .. info.length * elem_size];
     return info;
 }
 
