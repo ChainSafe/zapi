@@ -242,6 +242,12 @@ describe("Counter class", () => {
 		expect(() => getCount.call(new mod.Buffer(4))).toThrow();
 	});
 
+	it("rejects constructor calls without new", () => {
+		expect(() => mod.Counter(5)).toThrow(TypeError);
+		expect(() => mod.Point()).toThrow(TypeError);
+		expect(() => Reflect.apply(mod.Counter, undefined, [5])).toThrow(TypeError);
+	});
+
 	it("increments", () => {
 		const c = new mod.Counter(0);
 		c.increment();
