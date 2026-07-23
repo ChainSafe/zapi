@@ -13,6 +13,7 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
+    // Assumed infallible: a failing removeWrap leaves the finalizer live and the caller double-frees.
     errdefer _ = env.removeWrap(T, object) catch {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
