@@ -167,6 +167,21 @@ describe("typed arrays", () => {
 		expect(Array.from(result)).toEqual([2.5, 5.0, 7.5]);
 	});
 
+	it("accepts empty Uint8Array and Float64Array values", () => {
+		expect(mod.uint8Sum(new Uint8Array(0))).toEqual(0);
+		const result = mod.float64Scale(new Float64Array(0), 2.5);
+		expect(result).toBeInstanceOf(Float64Array);
+		expect(result).toHaveLength(0);
+	});
+
+	it("accepts a detached Uint8Array value", () => {
+		const backing = new ArrayBuffer(8);
+		const view = new Uint8Array(backing, 2, 3);
+		structuredClone(backing, { transfer: [backing] });
+
+		expect(mod.uint8Sum(view)).toEqual(0);
+	});
+
 	it("allocUint8 allocates and fills via alloc pattern", () => {
 		const result = mod.allocUint8(5);
 		expect(result).toBeInstanceOf(Uint8Array);
@@ -307,6 +322,38 @@ describe("mixed DSL + N-API", () => {
 		const view = new DataView(backing, 4, 6);
 
 		expect(mod.dataViewInfoMatches(view, backing, 6, 4)).toBe(true);
+	});
+
+	it("reports zero byte length for empty and detached ArrayBuffers", () => {
+		expect(mod.arrayBufferByteLength(new ArrayBuffer(0))).toEqual(0);
+
+		const detached = new ArrayBuffer(8);
+		structuredClone(detached, { transfer: [detached] });
+		expect(mod.arrayBufferByteLength(detached)).toEqual(0);
+	});
+
+	it("reports zero byte length for an empty Buffer", () => {
+		expect(mod.bufferByteLength(Buffer.alloc(0))).toEqual(0);
+	});
+
+	it("reports zero range for empty and detached TypedArrays", () => {
+		const empty = new Uint8Array(0);
+		expect(mod.typedArrayInfoMatches(empty, empty.buffer, 0, 0)).toBe(true);
+
+		const backing = new ArrayBuffer(16);
+		const view = new Uint16Array(backing, 4, 3);
+		structuredClone(backing, { transfer: [backing] });
+		expect(mod.typedArrayInfoMatches(view, backing, 0, 0)).toBe(true);
+	});
+
+	it("reports zero range for empty and detached DataViews", () => {
+		const empty = new DataView(new ArrayBuffer(0));
+		expect(mod.dataViewInfoMatches(empty, empty.buffer, 0, 0)).toBe(true);
+
+		const backing = new ArrayBuffer(16);
+		const view = new DataView(backing, 4, 6);
+		structuredClone(backing, { transfer: [backing] });
+		expect(mod.dataViewInfoMatches(view, backing, 0, 0)).toBe(true);
 	});
 
 	it("randomBytes16 uses js.io() to produce a Uint8Array", () => {

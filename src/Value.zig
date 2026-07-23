@@ -13,6 +13,13 @@ value: c.napi_value,
 
 const Value = @This();
 
+fn byteSlice(data: ?*anyopaque, byte_length: usize) []u8 {
+    if (byte_length == 0) return &.{};
+    // The N-API zero-length case, where data may be null or arbitrary, was handled above.
+    const byte_ptr: [*]u8 = @ptrCast(data.?);
+    return byte_ptr[0..byte_length];
+}
+
 /// https://nodejs.org/api/n-api.html#napi_is_array
 pub fn isArray(self: Value) NapiError!bool {
     var is_array: bool = undefined;
@@ -107,22 +114,22 @@ pub fn getArrayLength(self: Value) NapiError!u32 {
 
 /// https://nodejs.org/api/n-api.html#napi_get_arraybuffer_info
 pub fn getArrayBufferInfo(self: Value) NapiError![]u8 {
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var byte_length: usize = undefined;
     try status.check(
-        c.napi_get_arraybuffer_info(self.env, self.value, @ptrCast(&data), &byte_length),
+        c.napi_get_arraybuffer_info(self.env, self.value, &data, &byte_length),
     );
-    return data[0..byte_length];
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_buffer_info
 pub fn getBufferInfo(self: Value) NapiError![]u8 {
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var byte_length: usize = undefined;
     try status.check(
-        c.napi_get_buffer_info(self.env, self.value, @ptrCast(&data), &byte_length),
+        c.napi_get_buffer_info(self.env, self.value, &data, &byte_length),
     );
-    return data[0..byte_length];
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_prototype
@@ -151,7 +158,7 @@ pub const TypedarrayInfoError = NapiError || error{
 pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
     var array_type_raw: c.napi_typedarray_type = undefined;
     var length: usize = undefined;
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var arraybuffer: c.napi_value = undefined;
     var byte_offset: usize = undefined;
     try status.check(
@@ -160,7 +167,7 @@ pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
             self.value,
             &array_type_raw,
             &length,
-            @ptrCast(&data),
+            &data,
             &arraybuffer,
             &byte_offset,
         ),
@@ -170,7 +177,7 @@ pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
     return .{
         .array_type = array_type,
         .length = length,
-        .data = data[0 .. length * array_type.elementSize()],
+        .data = byteSlice(data, length * array_type.elementSize()),
         .arraybuffer = .{
             .env = self.env,
             .value = arraybuffer,
@@ -189,7 +196,7 @@ pub const DataViewInfo = struct {
 /// https://nodejs.org/api/n-api.html#napi_get_dataview_info
 pub fn getDataviewInfo(self: Value) NapiError!DataViewInfo {
     var byte_length: usize = undefined;
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var arraybuffer: c.napi_value = undefined;
     var byte_offset: usize = undefined;
     try status.check(
@@ -197,14 +204,14 @@ pub fn getDataviewInfo(self: Value) NapiError!DataViewInfo {
             self.env,
             self.value,
             &byte_length,
-            @ptrCast(&data),
+            &data,
             &arraybuffer,
             &byte_offset,
         ),
     );
     return .{
         .byte_length = byte_length,
-        .data = data[0..byte_length],
+        .data = byteSlice(data, byte_length),
         .arraybuffer = .{
             .env = self.env,
             .value = arraybuffer,
@@ -568,4 +575,10 @@ pub fn objectSeal(self: Value) NapiError!void {
     try status.check(
         c.napi_object_seal(self.env, self.value),
     );
+}
+
+test "byteSlice normalizes null data for zero byte length" {
+    const bytes = byteSlice(null, 0);
+
+    try std.testing.expectEqual(@as(usize, 0), bytes.len);
 }
