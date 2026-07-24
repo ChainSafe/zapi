@@ -1,6 +1,6 @@
 .{
     .name = .zapi,
-    .version = "3.1.0", // x-release-please-version
+    .version = "3.1.1", // x-release-please-version
     .fingerprint = 0x77829ef951b38aac,
     .minimum_zig_version = "0.16.0",
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
