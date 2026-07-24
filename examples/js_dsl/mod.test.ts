@@ -96,9 +96,9 @@ describe("primitive types", () => {
 
 	describe("getValueBigintWords", () => {
 		it("reads words with null sign_bit (unsigned only)", () => {
-			expect(mod.bigIntFirstWord(0n)).toEqual(0);
-			expect(mod.bigIntFirstWord(1n)).toEqual(1);
-			expect(mod.bigIntFirstWord(0xdeadbeefn)).toEqual(0xdeadbeef);
+			expect(mod.bigIntSingleWord(0n)).toEqual(0);
+			expect(mod.bigIntSingleWord(1n)).toEqual(1);
+			expect(mod.bigIntSingleWord(0xdeadbeefn)).toEqual(0xdeadbeef);
 		});
 
 		it("reads correct sign (non-null sign_bit path)", () => {
@@ -111,8 +111,8 @@ describe("primitive types", () => {
 		});
 
 		it("rejects BigInts wider than the provided word buffer", () => {
-			expect(() => mod.bigIntFirstWord(2n ** 64n)).toThrow();
-			expect(() => mod.bigIntFirstWord(2n ** 200n)).toThrow();
+			expect(() => mod.bigIntSingleWord(2n ** 64n)).toThrow();
+			expect(() => mod.bigIntSingleWord(2n ** 200n)).toThrow();
 		});
 	});
 

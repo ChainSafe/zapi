@@ -100,10 +100,10 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
     return BigInt.from(val * 2);
 }
 
-/// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
+/// Read a single-word BigInt as a u64 via `getValueBigintWords` passing `null` for `sign_bit`.
 ///
 /// Throws `Overflow` if the BigInt needs more than one word.
-pub fn bigIntFirstWord(n: BigInt) !Number {
+pub fn bigIntSingleWord(n: BigInt) !Number {
     var words: [1]u64 = .{0};
     _ = try n.toValue().getValueBigintWords(null, &words);
     return Number.from(words[0]);
