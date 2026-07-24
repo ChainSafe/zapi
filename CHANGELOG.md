@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.1.1](https://github.com/ChainSafe/zapi/compare/zapi-v3.1.0...zapi-v3.1.1) (2026-07-24)
+
+
+### Bug Fixes
+
+* **dsl:** support class pointer arguments ([#50](https://github.com/ChainSafe/zapi/issues/50)) ([9dd2111](https://github.com/ChainSafe/zapi/commit/9dd211167c4774c5a79e3d6fd360c22adca0a138))
+* restore registerDecls on Zig 0.16 ([#59](https://github.com/ChainSafe/zapi/issues/59)) ([7f3af3e](https://github.com/ChainSafe/zapi/commit/7f3af3e7f5710892d441c80593adb35d028a93de))
+
+
+### Code Refactoring
+
+* **js:** unify env lifecycle refcounting ([#53](https://github.com/ChainSafe/zapi/issues/53)) ([d3d5056](https://github.com/ChainSafe/zapi/commit/d3d50565382e30580def5c71f48f310fdf6246fa))
+
+
+### Miscellaneous Chores
+
+* define changelog sections for release-please ([#54](https://github.com/ChainSafe/zapi/issues/54)) ([1c5e7b4](https://github.com/ChainSafe/zapi/commit/1c5e7b4c4e668ce425d0877212d58c88efa8525a))
+
 ## [3.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.0.0...zapi-v3.1.0) (2026-07-10)
 
 
