@@ -44,6 +44,7 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         pub fn toSlice(self: Self) ![]Element {
             const info = try self.val.getTypedarrayInfo();
             if (info.array_type != array_type) return error.TypeMismatch;
+            if (info.length == 0) return &.{};
             const byte_ptr: [*]u8 = info.data.ptr;
             const typed_ptr: [*]Element = @ptrCast(@alignCast(byte_ptr));
             return typed_ptr[0..info.length];

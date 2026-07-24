@@ -889,11 +889,11 @@ pub fn asyncInit(self: Env, async_resource: Value, async_resource_name: Value) N
 
 /// https://nodejs.org/api/n-api.html#napi_get_node_version
 pub fn getNodeVersion(self: Env) NapiError!NodeVersion {
-    var version: c.napi_node_version = undefined;
+    var version: [*c]const c.napi_node_version = undefined;
     try status.check(
-        c.napi_get_node_version(self.env, @ptrCast(&version)),
+        c.napi_get_node_version(self.env, &version),
     );
-    return NodeVersion{ .version = version };
+    return NodeVersion{ .version = version.* };
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_version
