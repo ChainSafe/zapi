@@ -8,12 +8,15 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
-/// On error the caller keeps ownership of `native_object`: the wrap is
-/// detached so the finalizer cannot fire, but the object is not destroyed.
+/// After a successful wrap, N-API owns `native_object` and frees it via the
+/// finalizer when the JS object is GC'd. On a later error the caller frees it
+/// instead, so the finalizer is detached first — it must not also fire, or the
+/// object is freed twice.
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
-    // Assumed infallible: a failing removeWrap leaves the finalizer live and the caller double-frees.
+    // Assumed infallible right after a successful wrap; if removeWrap ever
+    // failed the finalizer would stay live and both it and the caller would free.
     errdefer _ = env.removeWrap(T, object) catch {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
