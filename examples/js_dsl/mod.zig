@@ -100,13 +100,12 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
     return BigInt.from(val * 2);
 }
 
-/// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
+/// Read a single-word BigInt as a u64 via `getValueBigintWords` passing `null` for `sign_bit`.
 ///
-/// Throws if word_count > 1.
-pub fn bigIntFirstWord(n: BigInt) !Number {
+/// Throws `Overflow` if the BigInt needs more than one word.
+pub fn bigIntSingleWord(n: BigInt) !Number {
     var words: [1]u64 = .{0};
-    const got = try n.toValue().getValueBigintWords(null, &words);
-    if (got.len > 1) return error.BigIntTooLarge;
+    _ = try n.toValue().getValueBigintWords(null, &words);
     return Number.from(words[0]);
 }
 
@@ -116,6 +115,14 @@ pub fn bigIntSign(n: BigInt) !Number {
     var words: [1]u64 = .{0};
     _ = try n.toValue().getValueBigintWords(&sign, &words);
     return Number.from(@as(u32, sign));
+}
+
+/// Convert a BigInt to an i128 and render it as a decimal string.
+pub fn bigIntToI128String(n: BigInt) !String {
+    const v = try n.toI128();
+    var buf: [48]u8 = undefined;
+    const s = std.fmt.bufPrint(&buf, "{d}", .{v}) catch return error.FormatError;
+    return String.from(s);
 }
 
 /// Add one day (86400000ms) to a Date.
@@ -308,6 +315,18 @@ pub const Buffer = struct {
 // ============================================================================
 // Section 10: Mixed DSL + N-API
 // ============================================================================
+
+/// Narrow an untyped value to a Number via the `js.Value` narrowing API.
+pub fn narrowToNumber(v: Value) !Number {
+    return v.asNumber();
+}
+
+/// Narrow an untyped value to a Uint8Array and return its length.
+pub fn narrowToUint8ArrayLen(v: Value) !Number {
+    const arr = try v.asUint8Array();
+    const slice = try arr.toSlice();
+    return Number.from(@as(u32, @intCast(slice.len)));
+}
 
 /// Return the JS typeof string for any value.
 /// Demonstrates dropping down to low-level napi to call raw N-API methods.

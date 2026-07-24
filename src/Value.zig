@@ -149,7 +149,8 @@ pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
     try status.check(
         c.napi_get_typedarray_info(self.env, self.value, @ptrCast(&info.array_type), &info.length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
     );
-    info.data = data[0 .. info.length * info.array_type.elementSize()];
+    const elem_size = info.array_type.elementSize() orelse return error.GenericFailure;
+    info.data = data[0 .. info.length * elem_size];
     return info;
 }
 
@@ -223,16 +224,21 @@ pub fn getValueBigintUint64(self: Value, lossless: ?*bool) NapiError!u64 {
 /// In Ethereum's context, this is useful for big integers defined in the spec to be
 /// unsigned.
 ///
+/// Returns `error.Overflow` if the BigInt needs more words than `words` can hold:
+/// napi sets the out `word_count` to the *required* count, which may exceed the
+/// buffer, so slicing by it unchecked would read out of bounds.
+///
 /// NOTE: napi's C entry takes `int*` (4-byte aligned). Casting a u1 to int* is UB, since that
 /// is 4-bytes aligned. We use a local `c_int` for the napi call and narrow back to `u1` for the caller.
 ///
 /// Source: https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
-pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError![]u64 {
+pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) (NapiError || error{Overflow})![]u64 {
     var word_count: usize = words.len;
     var raw_sign: c_int = 0;
     try status.check(
         c.napi_get_value_bigint_words(self.env, self.value, &raw_sign, &word_count, words.ptr),
     );
+    if (word_count > words.len) return error.Overflow;
     // napi guarantees raw_sign ∈ {0, 1}
     if (sign_bit) |s| s.* = @intCast(raw_sign);
     return words[0..word_count];

@@ -34,6 +34,8 @@ pub const ValueType = enum(c.napi_valuetype) {
     function = c.napi_function,
     external = c.napi_external,
     bigint = c.napi_bigint,
+    // Non-exhaustive: future Node versions may add value types.
+    _,
 };
 
 /// https://nodejs.org/api/n-api.html#napi_typedarray_type
@@ -49,13 +51,18 @@ pub const TypedarrayType = enum(c.napi_typedarray_type) {
     float64 = c.napi_float64_array,
     bigint64 = c.napi_bigint64_array,
     biguint64 = c.napi_biguint64_array,
+    // Non-exhaustive: engines already ship array types napi doesn't name yet
+    // (e.g. Float16Array); unknown values must be representable, not UB.
+    _,
 
-    pub fn elementSize(self: TypedarrayType) usize {
+    /// Returns null for typedarray types this binding doesn't know about.
+    pub fn elementSize(self: TypedarrayType) ?usize {
         switch (self) {
             .int8, .uint8, .uint8_clamped => return 1,
             .int16, .uint16 => return 2,
             .int32, .uint32, .float32 => return 4,
             .float64, .bigint64, .biguint64 => return 8,
+            _ => return null,
         }
     }
 
@@ -72,9 +79,21 @@ pub const TypedarrayType = enum(c.napi_typedarray_type) {
             .float64 => return f64,
             .bigint64 => return i64,
             .biguint64 => return u64,
+            _ => @compileError("unknown typedarray type"),
         }
     }
 };
+
+test "elementSize returns null for unknown typedarray types" {
+    // e.g. Float16Array on newer engines: unknown values must not be UB.
+    const unknown: TypedarrayType = @enumFromInt(999);
+    try @import("std").testing.expect(unknown.elementSize() == null);
+}
+
+test "elementSize covers known typedarray types" {
+    try @import("std").testing.expectEqual(@as(?usize, 1), TypedarrayType.uint8.elementSize());
+    try @import("std").testing.expectEqual(@as(?usize, 8), TypedarrayType.biguint64.elementSize());
+}
 
 /// https://nodejs.org/api/n-api.html#napi_property_attributes
 pub const PropertyAttributes = enum(c.napi_property_attributes) {

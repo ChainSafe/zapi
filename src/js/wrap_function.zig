@@ -75,6 +75,7 @@ fn typedArrayName(comptime array_type: napi.value_types.TypedarrayType) []const 
         .float64 => "Float64Array",
         .bigint64 => "BigInt64Array",
         .biguint64 => "BigUint64Array",
+        _ => "TypedArray",
     };
 }
 

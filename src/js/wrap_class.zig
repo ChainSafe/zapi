@@ -360,6 +360,17 @@ pub fn wrapClass(comptime T: type) type {
                         return null;
                     };
 
+                    // Without `new`, `this` is the global proxy; wrapping it would
+                    // attach native state and a finalizer to globalThis.
+                    const new_target = e.getNewTarget(cb_info) catch {
+                        e.throwError("", "Failed to get new.target in constructor") catch {};
+                        return null;
+                    };
+                    if (new_target.value == null) {
+                        e.throwTypeError("", "Class constructor cannot be invoked without 'new'") catch {};
+                        return null;
+                    }
+
                     // Fast path: materializeClassInstance is creating this instance.
                     // Skip normal init; materialize will wrap the returned JS instance
                     // with the real native pointer after napi_new_instance returns.
@@ -400,6 +411,7 @@ pub fn wrapClass(comptime T: type) type {
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
                     class_runtime.wrapTaggedObject(T, e, this_val, obj_ptr) catch {
+                        class_runtime.destroyNativeObject(T, obj_ptr);
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
                     };

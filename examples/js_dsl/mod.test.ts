@@ -96,9 +96,9 @@ describe("primitive types", () => {
 
 	describe("getValueBigintWords", () => {
 		it("reads words with null sign_bit (unsigned only)", () => {
-			expect(mod.bigIntFirstWord(0n)).toEqual(0);
-			expect(mod.bigIntFirstWord(1n)).toEqual(1);
-			expect(mod.bigIntFirstWord(0xdeadbeefn)).toEqual(0xdeadbeef);
+			expect(mod.bigIntSingleWord(0n)).toEqual(0);
+			expect(mod.bigIntSingleWord(1n)).toEqual(1);
+			expect(mod.bigIntSingleWord(0xdeadbeefn)).toEqual(0xdeadbeef);
 		});
 
 		it("reads correct sign (non-null sign_bit path)", () => {
@@ -110,6 +110,28 @@ describe("primitive types", () => {
 			expect(mod.bigIntSign(-0xffffffffffffffffn)).toEqual(1);
 		});
 
+		it("rejects BigInts wider than the provided word buffer", () => {
+			expect(() => mod.bigIntSingleWord(2n ** 64n)).toThrow();
+			expect(() => mod.bigIntSingleWord(2n ** 200n)).toThrow();
+		});
+	});
+
+	describe("toI128", () => {
+		it("round-trips values across the i128 range", () => {
+			expect(mod.bigIntToI128String(0n)).toEqual("0");
+			expect(mod.bigIntToI128String(123n)).toEqual("123");
+			expect(mod.bigIntToI128String(-123n)).toEqual("-123");
+			expect(mod.bigIntToI128String(2n ** 127n - 1n)).toEqual((2n ** 127n - 1n).toString());
+			expect(mod.bigIntToI128String(-(2n ** 127n))).toEqual((-(2n ** 127n)).toString());
+		});
+
+		it("rejects BigInts outside the i128 range instead of crashing", () => {
+			expect(() => mod.bigIntToI128String(2n ** 127n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 127n) - 1n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 128n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 200n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 200n))).toThrow();
+		});
 	});
 
 	it("tomorrow adds one day", () => {
@@ -122,6 +144,25 @@ describe("primitive types", () => {
 	it("tomorrow rejects non-Date arguments at the JS boundary", () => {
 		expectTypeErrorWithMessage(() => mod.tomorrow("2025-01-01T00:00:00Z"), "Argument 1 must be a Date");
 		expectTypeErrorWithMessage(() => mod.tomorrow(123), "Argument 1 must be a Date");
+	});
+});
+
+describe("value narrowing", () => {
+	it("narrows numbers", () => {
+		expect(mod.narrowToNumber(42)).toEqual(42);
+	});
+
+	it("rejects non-numbers", () => {
+		expect(() => mod.narrowToNumber("42")).toThrow();
+		expect(() => mod.narrowToNumber({})).toThrow();
+		expect(() => mod.narrowToNumber(42n)).toThrow();
+	});
+
+	it("narrows typed arrays by exact subtype", () => {
+		expect(mod.narrowToUint8ArrayLen(new Uint8Array(3))).toEqual(3);
+		expect(() => mod.narrowToUint8ArrayLen(new Int8Array(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen(new Uint8ClampedArray(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen([1, 2, 3])).toThrow();
 	});
 });
 
@@ -218,6 +259,12 @@ describe("Counter class", () => {
 	it("rejects cross-class method binding", () => {
 		const getCount = mod.Counter.prototype.getCount;
 		expect(() => getCount.call(new mod.Buffer(4))).toThrow();
+	});
+
+	it("rejects constructor calls without new", () => {
+		expect(() => mod.Counter(5)).toThrow(TypeError);
+		expect(() => mod.Point()).toThrow(TypeError);
+		expect(() => Reflect.apply(mod.Counter, undefined, [5])).toThrow(TypeError);
 	});
 
 	it("increments", () => {

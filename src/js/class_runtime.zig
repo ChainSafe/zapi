@@ -8,12 +8,16 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
+/// After a successful wrap, N-API owns `native_object` and frees it via the
+/// finalizer when the JS object is GC'd. On a later error the caller frees it
+/// instead, so the finalizer is detached first — it must not also fire, or the
+/// object is freed twice.
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
-    errdefer if (env.removeWrap(T, object)) |removed| {
-        destroyNativeObject(T, removed);
-    } else |_| {};
+    // Assumed infallible right after a successful wrap; if removeWrap ever
+    // failed the finalizer would stay live and both it and the caller would free.
+    errdefer _ = env.removeWrap(T, object) catch {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
@@ -68,9 +72,12 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
         .ctor_ref = try env.createReference(ctor, 1),
         .next = State.head,
     };
-    State.head = entry;
+    errdefer entry.ctor_ref.delete() catch {};
 
+    // Link only after the cleanup hook is registered: a hook failure must not
+    // leave a freed entry reachable from the list head.
     try env.addEnvCleanupHook(State.Entry, entry, State.cleanupHook);
+    State.head = entry;
 }
 
 /// Per-thread marker set by `materializeClassInstance` to tell the generated
