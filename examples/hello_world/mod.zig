@@ -170,8 +170,8 @@ fn surprise() []const u8 {
 }
 
 fn copy_arraybuffer(env: zapi.Env, cb: zapi.CallbackInfo(1)) !zapi.Value {
-    if (try cb.arg(0).getValueBool()) return try env.createArrayBufferCopy("");
-    return try env.createArrayBufferCopy("copy me");
+    if (try cb.arg(0).getValueBool()) return try env.createArrayBufferCopy("", null);
+    return try env.createArrayBufferCopy("copy me", null);
 }
 
 fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {

@@ -255,12 +255,13 @@ pub fn createArrayBuffer(self: Env, size: usize, out: ?*[*]u8) NapiError!Value {
 
 /// Creates an ArrayBuffer containing a copy of `data`.
 /// The returned ArrayBuffer owns its backing memory and may be mutated independently of `data`.
-pub fn createArrayBufferCopy(self: Env, data: []const u8) NapiError!Value {
-    if (data.len == 0) return self.createArrayBuffer(0, null);
+pub fn createArrayBufferCopy(self: Env, data: []const u8, out: ?*[*]u8) NapiError!Value {
+    if (data.len == 0) return self.createArrayBuffer(0, out);
 
     var output: [*]u8 = undefined;
     const value = try self.createArrayBuffer(data.len, &output);
     @memcpy(output[0..data.len], data);
+    if (out) |result_data| result_data.* = output;
     return value;
 }
 
