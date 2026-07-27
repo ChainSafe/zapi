@@ -1,12 +1,13 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
+const class_meta = @import("class_meta.zig");
 
-pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
-    return .{
-        .lower = fnv1a64Parts(.{ "zapi:dsl:type-tag:lower:", @typeName(T) }),
-        .upper = fnv1a64Parts(.{ "zapi:dsl:type-tag:upper:", @typeName(T) }),
-    };
+/// Returns a stable tag derived from the addon's salt and the Zig class name.
+/// A class-level `.type_tag` salt replaces the module salt when present.
+pub fn typeTag(comptime T: type, comptime module_salt: []const u8) napi.c.napi_type_tag {
+    const salt = comptime class_meta.getTypeTagSalt(T) orelse module_salt;
+    return typeTagFromParts(.{ salt, "::", @typeName(T) });
 }
 
 /// Tags `object`, then wraps `native_object` into it with a finalizer.
@@ -14,30 +15,37 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
 /// The wrap is done last so it is the only fallible step that transfers
 /// ownership: once it succeeds N-API's finalizer owns `native_object`, and any
 /// earlier failure leaves nothing wrapped, so the caller still owns and frees it.
-pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
-    const tag = typeTag(T);
+pub fn wrapTaggedObject(
+    comptime T: type,
+    comptime module_salt: []const u8,
+    env: napi.Env,
+    object: napi.Value,
+    native_object: *T,
+) !void {
+    const tag = typeTag(T, module_salt);
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
 }
 
-/// Generates a deterministic 64-bit FNV-1a hash at compile-time.
-/// This is used to create stable `napi_type_tag` values for DSL classes
-/// based on their type names. FNV-1a is chosen for its simplicity, speed,
-/// and suitability for non-cryptographic unique-ish identification.
-///
-/// The `parts` argument allows concatenating multiple compile-time strings
-/// (e.g., prefixes and type names) into a single input for hashing.
-fn fnv1a64Parts(comptime parts: anytype) u64 {
-    var hash: u64 = 0xcbf29ce484222325;
+/// Builds a stable 128-bit Node-API type tag from a content identity using FNV-1a.
+fn typeTagFromParts(comptime parts: anytype) napi.c.napi_type_tag {
+    var hash: u128 = 0x6c62272e07bb0142_62b821756295c58d;
     inline for (parts) |part| {
         inline for (part) |byte| {
             hash ^= byte;
-            hash *%= 0x100000001b3;
+            hash *%= 0x0000000001000000_000000000000013B;
         }
     }
-    return hash;
+    return .{
+        .lower = @truncate(hash),
+        .upper = @truncate(hash >> 64),
+    };
+}
+
+fn typeTagFromIdent(comptime ident: []const u8) napi.c.napi_type_tag {
+    return typeTagFromParts(.{ident});
 }
 
 pub fn destroyNativeObject(comptime T: type, obj: *T) void {
@@ -113,7 +121,13 @@ pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.
     return true;
 }
 
-pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
+pub fn materializeClassInstance(
+    comptime T: type,
+    comptime module_salt: []const u8,
+    env: napi.Env,
+    instance: T,
+    preferred_ctor: ?napi.Value,
+) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
 
     const obj_ptr = try context.allocator().create(T);
@@ -147,7 +161,7 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     // `napi_new_instance`; otherwise a subclass returned a replacement object.
     if (!(try expected_instance.strictEquals(js_instance))) return error.InvalidMaterializationConstructor;
 
-    try wrapTaggedObject(T, env, js_instance, obj_ptr);
+    try wrapTaggedObject(T, module_salt, env, js_instance, obj_ptr);
     return js_instance;
 }
 
@@ -226,4 +240,49 @@ fn markers(comptime T: type) type {
 
 fn internalCtorMarkerPtr(comptime T: type) *u8 {
     return &markers(T).ctor_marker;
+}
+
+test "distinct type tag identities produce distinct tags" {
+    try std.testing.expect(
+        !std.meta.eql(
+            typeTagFromIdent("addon@example::mod.Foo"),
+            typeTagFromIdent("addon@example::mod.Bar"),
+        ),
+    );
+}
+
+test "module salts distinguish the same Zig class" {
+    const Tagged = struct {
+        pub const js_meta = class_meta.class(.{});
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, "addon-a"), typeTag(Tagged, "addon-b")),
+    );
+}
+
+test "class salt overrides the module salt" {
+    const Tagged = struct {
+        pub const js_meta = class_meta.class(.{ .type_tag = "class-uuid" });
+    };
+    try std.testing.expectEqual(
+        typeTag(Tagged, "addon-a"),
+        typeTag(Tagged, "addon-b"),
+    );
+}
+
+test "type tag identity hashing is deterministic" {
+    try std.testing.expectEqual(
+        typeTagFromIdent("addon@example::mod.Foo"),
+        typeTagFromIdent("addon@example::mod.Foo"),
+    );
+}
+
+test "type tag identity hashing matches the FNV-1a known vector" {
+    try std.testing.expectEqual(
+        napi.c.napi_type_tag{
+            .lower = 9205288767444028904,
+            .upper = 12488879969338687231,
+        },
+        typeTagFromIdent("napi@1.0.0::x::Foo"),
+    );
 }

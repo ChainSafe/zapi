@@ -150,7 +150,12 @@ fn missingClassMetaHint(comptime T: type) ?type {
 /// pointers for class types.
 /// Returns `error.TypeMismatch` if type validation fails or an N-API class
 /// cannot be unwrapped. Compile-time error for unsupported `T` type.
-pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env) !T {
+pub fn convertArg(
+    comptime T: type,
+    comptime type_tag_salt: []const u8,
+    raw: napi.c.napi_value,
+    env: napi.c.napi_env,
+) !T {
     const value = napi.Value{ .env = env, .value = raw };
 
     if (T == napi.Value) {
@@ -162,14 +167,22 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
     }
     if (comptime class_meta.isClassType(T)) {
         const e = napi.Env{ .env = env };
-        const ptr = e.unwrapChecked(T, value, class_runtime.typeTag(T)) catch return error.TypeMismatch;
+        const ptr = e.unwrapChecked(
+            T,
+            value,
+            class_runtime.typeTag(T, type_tag_salt),
+        ) catch return error.TypeMismatch;
         return ptr.*;
     }
     switch (@typeInfo(T)) {
         .pointer => |ptr| {
             if (comptime ptr.size == .one and class_meta.isClassType(ptr.child)) {
                 const e = napi.Env{ .env = env };
-                return e.unwrapChecked(ptr.child, value, class_runtime.typeTag(ptr.child)) catch error.TypeMismatch;
+                return e.unwrapChecked(
+                    ptr.child,
+                    value,
+                    class_runtime.typeTag(ptr.child, type_tag_salt),
+                ) catch error.TypeMismatch;
             }
         },
         else => {},
@@ -188,6 +201,7 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
 /// Otherwise, it performs conversion using `convertArg`.
 pub fn convertArgWithOptional(
     comptime T: type,
+    comptime type_tag_salt: []const u8,
     raw: napi.c.napi_value,
     env: napi.c.napi_env,
     param_index: usize,
@@ -198,9 +212,9 @@ pub fn convertArgWithOptional(
         const raw_value = napi.Value{ .env = env, .value = raw };
         if ((try raw_value.typeof()) == .undefined) return null;
         const Inner = @typeInfo(T).optional.child;
-        return try convertArg(Inner, raw, env);
+        return try convertArg(Inner, type_tag_salt, raw, env);
     }
-    return try convertArg(T, raw, env);
+    return try convertArg(T, type_tag_salt, raw, env);
 }
 
 /// Converts a Zig value into a raw `napi.c.napi_value`, handling various DSL
@@ -213,7 +227,13 @@ pub fn convertArgWithOptional(
 /// materialization.
 /// Panics if N-API operations fail for `void` or class materialization.
 /// Compile-time error for unsupported `T` type.
-pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, preferred_ctor: ?napi.Value) napi.c.napi_value {
+pub fn convertReturnWithCtor(
+    comptime T: type,
+    comptime type_tag_salt: []const u8,
+    value: T,
+    env: napi.c.napi_env,
+    preferred_ctor: ?napi.Value,
+) napi.c.napi_value {
     if (T == void) {
         var result: napi.c.napi_value = null;
         napi.status.check(napi.c.napi_get_undefined(env, &result)) catch return null;
@@ -227,7 +247,13 @@ pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, p
     }
     if (comptime class_meta.isClassType(T)) {
         const e = napi.Env{ .env = env };
-        const instance = class_runtime.materializeClassInstance(T, e, value, preferred_ctor) catch {
+        const instance = class_runtime.materializeClassInstance(
+            T,
+            type_tag_salt,
+            e,
+            value,
+            preferred_ctor,
+        ) catch {
             e.throwError("", "Failed to materialize returned class instance") catch {};
             return null;
         };
@@ -243,8 +269,13 @@ pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, p
 ///
 /// This is a convenience wrapper around `convertReturnWithCtor` that does not
 /// provide a preferred constructor for class materialization.
-pub fn convertReturn(comptime T: type, value: T, env: napi.c.napi_env) napi.c.napi_value {
-    return convertReturnWithCtor(T, value, env, null);
+pub fn convertReturn(
+    comptime T: type,
+    comptime type_tag_salt: []const u8,
+    value: T,
+    env: napi.c.napi_env,
+) napi.c.napi_value {
+    return convertReturnWithCtor(T, type_tag_salt, value, env, null);
 }
 
 /// Calls the user-provided Zig function with the given arguments and converts
@@ -254,7 +285,13 @@ pub fn convertReturn(comptime T: type, value: T, env: napi.c.napi_env) napi.c.na
 /// and combinations (`!?T`). If the function returns an error, it throws a
 /// JavaScript `Error`. If it returns `null` or `undefined`, it returns JS `undefined`.
 /// A `preferred_ctor` can be provided for class materialization in return types.
-pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func)), env: napi.c.napi_env, preferred_ctor: ?napi.Value) napi.c.napi_value {
+pub fn callAndConvertWithCtor(
+    comptime func: anytype,
+    comptime type_tag_salt: []const u8,
+    args: std.meta.ArgsTuple(@TypeOf(func)),
+    env: napi.c.napi_env,
+    preferred_ctor: ?napi.Value,
+) napi.c.napi_value {
     const ReturnType = @typeInfo(@TypeOf(func)).@"fn".return_type.?;
 
     const ret_info = @typeInfo(ReturnType);
@@ -273,7 +310,13 @@ pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@
         // !?T — optional inside error union
         if (payload_info == .optional) {
             if (result) |val| {
-                return convertReturnWithCtor(payload_info.optional.child, val, env, preferred_ctor);
+                return convertReturnWithCtor(
+                    payload_info.optional.child,
+                    type_tag_salt,
+                    val,
+                    env,
+                    preferred_ctor,
+                );
             } else {
                 var undef: napi.c.napi_value = null;
                 napi.status.check(napi.c.napi_get_undefined(env, &undef)) catch return null;
@@ -282,14 +325,20 @@ pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@
         }
 
         // !T — plain error union
-        return convertReturnWithCtor(Payload, result, env, preferred_ctor);
+        return convertReturnWithCtor(Payload, type_tag_salt, result, env, preferred_ctor);
     }
 
     // ?T — optional (no error)
     if (ret_info == .optional) {
         const result = @call(.auto, func, args);
         if (result) |val| {
-            return convertReturnWithCtor(ret_info.optional.child, val, env, preferred_ctor);
+            return convertReturnWithCtor(
+                ret_info.optional.child,
+                type_tag_salt,
+                val,
+                env,
+                preferred_ctor,
+            );
         } else {
             var undef: napi.c.napi_value = null;
             napi.status.check(napi.c.napi_get_undefined(env, &undef)) catch return null;
@@ -299,7 +348,7 @@ pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@
 
     // Plain T
     const result = @call(.auto, func, args);
-    return convertReturnWithCtor(ReturnType, result, env, preferred_ctor);
+    return convertReturnWithCtor(ReturnType, type_tag_salt, result, env, preferred_ctor);
 }
 
 /// Calls the user-provided Zig function with the given arguments and converts
@@ -307,8 +356,13 @@ pub fn callAndConvertWithCtor(comptime func: anytype, args: std.meta.ArgsTuple(@
 ///
 /// This is a convenience wrapper around `callAndConvertWithCtor` that does not
 /// provide a preferred constructor for class materialization.
-pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(func)), env: napi.c.napi_env) napi.c.napi_value {
-    return callAndConvertWithCtor(func, args, env, null);
+pub fn callAndConvert(
+    comptime func: anytype,
+    comptime type_tag_salt: []const u8,
+    args: std.meta.ArgsTuple(@TypeOf(func)),
+    env: napi.c.napi_env,
+) napi.c.napi_value {
+    return callAndConvertWithCtor(func, type_tag_salt, args, env, null);
 }
 
 /// Generates a C-ABI `napi_callback` that wraps a ZAPI DSL-typed Zig function.
@@ -323,7 +377,7 @@ pub fn callAndConvert(comptime func: anytype, args: std.meta.ArgsTuple(@TypeOf(f
 ///   5. Sets up thread-local `thisArg` context if it's an instance method/getter/setter.
 ///
 /// Panics if N-API operations fail during callback info retrieval or argument conversion.
-pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
+pub fn wrapFunction(comptime func: anytype, comptime type_tag_salt: []const u8) napi.c.napi_callback {
     const FnType = @TypeOf(func);
     const fn_info = @typeInfo(FnType).@"fn";
     const params = fn_info.params;
@@ -359,13 +413,20 @@ pub fn wrapFunction(comptime func: anytype) napi.c.napi_callback {
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..argc) |i| {
                 const ParamType = params[i].type.?;
-                args[i] = convertArgWithOptional(ParamType, raw_args[i], raw_env, i, actual_argc) catch {
+                args[i] = convertArgWithOptional(
+                    ParamType,
+                    type_tag_salt,
+                    raw_args[i],
+                    raw_env,
+                    i,
+                    actual_argc,
+                ) catch {
                     throwArgTypeError(e, ParamType, i);
                     return null;
                 };
             }
 
-            return callAndConvert(func, args, raw_env);
+            return callAndConvert(func, type_tag_salt, args, raw_env);
         }
     };
     return wrapper.callback;

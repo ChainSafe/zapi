@@ -60,7 +60,11 @@ pub const Counter = struct {
     }
 };
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+    });
+}
 ```
 
 **JavaScript usage:**
@@ -73,7 +77,7 @@ c.increment();
 c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
+`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. `type_tag` is a stable addon-unique salt used to derive every class's 128-bit Node-API type tag. Generate it once (a UUID is recommended) and keep it unchanged across builds so class identities remain stable across addon reloads.
 
 ---
 
@@ -257,6 +261,7 @@ JS: `cfg.volume = 80; cfg.label; // "default"`
 
 **Rules:**
 - `pub const js_meta = js.class(.{})` marks a struct as a JS class
+- `.type_tag = "..."` optionally replaces the module's type-tag salt for one class; a UUID is recommended
 - `.properties = .{ .name = js.prop(.{ .get = true, .set = false }) }` registers a readonly getter backed by `pub fn name(...)`
 - `.properties = .{ .name = js.prop(.{ .get = true, .set = true }) }` registers getter/setter methods using `name` and `setName`
 - `.properties = .{ .name = js.prop(.{ .get = "customGetter", .set = false }) }` registers a getter backed by a specifically named method
@@ -319,7 +324,11 @@ Import Zig modules as `pub const` to create JS namespaces. The DSL recursively r
 pub const math = @import("math.zig");     // → exports.math.multiply(...)
 pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+    });
+}
 ```
 
 Namespaces nest arbitrarily — a sub-module with more `pub const` imports creates deeper nesting.
@@ -333,6 +342,7 @@ Namespaces nest arbitrarily — a sub-module with more `pub const` imports creat
 ```zig
 comptime {
     js.exportModule(@This(), .{
+        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
         .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
         .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
     });

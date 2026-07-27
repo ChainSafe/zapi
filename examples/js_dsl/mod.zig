@@ -665,6 +665,7 @@ pub const BlsPublicKey = struct {
 
 comptime {
     js.exportModule(@This(), .{
+        .type_tag = "8ef3566d-9606-4133-8ca6-fb50bb2b4d2e",
         .init = struct {
             fn f(refcount: u32) !void {
                 const count = module_init_count.fetchAdd(1, .monotonic);
