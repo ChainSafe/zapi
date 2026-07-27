@@ -8,19 +8,17 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
-/// After a successful wrap, N-API owns `native_object` and frees it via the
-/// finalizer when the JS object is GC'd. On a later error the caller frees it
-/// instead, so the finalizer is detached first — it must not also fire, or the
-/// object is freed twice.
+/// Tags `object`, then wraps `native_object` into it with a finalizer.
+///
+/// The wrap is done last so it is the only fallible step that transfers
+/// ownership: once it succeeds N-API's finalizer owns `native_object`, and any
+/// earlier failure leaves nothing wrapped, so the caller still owns and frees it.
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
-    try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
-    // Assumed infallible right after a successful wrap; if removeWrap ever
-    // failed the finalizer would stay live and both it and the caller would free.
-    errdefer _ = env.removeWrap(T, object) catch {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
+    try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
 }
 
 /// Generates a deterministic 64-bit FNV-1a hash at compile-time.
