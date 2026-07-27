@@ -82,11 +82,17 @@ pub fn toValue(
         .pointer => |p| {
             const h = hint;
             if (p.child == u8 and p.size == .slice) {
+                if (h == .external_buffer) {
+                    if (p.is_const) {
+                        @compileError("external buffers require a mutable byte slice");
+                    }
+                    const bytes: []u8 = @ptrCast(v);
+                    return try env.createExternalBuffer(bytes, null, null);
+                }
+
                 const bytes: []const u8 = @ptrCast(v);
                 if (h == .string) {
                     return try env.createStringUtf8(bytes);
-                } else if (h == .external_buffer) {
-                    return try env.createExternalBuffer(bytes, null, null);
                 } else if (h == .buffer or h == .auto) {
                     return try env.createBufferCopy(bytes, null);
                 }
