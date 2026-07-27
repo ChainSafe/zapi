@@ -403,13 +403,13 @@ pub fn wrapClass(comptime T: type) type {
 
                     // Allocate before init so a failed allocation can't strand
                     // the resources init_result owns.
-                    const obj_ptr = std.heap.c_allocator.create(T) catch {
+                    const obj_ptr = context.allocator().create(T) catch {
                         e.throwError("", "Out of memory allocating native object") catch {};
                         return null;
                     };
 
                     const init_result = callInit(init_fn, args) orelse {
-                        std.heap.c_allocator.destroy(obj_ptr);
+                        context.allocator().destroy(obj_ptr);
                         return null;
                     };
                     obj_ptr.* = init_result;

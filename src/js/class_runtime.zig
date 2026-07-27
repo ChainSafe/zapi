@@ -1,5 +1,6 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
+const context = @import("context.zig");
 
 pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     return .{
@@ -43,7 +44,7 @@ pub fn destroyNativeObject(comptime T: type, obj: *T) void {
     if (@hasDecl(T, "deinit")) {
         obj.deinit();
     }
-    std.heap.c_allocator.destroy(obj);
+    context.allocator().destroy(obj);
 }
 
 pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
@@ -62,8 +63,8 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
 
     if (State.find(env.env) != null) return;
 
-    const entry = try std.heap.c_allocator.create(State.Entry);
-    errdefer std.heap.c_allocator.destroy(entry);
+    const entry = try context.allocator().create(State.Entry);
+    errdefer context.allocator().destroy(entry);
 
     entry.* = .{
         .env = env.env,
@@ -115,7 +116,7 @@ pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.
 pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
 
-    const obj_ptr = try std.heap.c_allocator.create(T);
+    const obj_ptr = try context.allocator().create(T);
     errdefer destroyNativeObject(T, obj_ptr);
     obj_ptr.* = instance;
 
@@ -203,7 +204,7 @@ fn state(comptime T: type) type {
                 if (current == entry) {
                     cursor.* = current.next;
                     current.ctor_ref.delete() catch {};
-                    std.heap.c_allocator.destroy(current);
+                    context.allocator().destroy(current);
                     return;
                 }
                 cursor = &current.next;
