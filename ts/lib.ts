@@ -137,10 +137,6 @@ export function getZigTriple(target: Target): string {
 let isMuslCache: boolean | null = null;
 
 const isMusl = () => {
-  if (process.platform !== "linux") {
-    return false;
-  }
-
   if (isMuslCache !== null) {
     return isMuslCache;
   }
