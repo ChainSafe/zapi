@@ -76,6 +76,13 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
+    try module.setNamedProperty("copySlice", try env.createFunction(
+        "copySlice",
+        0,
+        zapi.createCallback(0, copy_slice, .{}),
+        null,
+    ));
+
     try module.setNamedProperty("externalBuffer", try env.createFunction(
         "externalBuffer",
         0,
@@ -85,10 +92,10 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
-    try module.setNamedProperty("externalBufferFirstByte", try env.createFunction(
-        "externalBufferFirstByte",
+    try module.setNamedProperty("externalBufferFinalizedCount", try env.createFunction(
+        "externalBufferFinalizedCount",
         0,
-        zapi.createCallback(0, external_buffer_first_byte, .{}),
+        zapi.createCallback(0, external_buffer_finalized_count, .{}),
         null,
     ));
 
@@ -178,14 +185,68 @@ fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {
     return try env.createBufferCopy("copy me", null);
 }
 
-var external_buffer_data = [_]u8{ 1, 2, 3 };
+const external_buffer_source = [_]u8{ 1, 2, 3 };
 
-fn external_buffer() []u8 {
-    return &external_buffer_data;
+/// Makes the GC-driven free observable to the JavaScript integration test.
+const ExternalBufferTrackingAllocator = struct {
+    child_allocator: std.mem.Allocator,
+    finalized_count: std.atomic.Value(u32) = .init(0),
+
+    const Self = @This();
+    const data_size = external_buffer_source.len;
+
+    fn allocator(self: *Self) std.mem.Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = alloc,
+                .resize = std.mem.Allocator.noResize,
+                .remap = std.mem.Allocator.noRemap,
+                .free = free,
+            },
+        };
+    }
+
+    fn alloc(
+        context: *anyopaque,
+        len: usize,
+        alignment: std.mem.Alignment,
+        return_address: usize,
+    ) ?[*]u8 {
+        const self: *Self = @ptrCast(@alignCast(context));
+        return self.child_allocator.rawAlloc(len, alignment, return_address);
+    }
+
+    fn free(
+        context: *anyopaque,
+        memory: []u8,
+        alignment: std.mem.Alignment,
+        return_address: usize,
+    ) void {
+        const self: *Self = @ptrCast(@alignCast(context));
+        const is_buffer_data = memory.len == data_size;
+        self.child_allocator.rawFree(memory, alignment, return_address);
+        if (is_buffer_data) _ = self.finalized_count.fetchAdd(1, .monotonic);
+    }
+};
+
+var slice_data = [_]u8{ 1, 2, 3 };
+var external_buffer_allocator: ExternalBufferTrackingAllocator = .{
+    .child_allocator = allocator,
+};
+
+fn copy_slice() []u8 {
+    return &slice_data;
 }
 
-fn external_buffer_first_byte() u8 {
-    return external_buffer_data[0];
+fn external_buffer() !zapi.OwnedBuffer {
+    const owned_allocator = external_buffer_allocator.allocator();
+    const data = try owned_allocator.dupe(u8, &external_buffer_source);
+    return zapi.OwnedBuffer.fromOwnedSlice(owned_allocator, data);
+}
+
+fn external_buffer_finalized_count() u32 {
+    return external_buffer_allocator.finalized_count.load(.monotonic);
 }
 
 const S = struct {
