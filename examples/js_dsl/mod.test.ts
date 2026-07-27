@@ -671,6 +671,7 @@ describe("class return interop", () => {
 
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
+		const { once } = await import("node:events");
 		const { Worker } = await import("node:worker_threads");
 		const { resolve } = await import("node:path");
 		const { fileURLToPath } = await import("node:url");
@@ -691,22 +692,15 @@ describe("module lifecycle - worker threads", () => {
 			{ eval: true, workerData: { nativePath } },
 		);
 
-		// Worker should see an incremented refcount
-		const workerRefcount = await new Promise((resolve) => {
-			worker.on("message", (msg) => {
-				resolve(msg.refcount);
-			});
-		});
-		expect(workerRefcount).toBeGreaterThan(refcountBefore);
+		// Node may drain the queued message and emit exit in the same turn.
+		// Register both listeners before yielding so neither event can be missed.
+		const [[message], [exitCode]] = await Promise.all([
+			once(worker, "message"),
+			once(worker, "exit"),
+		]);
 
-		// Wait for worker to exit (triggers cleanup hook)
-		await new Promise((resolve) => {
-			worker.on("exit", () => resolve(undefined));
-		});
-
-		// After worker exits, refcount should be back to what it was
-		// Give a small delay for cleanup hook to fire
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(message.refcount).toBeGreaterThan(refcountBefore);
+		expect(exitCode).toEqual(0);
 		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
 	});
 });
