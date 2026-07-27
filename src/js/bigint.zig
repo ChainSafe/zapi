@@ -38,19 +38,22 @@ pub const BigInt = struct {
     ///
     /// This function reads the BigInt as two 64-bit words and reconstructs it
     /// into a Zig `i128`. It handles both positive and negative BigInts.
-    /// Returns an error if N-API operations fail.
+    /// Returns `error.Overflow` if the value is outside the i128 range, and an
+    /// error if N-API operations fail.
     pub fn toI128(self: BigInt) !i128 {
         var sign_bit: u1 = 0;
         var words: [2]u64 = .{ 0, 0 };
         const result = try self.val.getValueBigintWords(&sign_bit, &words);
-        const lo: u128 = result[0];
+        const lo: u128 = if (result.len > 0) result[0] else 0;
         const hi: u128 = if (result.len > 1) result[1] else 0;
         const magnitude: u128 = (hi << 64) | lo;
+        const max_positive: u128 = std.math.maxInt(i128);
         if (sign_bit == 1) {
-            // Negative: negate the magnitude
-            if (magnitude == 0) return 0;
+            if (magnitude > max_positive + 1) return error.Overflow;
+            if (magnitude == max_positive + 1) return std.math.minInt(i128);
             return -@as(i128, @intCast(magnitude));
         }
+        if (magnitude > max_positive) return error.Overflow;
         return @intCast(magnitude);
     }
 

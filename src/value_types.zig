@@ -34,6 +34,8 @@ pub const ValueType = enum(c.napi_valuetype) {
     function = c.napi_function,
     external = c.napi_external,
     bigint = c.napi_bigint,
+    // Non-exhaustive: future Node versions may add value types.
+    _,
 };
 
 /// https://nodejs.org/api/n-api.html#napi_typedarray_type
@@ -75,6 +77,11 @@ pub const TypedarrayType = enum(c.napi_typedarray_type) {
         }
     }
 };
+
+test "elementSize covers known typedarray types" {
+    try @import("std").testing.expectEqual(@as(usize, 1), TypedarrayType.uint8.elementSize());
+    try @import("std").testing.expectEqual(@as(usize, 8), TypedarrayType.biguint64.elementSize());
+}
 
 /// https://nodejs.org/api/n-api.html#napi_property_attributes
 pub const PropertyAttributes = enum(c.napi_property_attributes) {
