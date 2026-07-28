@@ -450,9 +450,11 @@ const callback = napi.createCallback(0, makeExternalBuffer, .{
 });
 ```
 
-`OwnedBuffer` frees the allocation if conversion fails. After a successful transfer, its N-API
-finalizer frees the allocation when JavaScript collects the Buffer. The allocator itself must remain
-valid until that finalizer runs. Environments that disallow external buffers fall back to a copy.
+`OwnedBuffer.intoValue` consumes the buffer even if conversion fails, so the caller must not
+deinitialize it afterwards. Once N-API accepts the external buffer, the allocator must remain valid
+until its finalizer runs, including if N-API subsequently reports an error. If the environment
+disallows external buffers, `intoValue` copies the bytes and releases the original allocation before
+returning.
 
 ### Creating Classes
 

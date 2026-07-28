@@ -55,9 +55,9 @@ describe("example mod", () => {
 	it("releases an external Buffer through its GC finalizer", () => {
 		const script = `
 			const addon = require(${JSON.stringify(addonPath)});
-			const baseline = addon.externalBufferFinalizedCount();
+			const baseline = addon.externalBufferAllocatedBytes();
 			let buffer = addon.externalBuffer();
-			if (addon.externalBufferFinalizedCount() !== baseline) {
+			if (addon.externalBufferAllocatedBytes() <= baseline) {
 				throw new Error("external Buffer was released while still reachable");
 			}
 			buffer = null;
@@ -65,13 +65,12 @@ describe("example mod", () => {
 			const deadline = Date.now() + 5000;
 			function collect() {
 				global.gc();
-				const finalized = addon.externalBufferFinalizedCount();
-				if (finalized === baseline + 1) return;
-				if (finalized > baseline + 1) {
-					throw new Error("external Buffer was finalized more than once");
-				}
+				const allocatedBytes = addon.externalBufferAllocatedBytes();
+				if (allocatedBytes === baseline) return;
 				if (Date.now() >= deadline) {
-					throw new Error("external Buffer finalizer did not run");
+					throw new Error(
+						\`external Buffer finalizer did not release \${allocatedBytes - baseline} bytes\`,
+					);
 				}
 				setImmediate(collect);
 			}

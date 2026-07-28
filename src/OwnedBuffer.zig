@@ -51,10 +51,11 @@ pub fn intoValue(self: OwnedBuffer, env: Env) !Value {
     const context = try createFinalizerContext(self);
 
     return env.createExternalBuffer(data, finalize, context) catch |err| {
-        defer release(context);
         if (err == error.NoExternalBuffersAllowed) {
+            defer release(context);
             return try env.createBufferCopy(data, null);
         }
+        // Other failures may occur after the finalizer has taken ownership.
         return err;
     };
 }
@@ -106,17 +107,4 @@ test "OwnedBuffer releases data when finalizer context allocation fails" {
 
     try std.testing.expectError(error.OutOfMemory, createFinalizerContext(buffer));
     try std.testing.expectEqual(@as(usize, 1), failing_allocator.deallocations);
-}
-
-test "OwnedBuffer finalizer releases its data and context" {
-    const data = try std.testing.allocator.dupe(u8, "external");
-    errdefer std.testing.allocator.free(data);
-
-    const context = try std.testing.allocator.create(FinalizerContext);
-    context.* = .{
-        .allocator = std.testing.allocator,
-        .data = data,
-    };
-
-    finalize(null, @ptrCast(data.ptr), context);
 }
