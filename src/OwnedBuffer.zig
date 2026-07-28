@@ -110,6 +110,8 @@ test "OwnedBuffer releases data when finalizer context allocation fails" {
 
 test "OwnedBuffer finalizer releases its data and context" {
     const data = try std.testing.allocator.dupe(u8, "external");
+    errdefer std.testing.allocator.free(data);
+
     const context = try std.testing.allocator.create(FinalizerContext);
     context.* = .{
         .allocator = std.testing.allocator,
