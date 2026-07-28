@@ -96,6 +96,12 @@
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_register_decls.node",
         },
+        .function_only_dsl_compile = .{
+            .root_module = .function_only_dsl_compile,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "function_only_dsl_compile.node",
+        },
     },
     .tests = .{
         .napi = .{ .root_module = .napi },
@@ -117,10 +123,6 @@
         },
         .example_addon_isolation = .{
             .root_module = .example_addon_isolation,
-            .linker_allow_shlib_undefined = true,
-        },
-        .function_only_dsl_compile = .{
-            .root_module = .function_only_dsl_compile,
             .linker_allow_shlib_undefined = true,
         },
     },

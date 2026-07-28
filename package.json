@@ -13,7 +13,7 @@
 		"build": "pnpm build:js && pnpm build:zig",
 		"build:js": "tsc --outDir lib",
 		"build:zig": "zig build",
-		"test:zig": "zig build test:zapi test:function_only_dsl_compile",
+		"test:zig": "zig build test:zapi",
 		"test:js": "vitest run examples/**/*.test.ts",
 		"test": "pnpm test:zig && pnpm test:js",
 		"lint:zig": "zig fmt src",
