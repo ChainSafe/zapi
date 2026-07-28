@@ -190,7 +190,7 @@ const external_buffer_source = [_]u8{ 1, 2, 3 };
 var slice_data = [_]u8{ 1, 2, 3 };
 var external_buffer_allocator: std.heap.DebugAllocator(.{
     .enable_memory_limit = true,
-    .thread_safe = true,
+    .thread_safe = false,
 }) = .init;
 
 fn copy_slice() []u8 {
@@ -204,9 +204,6 @@ fn external_buffer() !zapi.OwnedBuffer {
 }
 
 fn external_buffer_allocated_bytes() usize {
-    std.Io.Threaded.mutexLock(&external_buffer_allocator.mutex);
-    defer std.Io.Threaded.mutexUnlock(&external_buffer_allocator.mutex);
-
     return external_buffer_allocator.total_requested_bytes;
 }
 
