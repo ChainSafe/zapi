@@ -40,6 +40,7 @@ pub const BigUint64Array = typed_arrays.BigUint64Array;
 pub const Promise = @import("js/promise.zig").Promise;
 pub const createPromise = @import("js/promise.zig").createPromise;
 
+pub const NoAddonIdentity = @import("js/class_runtime.zig").NoAddonIdentity;
 pub const wrapFunction = @import("js/wrap_function.zig").wrapFunction;
 pub const wrapClass = @import("js/wrap_class.zig").wrapClass;
 pub const exportModule = @import("js/export_module.zig").exportModule;

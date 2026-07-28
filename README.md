@@ -24,6 +24,30 @@ Add the Zig dependency to your `build.zig.zon`:
 },
 ```
 
+After creating the shared-library compile step for the final `.node` artifact,
+attach its package and artifact identity in the addon's `build.zig`:
+
+```zig
+const std = @import("std");
+const zapi_build = @import("zapi");
+
+fn configureAddonIdentity(
+    b: *std.Build,
+    addon: *std.Build.Step.Compile,
+) void {
+    const manifest = @import("build.zig.zon");
+    zapi_build.addAddonIdentity(b, addon, manifest);
+}
+```
+
+Each logically distinct addon needs a unique compile-step name and its own root
+module. Configure each root module once. Aliases or installed copies of one
+compiled addon keep the identity embedded in that artifact.
+
+Zig 0.16 does not expose a `.path` dependency's `build.zig` as an import. Keep
+the URL/hash dependency declaration above and use
+`zig build --fork=/path/to/zapi` when developing against a local checkout.
+
 ---
 
 ## Zig Library — Quick Start
@@ -62,7 +86,7 @@ pub const Counter = struct {
 
 comptime {
     js.exportModule(@This(), .{
-        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+        .identity = @import("zapi_addon_identity"),
     });
 }
 ```
@@ -77,7 +101,20 @@ c.increment();
 c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. `type_tag` is a stable addon-unique salt used to derive every class's 128-bit Node-API type tag. Generate it once (a UUID is recommended) and keep it unchanged across builds so class identities remain stable across addon reloads.
+`pub` functions are auto-exported, and structs with `js_meta = js.class(...)`
+become JS classes. Class type tags are derived at compile time from the Zig
+package name, version, fingerprint, addon artifact name, and class type name.
+This keeps two loaded copies of one addon compatible while isolating different
+addons and package versions. Modules that export only functions and never
+accept or return DSL classes may continue to use `js.exportModule(@This(), .{})`.
+
+```text
+FNV-1a-128(package@version#fingerprint::addon::ZigType)
+```
+
+Low-level wrapper and conversion APIs take the same identity type explicitly.
+Code paths that cannot accept or return DSL classes pass
+`js.NoAddonIdentity`.
 
 ---
 
@@ -261,7 +298,6 @@ JS: `cfg.volume = 80; cfg.label; // "default"`
 
 **Rules:**
 - `pub const js_meta = js.class(.{})` marks a struct as a JS class
-- `.type_tag = "..."` optionally replaces the module's type-tag salt for one class; a UUID is recommended
 - `.properties = .{ .name = js.prop(.{ .get = true, .set = false }) }` registers a readonly getter backed by `pub fn name(...)`
 - `.properties = .{ .name = js.prop(.{ .get = true, .set = true }) }` registers getter/setter methods using `name` and `setName`
 - `.properties = .{ .name = js.prop(.{ .get = "customGetter", .set = false }) }` registers a getter backed by a specifically named method
@@ -326,7 +362,7 @@ pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
 
 comptime {
     js.exportModule(@This(), .{
-        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+        .identity = @import("zapi_addon_identity"),
     });
 }
 ```
@@ -342,7 +378,7 @@ Namespaces nest arbitrarily — a sub-module with more `pub const` imports creat
 ```zig
 comptime {
     js.exportModule(@This(), .{
-        .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+        .identity = @import("zapi_addon_identity"),
         .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
         .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
     });

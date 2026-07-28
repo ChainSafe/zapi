@@ -22,6 +22,6 @@ pub fn incrementCounter(counter: *Counter) void {
 
 comptime {
     js.exportModule(@This(), .{
-        .type_tag = "bf260670-570b-48a8-9343-8dc4dcbce5aa",
+        .identity = @import("zapi_addon_identity"),
     });
 }

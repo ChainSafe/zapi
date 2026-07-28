@@ -1,13 +1,27 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
-const class_meta = @import("class_meta.zig");
 
-/// Returns a stable tag derived from the addon's salt and the Zig class name.
-/// A class-level `.type_tag` salt replaces the module salt when present.
-pub fn typeTag(comptime T: type, comptime module_salt: []const u8) napi.c.napi_type_tag {
-    const salt = comptime class_meta.getTypeTagSalt(T) orelse module_salt;
-    return typeTagFromParts(.{ salt, "::", @typeName(T) });
+pub const NoAddonIdentity = struct {};
+
+/// Returns a stable tag derived from the package, addon artifact, and Zig class.
+pub fn typeTag(comptime T: type, comptime Identity: type) napi.c.napi_type_tag {
+    validateIdentity(Identity);
+    const fingerprint = comptime std.fmt.comptimePrint(
+        "{x}",
+        .{Identity.package_fingerprint},
+    );
+    return typeTagFromParts(.{
+        Identity.package_name,
+        "@",
+        Identity.package_version,
+        "#",
+        fingerprint,
+        "::",
+        Identity.addon_name,
+        "::",
+        @typeName(T),
+    });
 }
 
 /// Tags `object`, then wraps `native_object` into it with a finalizer.
@@ -17,12 +31,12 @@ pub fn typeTag(comptime T: type, comptime module_salt: []const u8) napi.c.napi_t
 /// earlier failure leaves nothing wrapped, so the caller still owns and frees it.
 pub fn wrapTaggedObject(
     comptime T: type,
-    comptime module_salt: []const u8,
+    comptime Identity: type,
     env: napi.Env,
     object: napi.Value,
     native_object: *T,
 ) !void {
-    const tag = typeTag(T, module_salt);
+    const tag = typeTag(T, Identity);
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
@@ -44,8 +58,36 @@ fn typeTagFromParts(comptime parts: anytype) napi.c.napi_type_tag {
     };
 }
 
-fn typeTagFromIdent(comptime ident: []const u8) napi.c.napi_type_tag {
-    return typeTagFromParts(.{ident});
+fn validateIdentity(comptime Identity: type) void {
+    if (Identity == NoAddonIdentity) {
+        @compileError(
+            "DSL class bindings require .identity = @import(\"zapi_addon_identity\"); " ++
+                "call zapi.addAddonIdentity from the addon's build.zig",
+        );
+    }
+    inline for (.{
+        "package_name",
+        "package_version",
+        "package_fingerprint",
+        "addon_name",
+    }) |decl_name| {
+        if (!@hasDecl(Identity, decl_name)) {
+            @compileError("zapi addon identity is missing ." ++ decl_name);
+        }
+    }
+    if (@TypeOf(Identity.package_name) != []const u8 or
+        @TypeOf(Identity.package_version) != []const u8 or
+        @TypeOf(Identity.addon_name) != []const u8 or
+        @TypeOf(Identity.package_fingerprint) != u64)
+    {
+        @compileError("zapi addon identity has invalid field types");
+    }
+    if (Identity.package_name.len == 0 or
+        Identity.package_version.len == 0 or
+        Identity.addon_name.len == 0)
+    {
+        @compileError("zapi addon identity strings must not be empty");
+    }
 }
 
 pub fn destroyNativeObject(comptime T: type, obj: *T) void {
@@ -123,7 +165,7 @@ pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.
 
 pub fn materializeClassInstance(
     comptime T: type,
-    comptime module_salt: []const u8,
+    comptime Identity: type,
     env: napi.Env,
     instance: T,
     preferred_ctor: ?napi.Value,
@@ -161,7 +203,7 @@ pub fn materializeClassInstance(
     // `napi_new_instance`; otherwise a subclass returned a replacement object.
     if (!(try expected_instance.strictEquals(js_instance))) return error.InvalidMaterializationConstructor;
 
-    try wrapTaggedObject(T, module_salt, env, js_instance, obj_ptr);
+    try wrapTaggedObject(T, Identity, env, js_instance, obj_ptr);
     return js_instance;
 }
 
@@ -242,38 +284,74 @@ fn internalCtorMarkerPtr(comptime T: type) *u8 {
     return &markers(T).ctor_marker;
 }
 
-test "distinct type tag identities produce distinct tags" {
-    try std.testing.expect(
-        !std.meta.eql(
-            typeTagFromIdent("addon@example::mod.Foo"),
-            typeTagFromIdent("addon@example::mod.Bar"),
-        ),
-    );
-}
-
-test "module salts distinguish the same Zig class" {
-    const Tagged = struct {
-        pub const js_meta = class_meta.class(.{});
+test "package versions distinguish the same Zig class" {
+    const Tagged = struct {};
+    const VersionOne = struct {
+        pub const package_name: []const u8 = "addon";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
+    };
+    const VersionTwo = struct {
+        pub const package_name: []const u8 = "addon";
+        pub const package_version: []const u8 = "2.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
     };
     try std.testing.expect(
-        !std.meta.eql(typeTag(Tagged, "addon-a"), typeTag(Tagged, "addon-b")),
+        !std.meta.eql(typeTag(Tagged, VersionOne), typeTag(Tagged, VersionTwo)),
     );
 }
 
-test "class salt overrides the module salt" {
-    const Tagged = struct {
-        pub const js_meta = class_meta.class(.{ .type_tag = "class-uuid" });
+test "package fingerprints distinguish the same Zig class" {
+    const Tagged = struct {};
+    const PackageOne = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1111;
+        pub const addon_name: []const u8 = "native";
     };
-    try std.testing.expectEqual(
-        typeTag(Tagged, "addon-a"),
-        typeTag(Tagged, "addon-b"),
+    const PackageTwo = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x2222;
+        pub const addon_name: []const u8 = "native";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, PackageOne), typeTag(Tagged, PackageTwo)),
     );
 }
 
-test "type tag identity hashing is deterministic" {
-    try std.testing.expectEqual(
-        typeTagFromIdent("addon@example::mod.Foo"),
-        typeTagFromIdent("addon@example::mod.Foo"),
+test "addon artifacts distinguish the same Zig class" {
+    const Tagged = struct {};
+    const AddonOne = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "addon-one";
+    };
+    const AddonTwo = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "addon-two";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, AddonOne), typeTag(Tagged, AddonTwo)),
+    );
+}
+
+test "Zig class names distinguish types within the same addon" {
+    const First = struct {};
+    const Second = struct {};
+    const Identity = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(First, Identity), typeTag(Second, Identity)),
     );
 }
 
@@ -283,6 +361,6 @@ test "type tag identity hashing matches the FNV-1a known vector" {
             .lower = 9205288767444028904,
             .upper = 12488879969338687231,
         },
-        typeTagFromIdent("napi@1.0.0::x::Foo"),
+        typeTagFromParts(.{"napi@1.0.0::x::Foo"}),
     );
 }

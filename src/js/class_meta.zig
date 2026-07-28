@@ -48,8 +48,6 @@ fn ClassMeta(comptime Options: type) type {
 ///   name is used. Can be an `?[]const u8` or `[]const u8`.
 /// - `.properties: struct`: A struct literal where each field corresponds to a
 ///   JS property. The value for each field must be a `js.prop(...)` call.
-/// - `.type_tag: []const u8`: Optional stable salt overriding the addon's
-///   default type-tag salt for this class. A UUID is recommended.
 ///
 /// Compile-time errors will be raised if `opts` contains unsupported fields or
 /// if `properties` are not correctly defined using `js.prop`.
@@ -154,13 +152,6 @@ pub fn getClassName(comptime T: type, comptime default_name: []const u8) []const
     }
 }
 
-/// Returns the class-specific type-tag salt, if one was configured.
-pub fn getTypeTagSalt(comptime T: type) ?[]const u8 {
-    if (!hasClassMeta(T)) return null;
-    if (!@hasField(@TypeOf(T.js_meta.options), "type_tag")) return null;
-    return coerceStringLike(T.js_meta.options.type_tag);
-}
-
 /// Determines the kind of property specification for a given compile-time value.
 ///
 /// This internal comptime function classifies whether a value is a valid
@@ -192,11 +183,8 @@ fn validateClassOptions(comptime Opts: type, comptime opts: Opts) void {
     }
 
     inline for (@typeInfo(Opts).@"struct".fields) |field_info| {
-        const supported = std.mem.eql(u8, field_info.name, "name") or
-            std.mem.eql(u8, field_info.name, "properties") or
-            std.mem.eql(u8, field_info.name, "type_tag");
-        if (!supported) {
-            @compileError("js.class only supports .name, .properties, and .type_tag");
+        if (!std.mem.eql(u8, field_info.name, "name") and !std.mem.eql(u8, field_info.name, "properties")) {
+            @compileError("js.class only supports .name and .properties");
         }
     }
 
@@ -212,14 +200,6 @@ fn validateClassOptions(comptime Opts: type, comptime opts: Opts) void {
 
     if (@hasField(Opts, "properties")) {
         validateProperties(@TypeOf(opts.properties), opts.properties);
-    }
-
-    if (@hasField(Opts, "type_tag")) {
-        const SaltType = @TypeOf(opts.type_tag);
-        _ = comptime coerceStringLikeType(SaltType, "js.class .type_tag");
-        if (coerceStringLike(opts.type_tag).len == 0) {
-            @compileError("js.class .type_tag must not be empty");
-        }
     }
 }
 
@@ -277,13 +257,6 @@ fn coerceStringLikeType(comptime T: type, comptime label: []const u8) type {
 test "js.class accepts empty options" {
     const meta = class(.{});
     try std.testing.expect(isClassMetaValue(meta));
-}
-
-test "js.class accepts a type tag salt" {
-    const Tagged = struct {
-        pub const js_meta = class(.{ .type_tag = "addon-uuid" });
-    };
-    try std.testing.expectEqualStrings("addon-uuid", getTypeTagSalt(Tagged).?);
 }
 
 test "js.prop accepts derived getter and setter" {

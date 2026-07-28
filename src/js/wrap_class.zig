@@ -20,8 +20,9 @@ const wrap_function = @import("wrap_function.zig");
 /// - (Potentially) `getFactoryDescriptors` for static factory methods.
 ///
 /// This result is typically passed to `js.exportModule` to register the class
-/// with Node-API.
-pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
+/// with Node-API. `Identity` is the build-generated identity for the final
+/// addon artifact and must be used consistently for every class conversion.
+pub fn wrapClass(comptime T: type, comptime Identity: type) type {
     if (!class_meta.isClassType(T)) {
         @compileError("wrapClass: " ++ @typeName(T) ++ " must declare `pub const js_meta = js.class(...)`");
     }
@@ -395,7 +396,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         const ParamType = init_params[i].type.?;
                         args[i] = wrap_function.convertArgWithOptional(
                             ParamType,
-                            type_tag_salt,
+                            Identity,
                             raw_args[i],
                             raw_env,
                             i,
@@ -420,7 +421,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                     obj_ptr.* = init_result;
 
                     const this_val = napi.Value{ .env = raw_env, .value = this_arg };
-                    class_runtime.wrapTaggedObject(T, type_tag_salt, e, this_val, obj_ptr) catch {
+                    class_runtime.wrapTaggedObject(T, Identity, e, this_val, obj_ptr) catch {
                         class_runtime.destroyNativeObject(T, obj_ptr);
                         e.throwError("", "Failed to wrap native object") catch {};
                         return null;
@@ -504,7 +505,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                     const self_ptr = e.unwrapChecked(
                         Class,
                         this_val,
-                        class_runtime.typeTag(Class, type_tag_salt),
+                        class_runtime.typeTag(Class, Identity),
                     ) catch {
                         e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
@@ -520,7 +521,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         const ParamType = method_params[i + 1].type.?;
                         args[i + 1] = wrap_function.convertArgWithOptional(
                             ParamType,
-                            type_tag_salt,
+                            Identity,
                             raw_args[i],
                             raw_env,
                             i,
@@ -537,7 +538,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         null;
                     return wrap_function.callAndConvertWithCtor(
                         method,
-                        type_tag_salt,
+                        Identity,
                         args,
                         raw_env,
                         preferred_ctor,
@@ -576,7 +577,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                     const self_ptr = e.unwrapChecked(
                         Class,
                         this_val,
-                        class_runtime.typeTag(Class, type_tag_salt),
+                        class_runtime.typeTag(Class, Identity),
                     ) catch {
                         e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
@@ -594,7 +595,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         null;
                     return wrap_function.callAndConvertWithCtor(
                         getter_fn,
-                        type_tag_salt,
+                        Identity,
                         args,
                         raw_env,
                         preferred_ctor,
@@ -644,7 +645,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         const ParamType = method_params[i].type.?;
                         args[i] = wrap_function.convertArgWithOptional(
                             ParamType,
-                            type_tag_salt,
+                            Identity,
                             raw_args[i],
                             raw_env,
                             i,
@@ -661,7 +662,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                         null;
                     return wrap_function.callAndConvertWithCtor(
                         method,
-                        type_tag_salt,
+                        Identity,
                         args,
                         raw_env,
                         preferred_ctor,
@@ -702,7 +703,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
                     const self_ptr = e.unwrapChecked(
                         Class,
                         this_val,
-                        class_runtime.typeTag(Class, type_tag_salt),
+                        class_runtime.typeTag(Class, Identity),
                     ) catch {
                         e.throwTypeError("", "Invalid class receiver") catch {};
                         return null;
@@ -713,7 +714,7 @@ pub fn wrapClass(comptime T: type, comptime type_tag_salt: []const u8) type {
 
                     const value_arg = wrap_function.convertArg(
                         ValueParamType,
-                        type_tag_salt,
+                        Identity,
                         raw_args[0],
                         raw_env,
                     ) catch {

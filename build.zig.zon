@@ -59,6 +59,11 @@
             .imports = .{.zapi},
             .link_libc = true,
         },
+        .function_only_dsl_compile = .{
+            .root_source_file = "examples/function_only_dsl/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
     },
     .libraries = .{
         .example_hello_world = .{
@@ -112,6 +117,10 @@
         },
         .example_addon_isolation = .{
             .root_module = .example_addon_isolation,
+            .linker_allow_shlib_undefined = true,
+        },
+        .function_only_dsl_compile = .{
+            .root_module = .function_only_dsl_compile,
             .linker_allow_shlib_undefined = true,
         },
     },

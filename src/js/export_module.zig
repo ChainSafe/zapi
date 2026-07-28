@@ -15,9 +15,9 @@ const class_runtime = @import("class_runtime.zig");
 /// Node.js. It inspects the `Module`'s `pub` declarations and automatically
 /// creates corresponding JavaScript functions, classes, and sub-namespaces.
 ///
-/// `options.type_tag` is a stable, addon-unique salt used to derive every DSL
-/// class's 128-bit Node-API type tag. A UUID is recommended. Individual classes
-/// can override it with `js.class(.{ .type_tag = "..." })`.
+/// Addons that export DSL classes pass the build-generated identity module:
+/// `.identity = @import("zapi_addon_identity")`. The addon's `build.zig` creates
+/// this import with `zapi.addAddonIdentity`. Function-only modules do not need it.
 ///
 /// Additional `options` customize module lifecycle hooks:
 ///
@@ -48,14 +48,14 @@ const class_runtime = @import("class_runtime.zig");
 /// comptime {
 ///     // Basic export of all `pub` functions, classes, and sub-namespaces.
 ///     js.exportModule(@This(), .{
-///         .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+///         .identity = @import("zapi_addon_identity"),
 ///     });
 /// }
 ///
 /// comptime {
 ///     // Export with custom initialization and cleanup hooks.
 ///     js.exportModule(@This(), .{
-///         .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
+///         .identity = @import("zapi_addon_identity"),
 ///         .init = myInitFunction,
 ///         .cleanup = myCleanupFunction,
 ///     });
@@ -64,13 +64,12 @@ const class_runtime = @import("class_runtime.zig");
 /// comptime {
 ///     // Export with a manual registration function.
 ///     js.exportModule(@This(), .{
-///         .type_tag = "6f9619ff-8b86-d011-b42d-00cf4fc964ff",
 ///         .register = myCustomRegisterFunction,
 ///     });
 /// }
 /// ```
 pub fn exportModule(comptime Module: type, comptime options: anytype) void {
-    const type_tag_salt = comptime moduleTypeTagSalt(options);
+    const Identity = moduleTypeTagIdentity(options);
     const has_init = @hasField(@TypeOf(options), "init");
     const has_cleanup = @hasField(@TypeOf(options), "cleanup");
     const has_register = @hasField(@TypeOf(options), "register");
@@ -119,7 +118,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
                 State.Lifecycle.release();
             };
 
-            _ = try registerDecls(Module, type_tag_salt, env, module, 0);
+            _ = try registerDecls(Module, Identity, env, module, 0);
 
             if (has_register) {
                 try options.register(env, module);
@@ -140,7 +139,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
 /// Iterates module declarations and registers DSL functions and js_meta classes.
 fn registerDecls(
     comptime Module: type,
-    comptime type_tag_salt: []const u8,
+    comptime Identity: type,
     env: napi.Env,
     module: napi.Value,
     comptime depth: usize,
@@ -166,7 +165,7 @@ fn registerDecls(
             if (!is_dsl_fn) @compileError("zapi: cannot export non-DSL `pub fn " ++ @typeName(Module) ++ "." ++ decl.name ++ "` — use DSL params (e.g. `js.Number`), drop `pub`, or pass `.register` to `exportModule` to export it manually");
 
             // DSL function — wrap and register
-            const cb = wrap_function.wrapFunction(field, type_tag_salt);
+            const cb = wrap_function.wrapFunction(field, Identity);
             const name: [:0]const u8 = decl.name ++ "";
 
             var js_fn: napi.c.napi_value = null;
@@ -186,7 +185,7 @@ fn registerDecls(
             const InnerType = field;
             if (@typeInfo(InnerType) == .@"struct") {
                 if (comptime class_meta.hasClassMeta(InnerType)) {
-                    const wrapped = wrap_class.wrapClass(InnerType, type_tag_salt);
+                    const wrapped = wrap_class.wrapClass(InnerType, Identity);
                     const props = wrapped.getPropertyDescriptors();
                     const class_name = comptime class_meta.getClassName(InnerType, decl.name);
                     const name: [:0]const u8 = class_name ++ "";
@@ -210,7 +209,7 @@ fn registerDecls(
                     exported_any = true;
                 } else {
                     const ns_obj = try env.createObject();
-                    if (try registerDecls(InnerType, type_tag_salt, env, ns_obj, depth + 1)) {
+                    if (try registerDecls(InnerType, Identity, env, ns_obj, depth + 1)) {
                         const name: [:0]const u8 = decl.name ++ "";
                         try module.setNamedProperty(name, ns_obj);
                         exported_any = true;
@@ -222,19 +221,22 @@ fn registerDecls(
     return exported_any;
 }
 
-fn moduleTypeTagSalt(comptime options: anytype) []const u8 {
-    if (!@hasField(@TypeOf(options), "type_tag")) {
-        @compileError("js.exportModule requires .type_tag with a stable addon-unique salt");
+fn moduleTypeTagIdentity(comptime options: anytype) type {
+    if (!@hasField(@TypeOf(options), "identity")) {
+        return class_runtime.NoAddonIdentity;
     }
-    const salt: []const u8 = options.type_tag;
-    if (salt.len == 0) {
-        @compileError("js.exportModule .type_tag must not be empty");
-    }
-    return salt;
+    const Identity: type = options.identity;
+    return Identity;
 }
 
 test "exportModule comptime smoke test" {
     try std.testing.expect(true);
+}
+
+test "missing module identity selects the class-free sentinel" {
+    try std.testing.expect(
+        moduleTypeTagIdentity(.{}) == class_runtime.NoAddonIdentity,
+    );
 }
 
 test "exportModule shares a single js.io across the env lifecycle" {
