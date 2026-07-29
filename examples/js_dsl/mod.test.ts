@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const mod = require("../../zig-out/lib/example_js_dsl.node");
+const addonPath = require.resolve("../../zig-out/lib/example_js_dsl.node");
+const mod = require(addonPath);
 
 function expectTypeErrorWithMessage(fn: () => unknown, message: string) {
 	try {
@@ -246,6 +248,46 @@ describe("typed arrays", () => {
 			expect(result).toBeInstanceOf(Uint8Array);
 			expect(Array.from(result)).toEqual(tc.input);
 		}
+	});
+
+	it("does not allocate external backing while an exception is pending", () => {
+		expect(() => mod.externalUint8ArrayWithPendingException()).toThrow(
+			"pending exception before external allocation",
+		);
+	});
+
+	it("releases external typed-array memory through its GC finalizer", () => {
+		const script = `
+			const addon = require(${JSON.stringify(addonPath)});
+			global.gc();
+
+			const length = 4 * 1024 * 1024;
+			const noiseAllowance = 512 * 1024;
+			const baseline = process.memoryUsage().external;
+			let value = addon.externalUint8Array(new Array(length).fill(7));
+			const retained = process.memoryUsage().external - baseline;
+			if (retained < length - noiseAllowance) {
+				throw new Error(\`external memory accounting increased by only \${retained} bytes\`);
+			}
+			value = null;
+
+			const deadline = Date.now() + 5000;
+			function collect() {
+				global.gc();
+				const remaining = process.memoryUsage().external - baseline;
+				if (remaining <= noiseAllowance) return;
+				if (Date.now() >= deadline) {
+					throw new Error(\`external typed array retained \${remaining} bytes after GC\`);
+				}
+				setImmediate(collect);
+			}
+			setImmediate(collect);
+		`;
+
+		execFileSync(process.execPath, ["--expose-gc", "-e", script], {
+			stdio: "pipe",
+			timeout: 10_000,
+		});
 	});
 });
 
