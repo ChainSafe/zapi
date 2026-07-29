@@ -60,30 +60,80 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         /// native buffer is freed by a finalizer when V8 collects the ArrayBuffer.
         pub fn fromExternal(slice: []const Element) !Self {
             const e = context.env();
-            const buf = try context.allocator().dupe(Element, slice);
-
             const byte_len = slice.len * @sizeOf(Element);
-            const len_hint: ?*anyopaque = @ptrFromInt(slice.len);
-            const finalize_cb = comptime napi.wrapSliceFinalizeCallback(Element, externalFinalizer);
-            const arraybuffer = e.createExternalArrayBuffer(std.mem.sliceAsBytes(buf), finalize_cb, len_hint) catch |err| {
-                context.allocator().free(buf);
-                return err;
+
+            if (byte_len == 0) {
+                const arraybuffer = try e.createArrayBuffer(0, null);
+                const val = try e.createTypedarray(array_type, 0, arraybuffer, 0);
+                return .{ .val = val };
+            }
+
+            const finalizer_context = try createFinalizerContext(context.allocator(), slice);
+            const arraybuffer = e.createExternalArrayBuffer(
+                std.mem.sliceAsBytes(finalizer_context.data),
+                externalFinalizer,
+                finalizer_context,
+            ) catch |err| {
+                if (err != error.NoExternalBuffersAllowed) return err;
+                defer release(finalizer_context);
+
+                const fallback = try e.createArrayBufferCopy(
+                    std.mem.sliceAsBytes(finalizer_context.data),
+                    null,
+                );
+                const val = try e.createTypedarray(array_type, slice.len, fallback, 0);
+                return .{ .val = val };
             };
 
             _ = try e.adjustExternalMemory(@intCast(byte_len));
+            finalizer_context.accounted = true;
             const val = try e.createTypedarray(array_type, slice.len, arraybuffer, 0);
             return .{ .val = val };
         }
 
-        /// Finalizer for buffers allocated by `fromExternal`. Frees the native
-        /// allocation and reverses the matching `adjustExternalMemory` accounting.
-        ///
-        /// Caller is responsible for calling a matching `adjustExternalMemory` at
-        /// the appropriate callsite to let V8 know about native heap memory usage.
-        fn externalFinalizer(env: napi.Env, data: []Element) void {
-            const byte_len = data.len * @sizeOf(Element);
-            context.allocator().free(data);
-            _ = env.adjustExternalMemory(-@as(i64, @intCast(byte_len))) catch {};
+        const FinalizerContext = struct {
+            allocator: std.mem.Allocator,
+            data: []Element,
+            accounted: bool = false,
+        };
+
+        fn createFinalizerContext(
+            allocator: std.mem.Allocator,
+            slice: []const Element,
+        ) !*FinalizerContext {
+            const data = try allocator.dupe(Element, slice);
+            errdefer allocator.free(data);
+
+            const finalizer_context = try allocator.create(FinalizerContext);
+            finalizer_context.* = .{
+                .allocator = allocator,
+                .data = data,
+            };
+            return finalizer_context;
+        }
+
+        fn externalFinalizer(
+            env: napi.c.napi_env,
+            finalize_data: ?*anyopaque,
+            finalize_hint: ?*anyopaque,
+        ) callconv(.c) void {
+            const finalizer_context: *FinalizerContext =
+                @ptrCast(@alignCast(finalize_hint orelse unreachable));
+            std.debug.assert(
+                finalize_data == @as(?*anyopaque, @ptrCast(finalizer_context.data.ptr)),
+            );
+            if (finalizer_context.accounted) {
+                const byte_len = finalizer_context.data.len * @sizeOf(Element);
+                const e = napi.Env{ .env = env };
+                _ = e.adjustExternalMemory(-@as(i64, @intCast(byte_len))) catch {};
+            }
+            release(finalizer_context);
+        }
+
+        fn release(finalizer_context: *FinalizerContext) void {
+            const allocator = finalizer_context.allocator;
+            allocator.free(finalizer_context.data);
+            allocator.destroy(finalizer_context);
         }
 
         /// Creates a new JavaScript TypedArray from a Zig slice by copying the data.
@@ -171,4 +221,16 @@ pub const BigUint64Array = TypedArray(u64, .biguint64);
 test "TypedArray exposes expected subtype metadata" {
     try @import("std").testing.expect(Uint8Array.expected_array_type == .uint8);
     try @import("std").testing.expect(Float64Array.expected_array_type == .float64);
+}
+
+test "TypedArray releases data when finalizer context allocation fails" {
+    var failing_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{
+        .fail_index = 1,
+    });
+
+    try std.testing.expectError(
+        error.OutOfMemory,
+        Uint8Array.createFinalizerContext(failing_allocator.allocator(), &.{ 1, 2, 3 }),
+    );
+    try std.testing.expectEqual(@as(usize, 1), failing_allocator.deallocations);
 }

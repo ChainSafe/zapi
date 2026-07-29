@@ -244,6 +244,8 @@ describe("typed arrays", () => {
 		for (const tc of test_cases) {
 			const result = mod.externalUint8Array(tc.input);
 			expect(result).toBeInstanceOf(Uint8Array);
+			expect(Buffer.isBuffer(result)).toBe(false);
+			expect(Array.from(result)).toEqual(tc.input);
 		}
 	});
 });
