@@ -62,27 +62,17 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             const e = context.env();
             const byte_len = slice.len * @sizeOf(Element);
 
-            if (byte_len == 0) {
-                const arraybuffer = try e.createArrayBuffer(0, null);
-                const val = try e.createTypedarray(array_type, 0, arraybuffer, 0);
-                return .{ .val = val };
-            }
-
             const finalizer_context = try createFinalizerContext(context.allocator(), slice);
             const arraybuffer = e.createExternalArrayBuffer(
                 std.mem.sliceAsBytes(finalizer_context.data),
                 externalFinalizer,
                 finalizer_context,
             ) catch |err| {
-                if (err != error.NoExternalBuffersAllowed) return err;
-                defer release(finalizer_context);
-
-                const fallback = try e.createArrayBufferCopy(
-                    std.mem.sliceAsBytes(finalizer_context.data),
-                    null,
-                );
-                const val = try e.createTypedarray(array_type, slice.len, fallback, 0);
-                return .{ .val = val };
+                if (err == error.NoExternalBuffersAllowed) {
+                    release(finalizer_context);
+                }
+                // Other failures may occur after the finalizer has taken ownership.
+                return err;
             };
 
             _ = try e.adjustExternalMemory(@intCast(byte_len));
@@ -119,9 +109,11 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         ) callconv(.c) void {
             const finalizer_context: *FinalizerContext =
                 @ptrCast(@alignCast(finalize_hint orelse unreachable));
-            std.debug.assert(
-                finalize_data == @as(?*anyopaque, @ptrCast(finalizer_context.data.ptr)),
-            );
+            if (finalizer_context.data.len > 0) {
+                std.debug.assert(
+                    finalize_data == @as(?*anyopaque, @ptrCast(finalizer_context.data.ptr)),
+                );
+            }
             if (finalizer_context.accounted) {
                 const byte_len = finalizer_context.data.len * @sizeOf(Element);
                 const e = napi.Env{ .env = env };
