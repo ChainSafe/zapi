@@ -1,8 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const example = require("../../zig-out/lib/example_hello_world.node");
+const addonPath = require.resolve("../../zig-out/lib/example_hello_world.node");
+const example = require(addonPath);
 
 describe("example mod", () => {
 	it("addon parameters", () => {
@@ -36,10 +38,48 @@ describe("example mod", () => {
 		expect(arrayBuffer.byteLength).toEqual(0);
 	});
 
-	it("shares mutable storage with an external Buffer", () => {
+	it("copies mutable slices returned without an external hint", () => {
+		const buffer = example.copySlice();
+		buffer[0] = 9;
+		expect(example.copySlice()[0]).toEqual(1);
+	});
+
+	it("returns an allocator-owned external Buffer", () => {
 		const buffer = example.externalBuffer();
 		expect(Buffer.isBuffer(buffer)).toBe(true);
+		expect([...buffer]).toEqual([1, 2, 3]);
 		buffer[0] = 9;
-		expect(example.externalBufferFirstByte()).toEqual(9);
+		expect([...buffer]).toEqual([9, 2, 3]);
+	});
+
+	it("releases an external Buffer through its GC finalizer", () => {
+		const script = `
+			const addon = require(${JSON.stringify(addonPath)});
+			const baseline = addon.externalBufferAllocatedBytes();
+			let buffer = addon.externalBuffer();
+			if (addon.externalBufferAllocatedBytes() <= baseline) {
+				throw new Error("external Buffer was released while still reachable");
+			}
+			buffer = null;
+
+			const deadline = Date.now() + 5000;
+			function collect() {
+				global.gc();
+				const allocatedBytes = addon.externalBufferAllocatedBytes();
+				if (allocatedBytes === baseline) return;
+				if (Date.now() >= deadline) {
+					throw new Error(
+						\`external Buffer finalizer did not release \${allocatedBytes - baseline} bytes\`,
+					);
+				}
+				setImmediate(collect);
+			}
+			setImmediate(collect);
+		`;
+
+		execFileSync(process.execPath, ["--expose-gc", "-e", script], {
+			stdio: "pipe",
+			timeout: 10_000,
+		});
 	});
 });

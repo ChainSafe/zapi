@@ -1,5 +1,6 @@
 const std = @import("std");
 const Env = @import("Env.zig");
+const OwnedBuffer = @import("OwnedBuffer.zig");
 const Value = @import("Value.zig");
 
 pub fn fromValue(
@@ -55,6 +56,21 @@ pub fn toValue(
     comptime hint: anytype,
 ) !Value {
     const type_info = @typeInfo(T);
+    comptime {
+        const return_type = switch (type_info) {
+            .error_union => |error_union| error_union.payload,
+            else => T,
+        };
+        if (hint == .external_buffer and return_type != OwnedBuffer) {
+            @compileError("external_buffer returns require an OwnedBuffer");
+        }
+        if (return_type == OwnedBuffer and hint != .external_buffer) {
+            @compileError("OwnedBuffer returns require the external_buffer hint");
+        }
+    }
+
+    if (T == OwnedBuffer) return try v.intoValue(env);
+
     switch (type_info) {
         .bool => {
             return try env.getBoolean(v);
@@ -82,14 +98,6 @@ pub fn toValue(
         .pointer => |p| {
             const h = hint;
             if (p.child == u8 and p.size == .slice) {
-                if (h == .external_buffer) {
-                    if (p.is_const) {
-                        @compileError("external buffers require a mutable byte slice");
-                    }
-                    const bytes: []u8 = @ptrCast(v);
-                    return try env.createExternalBuffer(bytes, null, null);
-                }
-
                 const bytes: []const u8 = @ptrCast(v);
                 if (h == .string) {
                     return try env.createStringUtf8(bytes);

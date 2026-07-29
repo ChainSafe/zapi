@@ -421,18 +421,40 @@ Control how arguments are converted:
 ```zig
 napi.createCallback(2, myFunc, .{
     .args = .{ .env, .auto, .value, .data, .string, .buffer },
-    .returns = .value,  // or .string, .buffer, .auto
+    .returns = .value,  // or .string, .buffer, .external_buffer, .auto
 });
 ```
 
 | Hint | Description |
 |------|-------------|
-| `.auto` | Automatic type conversion |
+| `.auto` | Automatic type conversion; byte-slice returns are copied into a JS Buffer |
 | `.env` | Inject `napi.Env` |
 | `.value` | Pass raw `napi.Value` |
 | `.data` | User data pointer passed to createFunction |
 | `.string` | Convert to/from `[]const u8` |
-| `.buffer` | Convert to/from byte slice |
+| `.buffer` | Borrow Buffer arguments as byte slices; copy byte-slice returns |
+| `.external_buffer` | Transfer an `OwnedBuffer` to JavaScript without copying |
+
+External buffers require explicit ownership transfer:
+
+```zig
+const allocator = std.heap.page_allocator;
+
+fn makeExternalBuffer() !napi.OwnedBuffer {
+    const data = try allocator.dupe(u8, "external data");
+    return napi.OwnedBuffer.fromOwnedSlice(allocator, data);
+}
+
+const callback = napi.createCallback(0, makeExternalBuffer, .{
+    .returns = .external_buffer,
+});
+```
+
+`OwnedBuffer.intoValue` consumes the buffer even if conversion fails, so the caller must not
+deinitialize it afterwards. Once N-API accepts the external buffer, the allocator must remain valid
+until its finalizer runs, including if N-API subsequently reports an error. If the environment
+disallows external buffers, `intoValue` copies the bytes and releases the original allocation before
+returning.
 
 ### Creating Classes
 
