@@ -201,6 +201,15 @@ describe("typed arrays", () => {
 		expect(mod.uint8Sum(data)).toEqual(15);
 	});
 
+	it("toArray copies a TypedArray of the expected length", () => {
+		expect(mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4]))).toEqual(10);
+	});
+
+	it("toArray rejects TypedArrays of a different length", () => {
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3]))).toThrow();
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4, 5]))).toThrow();
+	});
+
 	it("float64Scale scales values", () => {
 		const data = new Float64Array([1.0, 2.0, 3.0]);
 		const result = mod.float64Scale(data, 2.5);

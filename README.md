@@ -90,7 +90,7 @@ c.count; // 1 (getter, not a method call)
 | `Object(T)` | `object` | `get()`, `set(value)` — `T` fields must be DSL types |
 | `Function` | `Function` | `call(args)` |
 | `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
-| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `from(slice)` |
+| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `toArray(len)`, `from(slice)` |
 | `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
 
 ---
