@@ -134,12 +134,34 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
     };
 }
 
+fn elementType(comptime array_type: TypedarrayType) type {
+    return switch (array_type) {
+        .int8 => i8,
+        .uint8, .uint8_clamped => u8,
+        .int16 => i16,
+        .uint16 => u16,
+        .int32 => i32,
+        .uint32 => u32,
+        .float32 => f32,
+        .float64 => f64,
+        .bigint64 => i64,
+        .biguint64 => u64,
+    };
+}
+
 /// Allocator-backed elements whose ownership can be transferred to a JavaScript
 /// TypedArray without copying the element data.
 ///
-/// Like other Zig owning values, an OwnedTypedArray must not be copied or
-/// deinitialized after transfer.
+/// Like other Zig owning values, an OwnedTypedArray must not be copied. After
+/// ownership transfers, the source is empty and may be deinitialized normally.
 pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayType) type {
+    if (Element != elementType(array_type)) {
+        @compileError(
+            "OwnedTypedArray element type `" ++ @typeName(Element) ++
+                "` does not match `" ++ @tagName(array_type) ++ "`",
+        );
+    }
+
     return struct {
         allocator: std.mem.Allocator,
         data: []Element,
@@ -163,7 +185,8 @@ pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayTy
             return .fromOwnedSlice(allocator, try allocator.dupe(Element, data));
         }
 
-        /// Releases data that has not been transferred to JavaScript.
+        /// Releases data that has not been transferred to JavaScript. This is
+        /// also safe after a successful transfer, when `data` is empty.
         pub fn deinit(self: *Self) void {
             self.allocator.free(self.data);
             self.* = undefined;
@@ -171,17 +194,22 @@ pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayTy
 
         /// Transfers ownership to a JavaScript TypedArray.
         ///
-        /// This consumes the value even on failure; the caller must not
-        /// deinitialize it afterwards. Unsupported external ArrayBuffers return
-        /// `error.NoExternalBuffersAllowed` without a copy fallback.
-        pub fn intoValue(self: Self, env: napi.Env) !napi.Value {
-            const allocator = self.allocator;
+        /// On success, `self.data` is empty and JavaScript releases the original
+        /// allocation through the ArrayBuffer finalizer. Failures before N-API
+        /// accepts the external memory leave ownership in `self`; failures after
+        /// ownership may have transferred leave `self.data` empty.
+        ///
+        /// Unsupported external ArrayBuffers return
+        /// `error.NoExternalBuffersAllowed` without a copy fallback. The caller
+        /// may deinitialize `self` after this function returns.
+        pub fn intoValue(self: *Self, env: napi.Env) !napi.Value {
             const data = self.data;
 
             if (data.len == 0) {
-                defer allocator.free(data);
                 const arraybuffer = try env.createArrayBuffer(0, null);
-                return env.createTypedarray(array_type, 0, arraybuffer, 0);
+                const value = try env.createTypedarray(array_type, 0, arraybuffer, 0);
+                self.data = &.{};
+                return value;
             }
 
             const owner = try moveToHeap(self);
@@ -194,7 +222,7 @@ pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayTy
                     error.NoExternalBuffersAllowed,
                     error.PendingException,
                     error.CannotRunJS,
-                    => release(owner),
+                    => restoreFromHeap(self, owner),
                     else => {},
                 }
                 return err;
@@ -203,13 +231,18 @@ pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayTy
             return env.createTypedarray(array_type, data.len, arraybuffer, 0);
         }
 
-        fn moveToHeap(self: Self) !*Self {
-            const owner = self.allocator.create(Self) catch |err| {
-                self.allocator.free(self.data);
-                return err;
-            };
-            owner.* = self;
+        fn moveToHeap(self: *Self) !*Self {
+            const owner = try self.allocator.create(Self);
+            owner.* = self.*;
+            self.data = &.{};
             return owner;
+        }
+
+        fn restoreFromHeap(self: *Self, owner: *Self) void {
+            const allocator = owner.allocator;
+            std.debug.assert(self.data.len == 0);
+            self.* = owner.*;
+            allocator.destroy(owner);
         }
 
         fn finalize(
@@ -316,17 +349,34 @@ test "OwnedTypedArray fromSlice owns an independent copy" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, array.data);
 }
 
-test "OwnedTypedArray releases data when moving the owner to the heap fails" {
-    const data = try std.testing.allocator.dupe(u8, &.{ 1, 2, 3 });
-
+test "OwnedTypedArray retains data when moving the owner to the heap fails" {
     var failing_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{
-        .fail_index = 0,
+        .fail_index = 1,
     });
-    const array = OwnedUint8Array.fromOwnedSlice(failing_allocator.allocator(), data);
+    var array = try OwnedUint8Array.fromSlice(
+        failing_allocator.allocator(),
+        &.{ 1, 2, 3 },
+    );
 
     try std.testing.expectError(
         error.OutOfMemory,
-        OwnedUint8Array.moveToHeap(array),
+        OwnedUint8Array.moveToHeap(&array),
     );
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, array.data);
+
+    array.deinit();
     try std.testing.expectEqual(@as(usize, 1), failing_allocator.deallocations);
+}
+
+test "OwnedTypedArray empties the source when ownership moves to the heap" {
+    var array = try OwnedUint8Array.fromSlice(
+        std.testing.allocator,
+        &.{ 1, 2, 3 },
+    );
+    const owner = try OwnedUint8Array.moveToHeap(&array);
+    defer OwnedUint8Array.release(owner);
+
+    try std.testing.expectEqual(@as(usize, 0), array.data.len);
+    array.deinit();
+    try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, owner.data);
 }

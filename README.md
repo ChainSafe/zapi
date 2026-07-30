@@ -301,10 +301,11 @@ pub fn serialize() !js.OwnedUint8Array {
 }
 ```
 
-Returning the value consumes it, including on conversion failure. JavaScript
-releases the allocation through the ArrayBuffer finalizer, so the allocator must
-remain valid until that finalizer runs. If external ArrayBuffers are unsupported,
-the original error is returned; no copy fallback is performed.
+Returning the value transfers its allocation to JavaScript without copying and
+leaves the Zig owner empty. Failures before N-API accepts the external memory
+leave ownership in Zig so it can be released normally. The allocator must remain
+valid until the ArrayBuffer finalizer runs. If external ArrayBuffers are
+unsupported, the original error is returned; no copy fallback is performed.
 
 ### Promises
 
