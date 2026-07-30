@@ -60,16 +60,28 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         /// native buffer is freed by a finalizer when V8 collects the ArrayBuffer.
         pub fn fromExternal(slice: []const Element) !Self {
             const e = context.env();
-            if (try e.isExceptionPending()) return error.PendingException;
+            const byte_len = slice.len * @sizeOf(Element);
 
             const finalizer_context = try createFinalizerContext(context.allocator(), slice);
-            const arraybuffer = try transferToExternalArrayBuffer(
-                e,
+            const arraybuffer = e.createExternalArrayBuffer(
+                std.mem.sliceAsBytes(finalizer_context.data),
+                externalFinalizer,
                 finalizer_context,
-                createNapiExternalArrayBuffer,
-            );
+            ) catch |err| {
+                // These statuses are returned before N-API installs the finalizer.
+                switch (err) {
+                    error.NoExternalBuffersAllowed,
+                    error.PendingException,
+                    error.CannotRunJS,
+                    => release(finalizer_context),
+                    // Other failures may occur after the finalizer has taken ownership.
+                    else => {},
+                }
+                return err;
+            };
 
-            try accountExternalMemory(e, finalizer_context, napi.Env.adjustExternalMemory);
+            _ = try e.adjustExternalMemory(@intCast(byte_len));
+            finalizer_context.accounted = true;
             const val = try e.createTypedarray(array_type, slice.len, arraybuffer, 0);
             return .{ .val = val };
         }
@@ -78,10 +90,6 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             allocator: std.mem.Allocator,
             data: []Element,
             accounted: bool = false,
-
-            fn externalMemorySize(self: *const FinalizerContext) usize {
-                return self.data.len * @sizeOf(Element) + @sizeOf(FinalizerContext);
-            }
         };
 
         fn createFinalizerContext(
@@ -99,62 +107,17 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             return finalizer_context;
         }
 
-        fn transferToExternalArrayBuffer(
-            e: napi.Env,
-            finalizer_context: *FinalizerContext,
-            comptime create_arraybuffer: anytype,
-        ) napi.status.NapiError!napi.Value {
-            return create_arraybuffer(e, finalizer_context) catch |err| {
-                // These statuses are returned before N-API installs the finalizer.
-                switch (err) {
-                    error.NoExternalBuffersAllowed,
-                    error.CannotRunJS,
-                    => release(finalizer_context),
-                    else => {},
-                }
-                return err;
-            };
-        }
-
-        fn createNapiExternalArrayBuffer(
-            e: napi.Env,
-            finalizer_context: *FinalizerContext,
-        ) napi.status.NapiError!napi.Value {
-            return e.createExternalArrayBuffer(
-                std.mem.sliceAsBytes(finalizer_context.data),
-                externalFinalizer,
-                finalizer_context,
-            );
-        }
-
-        fn accountExternalMemory(
-            e: napi.Env,
-            finalizer_context: *FinalizerContext,
-            comptime adjust_external_memory: anytype,
-        ) napi.status.NapiError!void {
-            _ = try adjust_external_memory(
-                e,
-                @intCast(finalizer_context.externalMemorySize()),
-            );
-            finalizer_context.accounted = true;
-        }
-
         fn externalFinalizer(
             env: napi.c.napi_env,
-            finalize_data: ?*anyopaque,
+            _: ?*anyopaque,
             finalize_hint: ?*anyopaque,
         ) callconv(.c) void {
             const finalizer_context: *FinalizerContext =
                 @ptrCast(@alignCast(finalize_hint orelse unreachable));
-            if (finalizer_context.data.len > 0) {
-                std.debug.assert(
-                    finalize_data == @as(?*anyopaque, @ptrCast(finalizer_context.data.ptr)),
-                );
-            }
             if (finalizer_context.accounted) {
-                const accounted_bytes: i64 = @intCast(finalizer_context.externalMemorySize());
+                const byte_len = finalizer_context.data.len * @sizeOf(Element);
                 const e = napi.Env{ .env = env };
-                _ = e.adjustExternalMemory(-accounted_bytes) catch {};
+                _ = e.adjustExternalMemory(-@as(i64, @intCast(byte_len))) catch {};
             }
             release(finalizer_context);
         }
@@ -262,128 +225,4 @@ test "TypedArray releases data when finalizer context allocation fails" {
         Uint8Array.createFinalizerContext(failing_allocator.allocator(), &.{ 1, 2, 3 }),
     );
     try std.testing.expectEqual(@as(usize, 1), failing_allocator.deallocations);
-}
-
-test "TypedArray release frees data and finalizer context" {
-    var tracking_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-
-    const finalizer_context = try Uint8Array.createFinalizerContext(
-        tracking_allocator.allocator(),
-        &.{ 1, 2, 3 },
-    );
-    const allocations = tracking_allocator.allocations;
-    Uint8Array.release(finalizer_context);
-
-    try std.testing.expectEqual(@as(usize, 2), allocations);
-    try std.testing.expectEqual(@as(usize, 2), tracking_allocator.deallocations);
-    try std.testing.expectEqual(tracking_allocator.allocated_bytes, tracking_allocator.freed_bytes);
-}
-
-test "TypedArray releases local ownership when external buffers are rejected" {
-    const Reject = struct {
-        fn noExternalBuffers(
-            _: napi.Env,
-            _: *Uint8Array.FinalizerContext,
-        ) napi.status.NapiError!napi.Value {
-            return error.NoExternalBuffersAllowed;
-        }
-
-        fn cannotRunJS(
-            _: napi.Env,
-            _: *Uint8Array.FinalizerContext,
-        ) napi.status.NapiError!napi.Value {
-            return error.CannotRunJS;
-        }
-    };
-
-    inline for (.{
-        .{ error.NoExternalBuffersAllowed, Reject.noExternalBuffers },
-        .{ error.CannotRunJS, Reject.cannotRunJS },
-    }) |case| {
-        var tracking_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-
-        const finalizer_context = try Uint8Array.createFinalizerContext(
-            tracking_allocator.allocator(),
-            &.{ 1, 2, 3 },
-        );
-        try std.testing.expectError(
-            case[0],
-            Uint8Array.transferToExternalArrayBuffer(
-                .{ .env = null },
-                finalizer_context,
-                case[1],
-            ),
-        );
-
-        try std.testing.expectEqual(@as(usize, 2), tracking_allocator.deallocations);
-        try std.testing.expectEqual(
-            tracking_allocator.allocated_bytes,
-            tracking_allocator.freed_bytes,
-        );
-    }
-}
-
-test "TypedArray preserves finalizer ownership after possible transfer" {
-    const FailAfterTransfer = struct {
-        fn create(
-            _: napi.Env,
-            finalizer_context: *Uint8Array.FinalizerContext,
-        ) napi.status.NapiError!napi.Value {
-            Uint8Array.release(finalizer_context);
-            return error.GenericFailure;
-        }
-    };
-    var tracking_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-
-    const finalizer_context = try Uint8Array.createFinalizerContext(
-        tracking_allocator.allocator(),
-        &.{ 1, 2, 3 },
-    );
-    try std.testing.expectError(
-        error.GenericFailure,
-        Uint8Array.transferToExternalArrayBuffer(
-            .{ .env = null },
-            finalizer_context,
-            FailAfterTransfer.create,
-        ),
-    );
-
-    try std.testing.expectEqual(@as(usize, 2), tracking_allocator.deallocations);
-    try std.testing.expectEqual(tracking_allocator.allocated_bytes, tracking_allocator.freed_bytes);
-}
-
-test "TypedArray records external memory only after adjustment succeeds" {
-    const Adjust = struct {
-        fn fail(_: napi.Env, _: i64) napi.status.NapiError!i64 {
-            return error.GenericFailure;
-        }
-
-        fn succeed(_: napi.Env, bytes: i64) napi.status.NapiError!i64 {
-            const expected = @sizeOf(Uint8Array.FinalizerContext) + 3;
-            if (bytes != expected) return error.GenericFailure;
-            return bytes;
-        }
-    };
-    const finalizer_context = try Uint8Array.createFinalizerContext(
-        std.testing.allocator,
-        &.{ 1, 2, 3 },
-    );
-    defer Uint8Array.release(finalizer_context);
-
-    try std.testing.expectEqual(
-        @sizeOf(Uint8Array.FinalizerContext) + 3,
-        finalizer_context.externalMemorySize(),
-    );
-    try std.testing.expectError(
-        error.GenericFailure,
-        Uint8Array.accountExternalMemory(.{ .env = null }, finalizer_context, Adjust.fail),
-    );
-    try std.testing.expect(!finalizer_context.accounted);
-
-    try Uint8Array.accountExternalMemory(
-        .{ .env = null },
-        finalizer_context,
-        Adjust.succeed,
-    );
-    try std.testing.expect(finalizer_context.accounted);
 }

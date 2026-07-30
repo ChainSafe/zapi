@@ -233,12 +233,6 @@ pub fn externalUint8Array(arr: Array) !Uint8Array {
     return Uint8Array.fromExternal(tmp);
 }
 
-/// Attempts external allocation after throwing a JavaScript exception.
-pub fn externalUint8ArrayWithPendingException() !Uint8Array {
-    try js.env().throwError("ERR_PENDING_EXCEPTION", "pending exception before external allocation");
-    return Uint8Array.fromExternal(&.{ 1, 2, 3 });
-}
-
 // ============================================================================
 // Section 7: Promises
 // ============================================================================
