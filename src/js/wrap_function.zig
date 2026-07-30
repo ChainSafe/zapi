@@ -3,6 +3,7 @@ const napi = @import("../napi.zig");
 const context = @import("context.zig");
 const class_meta = @import("class_meta.zig");
 const class_runtime = @import("class_runtime.zig");
+const typed_arrays = @import("typed_arrays.zig");
 
 /// Checks whether `T` is a ZAPI DSL wrapper type (a struct with a `val: napi.Value` field).
 ///
@@ -222,6 +223,16 @@ pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, p
     if (T == napi.Value) {
         return value.value;
     }
+    if (comptime typed_arrays.isOwnedTypedArray(T)) {
+        const e = napi.Env{ .env = env };
+        var owned = value;
+        defer owned.deinit();
+        const result = owned.intoValue(e) catch |err| {
+            e.throwError(@errorName(err), @errorName(err)) catch {};
+            return null;
+        };
+        return result.value;
+    }
     if (comptime isDslType(T)) {
         return value.val.value;
     }
@@ -385,8 +396,6 @@ test "isDslType rejects non-DSL types" {
 }
 
 test "argTypeDescription names typed arrays and unwraps optionals" {
-    const typed_arrays = @import("typed_arrays.zig");
-
     try std.testing.expectEqualStrings("a number", argTypeDescription(?@import("number.zig").Number));
     try std.testing.expectEqualStrings("a Uint8Array", argTypeDescription(typed_arrays.Uint8Array));
 }

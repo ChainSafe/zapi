@@ -25,6 +25,7 @@ pub const Function = @import("js/function.zig").Function;
 pub const Value = @import("js/value.zig").Value;
 
 pub const TypedArray = typed_arrays.TypedArray;
+pub const OwnedTypedArray = typed_arrays.OwnedTypedArray;
 pub const Int8Array = typed_arrays.Int8Array;
 pub const Uint8Array = typed_arrays.Uint8Array;
 pub const Uint8ClampedArray = typed_arrays.Uint8ClampedArray;
@@ -36,6 +37,17 @@ pub const Float32Array = typed_arrays.Float32Array;
 pub const Float64Array = typed_arrays.Float64Array;
 pub const BigInt64Array = typed_arrays.BigInt64Array;
 pub const BigUint64Array = typed_arrays.BigUint64Array;
+pub const OwnedInt8Array = typed_arrays.OwnedInt8Array;
+pub const OwnedUint8Array = typed_arrays.OwnedUint8Array;
+pub const OwnedUint8ClampedArray = typed_arrays.OwnedUint8ClampedArray;
+pub const OwnedInt16Array = typed_arrays.OwnedInt16Array;
+pub const OwnedUint16Array = typed_arrays.OwnedUint16Array;
+pub const OwnedInt32Array = typed_arrays.OwnedInt32Array;
+pub const OwnedUint32Array = typed_arrays.OwnedUint32Array;
+pub const OwnedFloat32Array = typed_arrays.OwnedFloat32Array;
+pub const OwnedFloat64Array = typed_arrays.OwnedFloat64Array;
+pub const OwnedBigInt64Array = typed_arrays.OwnedBigInt64Array;
+pub const OwnedBigUint64Array = typed_arrays.OwnedBigUint64Array;
 
 pub const Promise = @import("js/promise.zig").Promise;
 pub const createPromise = @import("js/promise.zig").createPromise;

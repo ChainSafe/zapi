@@ -246,6 +246,14 @@ describe("typed arrays", () => {
 			expect(result).toBeInstanceOf(Uint8Array);
 		}
 	});
+
+	it("ownedUint8Array returns allocator-owned native data", () => {
+		for (const input of [[], [10, 20, 30, 40]]) {
+			const result = mod.ownedUint8Array(input);
+			expect(result).toBeInstanceOf(Uint8Array);
+			expect(Array.from(result)).toEqual(input);
+		}
+	});
 });
 
 // Section 7: Promises
