@@ -244,7 +244,14 @@ describe("typed arrays", () => {
 		for (const tc of test_cases) {
 			const result = mod.externalUint8Array(tc.input);
 			expect(result).toBeInstanceOf(Uint8Array);
-			expect(Array.from(result)).toEqual(tc.input);
+		}
+	});
+
+	it("ownedUint8Array returns allocator-owned native data", () => {
+		for (const input of [[], [10, 20, 30, 40]]) {
+			const result = mod.ownedUint8Array(input);
+			expect(result).toBeInstanceOf(Uint8Array);
+			expect(Array.from(result)).toEqual(input);
 		}
 	});
 });

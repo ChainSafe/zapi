@@ -91,6 +91,7 @@ c.count; // 1 (getter, not a method call)
 | `Function` | `Function` | `call(args)` |
 | `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
 | `Uint8Array` etc. | `TypedArray` | `toSlice()`, `from(slice)` |
+| `OwnedUint8Array` etc. | `TypedArray` | `fromOwnedSlice(allocator, data)`, `fromSlice(allocator, data)` |
 | `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
 
 ---
@@ -287,6 +288,23 @@ pub fn sum(data: Uint8Array) !Number {
     return Number.from(total);
 }
 ```
+
+Use an owned return type to transfer an allocator-owned slice to JavaScript
+without copying its elements:
+
+```zig
+pub fn serialize() !js.OwnedUint8Array {
+    const allocator = js.allocator();
+    const data = try allocator.alloc(u8, 32);
+    // Fill data...
+    return js.OwnedUint8Array.fromOwnedSlice(allocator, data);
+}
+```
+
+Returning the value consumes it, including on conversion failure. JavaScript
+releases the allocation through the ArrayBuffer finalizer, so the allocator must
+remain valid until that finalizer runs. If external ArrayBuffers are unsupported,
+the original error is returned; no copy fallback is performed.
 
 ### Promises
 

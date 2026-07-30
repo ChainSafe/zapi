@@ -12,6 +12,7 @@ const Object = js.Object;
 const Function = js.Function;
 const Value = js.Value;
 const Uint8Array = js.Uint8Array;
+const OwnedUint8Array = js.OwnedUint8Array;
 const Float64Array = js.Float64Array;
 const Promise = js.Promise;
 
@@ -231,6 +232,20 @@ pub fn externalUint8Array(arr: Array) !Uint8Array {
         tmp[i] = @intCast((try arr.getNumber(i)).assertI32());
     }
     return Uint8Array.fromExternal(tmp);
+}
+
+/// Transfer an allocator-owned native allocation to a JavaScript Uint8Array.
+pub fn ownedUint8Array(arr: Array) !OwnedUint8Array {
+    const len = try arr.length();
+    const alloc = js.allocator();
+    const data = try alloc.alloc(u8, len);
+    errdefer alloc.free(data);
+
+    var i: u32 = 0;
+    while (i < len) : (i += 1) {
+        data[i] = @intCast((try arr.getNumber(i)).assertI32());
+    }
+    return OwnedUint8Array.fromOwnedSlice(alloc, data);
 }
 
 // ============================================================================
