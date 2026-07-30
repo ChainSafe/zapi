@@ -225,7 +225,9 @@ pub fn convertReturnWithCtor(comptime T: type, value: T, env: napi.c.napi_env, p
     }
     if (comptime typed_arrays.isOwnedTypedArray(T)) {
         const e = napi.Env{ .env = env };
-        const result = value.intoValue(e) catch |err| {
+        var owned = value;
+        defer owned.deinit();
+        const result = owned.intoValue(e) catch |err| {
             e.throwError(@errorName(err), @errorName(err)) catch {};
             return null;
         };
