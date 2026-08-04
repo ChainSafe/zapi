@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.1.0...zapi-v4.0.0) (2026-08-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* manage external buffer lifetime ([#66](https://github.com/ChainSafe/zapi/issues/66))
+* require writable external buffer storage ([#58](https://github.com/ChainSafe/zapi/issues/58))
+
+### Features
+
+* **js:** add exact u32 conversion ([#71](https://github.com/ChainSafe/zapi/issues/71)) ([d6b21e1](https://github.com/ChainSafe/zapi/commit/d6b21e193c9230d8da5fe4453331acfaff94396e))
+* **js:** add typed array toArray ([#70](https://github.com/ChainSafe/zapi/issues/70)) ([ab42ab0](https://github.com/ChainSafe/zapi/commit/ab42ab08de92e1ea1f9f8a3f124e5c4bf55d564d))
+
+
+### Bug Fixes
+
+* **dsl:** support class pointer arguments ([#50](https://github.com/ChainSafe/zapi/issues/50)) ([9dd2111](https://github.com/ChainSafe/zapi/commit/9dd211167c4774c5a79e3d6fd360c22adca0a138))
+* harden N-API boundary against JS-triggerable memory bugs ([#60](https://github.com/ChainSafe/zapi/issues/60)) ([fff76f3](https://github.com/ChainSafe/zapi/commit/fff76f32b9b9b6e92991ab8045fe7562fa3a4552))
+* manage external buffer lifetime ([#66](https://github.com/ChainSafe/zapi/issues/66)) ([d134a6a](https://github.com/ChainSafe/zapi/commit/d134a6a5bc6f03583de28ef712d8df2ca834c83d))
+* **napi:** receive raw pointer out parameters ([#57](https://github.com/ChainSafe/zapi/issues/57)) ([fde4a9a](https://github.com/ChainSafe/zapi/commit/fde4a9a10eee3fb270d26547137e975ed3df10b9))
+* remove redundant platform check from musl detection ([#64](https://github.com/ChainSafe/zapi/issues/64)) ([0d4829c](https://github.com/ChainSafe/zapi/commit/0d4829c2f5847a14fff60ff70a6cdf4d65cb8a4e))
+* require writable external buffer storage ([#58](https://github.com/ChainSafe/zapi/issues/58)) ([8fd898f](https://github.com/ChainSafe/zapi/commit/8fd898fc9d9edcd368e25f3fe3513915dd116461))
+* restore registerDecls on Zig 0.16 ([#59](https://github.com/ChainSafe/zapi/issues/59)) ([7f3af3e](https://github.com/ChainSafe/zapi/commit/7f3af3e7f5710892d441c80593adb35d028a93de))
+
+
+### Code Refactoring
+
+* **js:** unify env lifecycle refcounting ([#53](https://github.com/ChainSafe/zapi/issues/53)) ([d3d5056](https://github.com/ChainSafe/zapi/commit/d3d50565382e30580def5c71f48f310fdf6246fa))
+
+
+### Miscellaneous Chores
+
+* define changelog sections for release-please ([#54](https://github.com/ChainSafe/zapi/issues/54)) ([1c5e7b4](https://github.com/ChainSafe/zapi/commit/1c5e7b4c4e668ce425d0877212d58c88efa8525a))
+
 ## [3.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.0.0...zapi-v3.1.0) (2026-07-10)
 
 
