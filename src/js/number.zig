@@ -44,6 +44,23 @@ pub const Number = struct {
         return self.val.getValueUint32();
     }
 
+    /// Attempts to convert the JavaScript number to a `u32` without coercion.
+    ///
+    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// fractional, non-finite, or greater than `std.math.maxInt(u32)`.
+    pub fn toU32Exact(self: Number) !u32 {
+        const max: f64 = @floatFromInt(std.math.maxInt(u32));
+        const value = try self.toF64();
+        if (!std.math.isFinite(value) or
+            value < 0 or
+            value > max or
+            @trunc(value) != value)
+        {
+            return error.InvalidUnsignedInteger;
+        }
+        return @intFromFloat(value);
+    }
+
     /// Attempts to convert the JavaScript number to a Zig `f64`.
     ///
     /// This conversion is generally lossless for most JS numbers, which are typically `f64`.
