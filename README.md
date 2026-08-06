@@ -24,6 +24,30 @@ Add the Zig dependency to your `build.zig.zon`:
 },
 ```
 
+After creating the shared-library compile step for the final `.node` artifact,
+attach its package and artifact identity in the addon's `build.zig`:
+
+```zig
+const std = @import("std");
+const zapi_build = @import("zapi");
+
+fn configureAddonIdentity(
+    b: *std.Build,
+    addon: *std.Build.Step.Compile,
+) void {
+    const manifest = @import("build.zig.zon");
+    zapi_build.addAddonIdentity(b, addon, manifest);
+}
+```
+
+Each logically distinct addon needs a unique compile-step name and its own root
+module. Configure each root module once. Aliases or installed copies of one
+compiled addon keep the identity embedded in that artifact.
+
+Zig 0.16 does not expose a `.path` dependency's `build.zig` as an import. Keep
+the URL/hash dependency declaration above and use
+`zig build --fork=/path/to/zapi` when developing against a local checkout.
+
 ---
 
 ## Zig Library — Quick Start
@@ -60,7 +84,11 @@ pub const Counter = struct {
     }
 };
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
+    });
+}
 ```
 
 **JavaScript usage:**
@@ -73,7 +101,20 @@ c.increment();
 c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
+`pub` functions are auto-exported, and structs with `js_meta = js.class(...)`
+become JS classes. Class type tags are derived at compile time from the Zig
+package name, version, fingerprint, addon artifact name, and class type name.
+This keeps two loaded copies of one addon compatible while isolating different
+addons and package versions. Modules that export only functions and never
+accept or return DSL classes may continue to use `js.exportModule(@This(), .{})`.
+
+```text
+FNV-1a-128(package@version#fingerprint::addon::ZigType)
+```
+
+Low-level wrapper and conversion APIs take the same identity type explicitly.
+Code paths that cannot accept or return DSL classes pass
+`js.NoAddonIdentity`.
 
 ---
 
@@ -319,7 +360,11 @@ Import Zig modules as `pub const` to create JS namespaces. The DSL recursively r
 pub const math = @import("math.zig");     // → exports.math.multiply(...)
 pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
+    });
+}
 ```
 
 Namespaces nest arbitrarily — a sub-module with more `pub const` imports creates deeper nesting.
@@ -333,6 +378,7 @@ Namespaces nest arbitrarily — a sub-module with more `pub const` imports creat
 ```zig
 comptime {
     js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
         .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
         .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
     });

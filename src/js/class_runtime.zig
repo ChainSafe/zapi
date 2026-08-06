@@ -2,11 +2,26 @@ const std = @import("std");
 const napi = @import("../napi.zig");
 const context = @import("context.zig");
 
-pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
-    return .{
-        .lower = fnv1a64Parts(.{ "zapi:dsl:type-tag:lower:", @typeName(T) }),
-        .upper = fnv1a64Parts(.{ "zapi:dsl:type-tag:upper:", @typeName(T) }),
-    };
+pub const NoAddonIdentity = struct {};
+
+/// Returns a stable tag derived from the package, addon artifact, and Zig class.
+pub fn typeTag(comptime T: type, comptime Identity: type) napi.c.napi_type_tag {
+    validateIdentity(Identity);
+    const fingerprint = comptime std.fmt.comptimePrint(
+        "{x}",
+        .{Identity.package_fingerprint},
+    );
+    return typeTagFromParts(.{
+        Identity.package_name,
+        "@",
+        Identity.package_version,
+        "#",
+        fingerprint,
+        "::",
+        Identity.addon_name,
+        "::",
+        @typeName(T),
+    });
 }
 
 /// Tags `object`, then wraps `native_object` into it with a finalizer.
@@ -14,30 +29,65 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
 /// The wrap is done last so it is the only fallible step that transfers
 /// ownership: once it succeeds N-API's finalizer owns `native_object`, and any
 /// earlier failure leaves nothing wrapped, so the caller still owns and frees it.
-pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
-    const tag = typeTag(T);
+pub fn wrapTaggedObject(
+    comptime T: type,
+    comptime Identity: type,
+    env: napi.Env,
+    object: napi.Value,
+    native_object: *T,
+) !void {
+    const tag = typeTag(T, Identity);
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
     try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
 }
 
-/// Generates a deterministic 64-bit FNV-1a hash at compile-time.
-/// This is used to create stable `napi_type_tag` values for DSL classes
-/// based on their type names. FNV-1a is chosen for its simplicity, speed,
-/// and suitability for non-cryptographic unique-ish identification.
-///
-/// The `parts` argument allows concatenating multiple compile-time strings
-/// (e.g., prefixes and type names) into a single input for hashing.
-fn fnv1a64Parts(comptime parts: anytype) u64 {
-    var hash: u64 = 0xcbf29ce484222325;
+/// Builds a stable 128-bit Node-API type tag from a content identity using FNV-1a.
+fn typeTagFromParts(comptime parts: anytype) napi.c.napi_type_tag {
+    var hash: u128 = 0x6c62272e07bb0142_62b821756295c58d;
     inline for (parts) |part| {
         inline for (part) |byte| {
             hash ^= byte;
-            hash *%= 0x100000001b3;
+            hash *%= 0x0000000001000000_000000000000013B;
         }
     }
-    return hash;
+    return .{
+        .lower = @truncate(hash),
+        .upper = @truncate(hash >> 64),
+    };
+}
+
+fn validateIdentity(comptime Identity: type) void {
+    if (Identity == NoAddonIdentity) {
+        @compileError(
+            "DSL class bindings require .identity = @import(\"zapi_addon_identity\"); " ++
+                "call zapi.addAddonIdentity from the addon's build.zig",
+        );
+    }
+    inline for (.{
+        "package_name",
+        "package_version",
+        "package_fingerprint",
+        "addon_name",
+    }) |decl_name| {
+        if (!@hasDecl(Identity, decl_name)) {
+            @compileError("zapi addon identity is missing ." ++ decl_name);
+        }
+    }
+    if (@TypeOf(Identity.package_name) != []const u8 or
+        @TypeOf(Identity.package_version) != []const u8 or
+        @TypeOf(Identity.addon_name) != []const u8 or
+        @TypeOf(Identity.package_fingerprint) != u64)
+    {
+        @compileError("zapi addon identity has invalid field types");
+    }
+    if (Identity.package_name.len == 0 or
+        Identity.package_version.len == 0 or
+        Identity.addon_name.len == 0)
+    {
+        @compileError("zapi addon identity strings must not be empty");
+    }
 }
 
 pub fn destroyNativeObject(comptime T: type, obj: *T) void {
@@ -113,7 +163,13 @@ pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.
     return true;
 }
 
-pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
+pub fn materializeClassInstance(
+    comptime T: type,
+    comptime Identity: type,
+    env: napi.Env,
+    instance: T,
+    preferred_ctor: ?napi.Value,
+) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
 
     const obj_ptr = try context.allocator().create(T);
@@ -147,7 +203,7 @@ pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, pr
     // `napi_new_instance`; otherwise a subclass returned a replacement object.
     if (!(try expected_instance.strictEquals(js_instance))) return error.InvalidMaterializationConstructor;
 
-    try wrapTaggedObject(T, env, js_instance, obj_ptr);
+    try wrapTaggedObject(T, Identity, env, js_instance, obj_ptr);
     return js_instance;
 }
 
@@ -226,4 +282,85 @@ fn markers(comptime T: type) type {
 
 fn internalCtorMarkerPtr(comptime T: type) *u8 {
     return &markers(T).ctor_marker;
+}
+
+test "package versions distinguish the same Zig class" {
+    const Tagged = struct {};
+    const VersionOne = struct {
+        pub const package_name: []const u8 = "addon";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
+    };
+    const VersionTwo = struct {
+        pub const package_name: []const u8 = "addon";
+        pub const package_version: []const u8 = "2.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, VersionOne), typeTag(Tagged, VersionTwo)),
+    );
+}
+
+test "package fingerprints distinguish the same Zig class" {
+    const Tagged = struct {};
+    const PackageOne = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1111;
+        pub const addon_name: []const u8 = "native";
+    };
+    const PackageTwo = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x2222;
+        pub const addon_name: []const u8 = "native";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, PackageOne), typeTag(Tagged, PackageTwo)),
+    );
+}
+
+test "addon artifacts distinguish the same Zig class" {
+    const Tagged = struct {};
+    const AddonOne = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "addon-one";
+    };
+    const AddonTwo = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "addon-two";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(Tagged, AddonOne), typeTag(Tagged, AddonTwo)),
+    );
+}
+
+test "Zig class names distinguish types within the same addon" {
+    const First = struct {};
+    const Second = struct {};
+    const Identity = struct {
+        pub const package_name: []const u8 = "package";
+        pub const package_version: []const u8 = "1.0.0";
+        pub const package_fingerprint: u64 = 0x1234;
+        pub const addon_name: []const u8 = "native";
+    };
+    try std.testing.expect(
+        !std.meta.eql(typeTag(First, Identity), typeTag(Second, Identity)),
+    );
+}
+
+test "type tag identity hashing matches the FNV-1a known vector" {
+    try std.testing.expectEqual(
+        napi.c.napi_type_tag{
+            .lower = 9205288767444028904,
+            .upper = 12488879969338687231,
+        },
+        typeTagFromParts(.{"napi@1.0.0::x::Foo"}),
+    );
 }

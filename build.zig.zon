@@ -49,8 +49,18 @@
             .imports = .{.zapi},
             .link_libc = true,
         },
+        .example_addon_isolation = .{
+            .root_source_file = "examples/addon_isolation/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
         .example_register_decls = .{
             .root_source_file = "examples/register_decls/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
+        .function_only_dsl_compile = .{
+            .root_source_file = "examples/function_only_dsl/mod.zig",
             .imports = .{.zapi},
             .link_libc = true,
         },
@@ -74,11 +84,23 @@
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_js_dsl.node",
         },
+        .example_addon_isolation = .{
+            .root_module = .example_addon_isolation,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "example_addon_isolation.node",
+        },
         .example_register_decls = .{
             .root_module = .example_register_decls,
             .linkage = .dynamic,
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_register_decls.node",
+        },
+        .function_only_dsl_compile = .{
+            .root_module = .function_only_dsl_compile,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "function_only_dsl_compile.node",
         },
     },
     .tests = .{
@@ -97,6 +119,10 @@
         },
         .example_js_dsl = .{
             .root_module = .example_js_dsl,
+            .linker_allow_shlib_undefined = true,
+        },
+        .example_addon_isolation = .{
+            .root_module = .example_addon_isolation,
             .linker_allow_shlib_undefined = true,
         },
     },
