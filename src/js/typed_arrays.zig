@@ -179,6 +179,8 @@ pub fn OwnedTypedArray(comptime Element: type, comptime array_type: TypedarrayTy
         data: []Element,
 
         const Self = @This();
+        /// Presence-only compile-time marker used by `isOwnedTypedArray`.
+        /// It adds no state to an `OwnedTypedArray` instance.
         pub const owned_typed_array = {};
         pub const expected_array_type = array_type;
 
