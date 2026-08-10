@@ -78,7 +78,15 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             const len_hint: ?*anyopaque = @ptrFromInt(slice.len);
             const finalize_cb = comptime napi.wrapSliceFinalizeCallback(Element, externalFinalizer);
             const arraybuffer = e.createExternalArrayBuffer(std.mem.sliceAsBytes(buf), finalize_cb, len_hint) catch |err| {
-                context.allocator().free(buf);
+                // These statuses are returned before N-API installs the finalizer.
+                switch (err) {
+                    error.NoExternalBuffersAllowed,
+                    error.PendingException,
+                    error.CannotRunJS,
+                    => context.allocator().free(buf),
+                    // Other failures may occur after the finalizer has taken ownership.
+                    else => {},
+                }
                 return err;
             };
 
