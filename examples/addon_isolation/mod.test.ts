@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
-const primaryPath = require.resolve("../../zig-out/lib/example_js_dsl.node");
+const primaryPath = require.resolve("../zig-out/lib/example_js_dsl.node");
 const primary = require(primaryPath);
-const secondary = require("../../zig-out/lib/example_addon_isolation.node");
+const secondary = require("../zig-out/lib/example_addon_isolation.node");
 const duplicatePath = join(dirname(primaryPath), "example_js_dsl_duplicate.node");
 copyFileSync(primaryPath, duplicatePath);
 const duplicate = require(duplicatePath);

@@ -4,9 +4,7 @@ const zbuild = @import("zbuild");
 pub fn build(b: *std.Build) !void {
     @setEvalBranchQuota(200_000);
     const manifest = @import("build.zig.zon");
-    const result = try zbuild.configureBuild(b, manifest, .{});
-
-    configureExampleAddonIdentities(b, manifest, result);
+    _ = try zbuild.configureBuild(b, manifest, .{});
 }
 
 /// Makes the final addon's package and artifact identity available to its root
@@ -32,13 +30,4 @@ pub fn addAddonIdentity(
     identity.addOption(u64, "package_fingerprint", manifest.fingerprint);
     identity.addOption([]const u8, "addon_name", addon.name);
     addon.root_module.addOptions(import_name, identity);
-}
-
-fn configureExampleAddonIdentities(
-    b: *std.Build,
-    comptime manifest: anytype,
-    result: zbuild.BuildResult,
-) void {
-    addAddonIdentity(b, result.library("example_js_dsl").?, manifest);
-    addAddonIdentity(b, result.library("example_addon_isolation").?, manifest);
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const mod = require("../../zig-out/lib/example_js_dsl.node");
+const mod = require("../zig-out/lib/example_js_dsl.node");
 
 function expectTypeErrorWithMessage(fn: () => unknown, message: string) {
 	try {
@@ -726,7 +726,7 @@ describe("module lifecycle - worker threads", () => {
 
 		// Build an absolute path to the .node file so the worker can load it
 		const thisDir = fileURLToPath(new URL(".", import.meta.url));
-		const nativePath = resolve(thisDir, "../../zig-out/lib/example_js_dsl.node");
+		const nativePath = resolve(thisDir, "../zig-out/lib/example_js_dsl.node");
 
 		// Spawn a worker that loads the same native module
 		const worker = new Worker(

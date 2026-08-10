@@ -12,7 +12,7 @@
 	"scripts": {
 		"build": "pnpm build:js && pnpm build:zig",
 		"build:js": "tsc --outDir lib",
-		"build:zig": "zig build",
+		"build:zig": "cd examples && zig build --fork=..",
 		"test:zig": "zig build test:zapi",
 		"test:js": "vitest run examples/**/*.test.ts",
 		"test": "pnpm test:zig && pnpm test:js",
