@@ -38,7 +38,7 @@ pub fn createCallback(
                 const is_value_arg = arg_hint == .value or (arg_hint == .auto and param_type == Value);
 
                 if (arg_hint == .data) {
-                    args[i] = @alignCast(@ptrCast(info.data));
+                    args[i] = @ptrCast(@alignCast(info.data));
                 } else if (is_env_arg) {
                     args[i] = env;
                 } else if (is_value_arg) {

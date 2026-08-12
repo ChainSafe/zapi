@@ -274,7 +274,10 @@ pub fn getValueBigintUint64(self: Value, lossless: ?*bool) NapiError!u64 {
 ///
 /// Returns `error.Overflow` if the BigInt needs more words than `words` can hold:
 /// napi sets the out `word_count` to the *required* count, which may exceed the
-/// buffer, so slicing by it unchecked would read out of bounds.
+/// buffer, so slicing by it unchecked would read out of bounds. napi still fills
+/// `words` with the low-order words and `sign_bit` is set before the error is
+/// returned, so callers that want truncation semantics may catch `error.Overflow`
+/// and read the buffer directly.
 ///
 /// NOTE: napi's C entry takes `int*` (4-byte aligned). Casting a u1 to int* is UB, since that
 /// is 4-bytes aligned. We use a local `c_int` for the napi call and narrow back to `u1` for the caller.
@@ -286,9 +289,9 @@ pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) (NapiError
     try status.check(
         c.napi_get_value_bigint_words(self.env, self.value, &raw_sign, &word_count, words.ptr),
     );
-    if (word_count > words.len) return error.Overflow;
     // napi guarantees raw_sign ∈ {0, 1}
     if (sign_bit) |s| s.* = @intCast(raw_sign);
+    if (word_count > words.len) return error.Overflow;
     return words[0..word_count];
 }
 
