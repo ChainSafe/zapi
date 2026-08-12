@@ -99,13 +99,12 @@ pub fn doubleBigInt(n: BigInt) !BigInt {
     return BigInt.from(val * 2);
 }
 
-/// Read a BigInt's first u64 word via `getValueBigintWords` passing `null` for `sign_bit`.
+/// Read a single-word BigInt as a u64 via `getValueBigintWords` passing `null` for `sign_bit`.
 ///
-/// Throws if word_count > 1.
-pub fn bigIntFirstWord(n: BigInt) !Number {
+/// Throws `Overflow` if the BigInt needs more than one word.
+pub fn bigIntSingleWord(n: BigInt) !Number {
     var words: [1]u64 = .{0};
-    const got = try n.toValue().getValueBigintWords(null, &words);
-    if (got.len > 1) return error.BigIntTooLarge;
+    _ = try n.toValue().getValueBigintWords(null, &words);
     return Number.from(words[0]);
 }
 
@@ -115,6 +114,14 @@ pub fn bigIntSign(n: BigInt) !Number {
     var words: [1]u64 = .{0};
     _ = try n.toValue().getValueBigintWords(&sign, &words);
     return Number.from(@as(u32, sign));
+}
+
+/// Convert a BigInt to an i128 and render it as a decimal string.
+pub fn bigIntToI128String(n: BigInt) !String {
+    const v = try n.toI128();
+    var buf: [48]u8 = undefined;
+    const s = std.fmt.bufPrint(&buf, "{d}", .{v}) catch return error.FormatError;
+    return String.from(s);
 }
 
 /// Add one day (86400000ms) to a Date.
@@ -177,6 +184,16 @@ pub fn uint8Sum(data: Uint8Array) !Number {
     const slice = try data.toSlice();
     var sum: i32 = 0;
     for (slice) |byte| {
+        sum += @intCast(byte);
+    }
+    return Number.from(sum);
+}
+
+/// Sum exactly four bytes copied from a Uint8Array into a Zig array.
+pub fn uint8Array4Sum(data: Uint8Array) !Number {
+    const array = try data.toArray(4);
+    var sum: i32 = 0;
+    for (array) |byte| {
         sum += @intCast(byte);
     }
     return Number.from(sum);
@@ -271,6 +288,11 @@ pub const Counter = struct {
     }
 };
 
+/// Increment a counter passed as a class pointer argument.
+pub fn incrementCounter(counter: *Counter) void {
+    counter.count += 1;
+}
+
 /// A resource-owning buffer class demonstrating deinit.
 pub const Buffer = struct {
     pub const js_meta = js.class(.{});
@@ -303,6 +325,18 @@ pub const Buffer = struct {
 // Section 10: Mixed DSL + N-API
 // ============================================================================
 
+/// Narrow an untyped value to a Number via the `js.Value` narrowing API.
+pub fn narrowToNumber(v: Value) !Number {
+    return v.asNumber();
+}
+
+/// Narrow an untyped value to a Uint8Array and return its length.
+pub fn narrowToUint8ArrayLen(v: Value) !Number {
+    const arr = try v.asUint8Array();
+    const slice = try arr.toSlice();
+    return Number.from(@as(u32, @intCast(slice.len)));
+}
+
 /// Return the JS typeof string for any value.
 /// Demonstrates dropping down to low-level napi to call raw N-API methods.
 pub fn getTypeOf(val: Value) !String {
@@ -326,6 +360,69 @@ pub fn makeObject(key: String, value: Number) !Value {
     const name: [:0]const u8 = name_buf[0..key_slice.len :0];
     try obj.setNamedProperty(name, value.toValue());
     return .{ .val = obj };
+}
+
+pub fn nodeVersion() !String {
+    const semantic_version = (try js.env().getNodeVersion()).toSemanticVersion();
+    var buffer: [64]u8 = undefined;
+    const version = std.fmt.bufPrint(
+        &buffer,
+        "{d}.{d}.{d}",
+        .{ semantic_version.major, semantic_version.minor, semantic_version.patch },
+    ) catch return error.FormatError;
+    return String.from(version);
+}
+
+pub fn nodeRelease() !String {
+    const release = (try js.env().getNodeVersion()).getRelease();
+    return String.from(std.mem.span(release));
+}
+
+pub fn arrayBufferByteLength(value: Value) !Number {
+    const bytes = try value.toValue().getArrayBufferInfo();
+    return Number.from(bytes.len);
+}
+
+pub fn bufferByteLength(value: Value) !Number {
+    const bytes = try value.toValue().getBufferInfo();
+    return Number.from(bytes.len);
+}
+
+pub fn typedArrayInfoMatches(
+    value: Value,
+    expected_arraybuffer: Value,
+    expected_length: Number,
+    expected_byte_offset: Number,
+) !Boolean {
+    const info = try value.toValue().getTypedarrayInfo();
+    const length: usize = @intCast(expected_length.assertU32());
+    const byte_offset: usize = @intCast(expected_byte_offset.assertU32());
+    if (info.length != length) return Boolean.from(false);
+    if (info.byte_offset != byte_offset) return Boolean.from(false);
+    if (info.data.len != length * info.array_type.elementSize()) return Boolean.from(false);
+    return Boolean.from(try info.arraybuffer.strictEquals(expected_arraybuffer.toValue()));
+}
+
+pub fn dataViewInfoMatches(
+    value: Value,
+    expected_arraybuffer: Value,
+    expected_byte_length: Number,
+    expected_byte_offset: Number,
+) !Boolean {
+    const info = try value.toValue().getDataviewInfo();
+    const byte_length: usize = @intCast(expected_byte_length.assertU32());
+    const byte_offset: usize = @intCast(expected_byte_offset.assertU32());
+    if (info.byte_length != byte_length) return Boolean.from(false);
+    if (info.byte_offset != byte_offset) return Boolean.from(false);
+    if (info.data.len != byte_length) return Boolean.from(false);
+    return Boolean.from(try info.arraybuffer.strictEquals(expected_arraybuffer.toValue()));
+}
+
+/// Generate 16 random bytes using the DSL-managed shared std.Io instance.
+pub fn randomBytes16() Uint8Array {
+    var bytes: [16]u8 = undefined;
+    js.io().random(&bytes);
+    return Uint8Array.from(&bytes);
 }
 
 // ============================================================================

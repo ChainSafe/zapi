@@ -1,13 +1,13 @@
 .{
     .name = .zapi,
-    .version = "2.2.0", // x-release-please-version
+    .version = "3.1.0", // x-release-please-version
     .fingerprint = 0x77829ef951b38aac,
     .minimum_zig_version = "0.16.0",
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
     .dependencies = .{
         .zbuild = .{
-            .url = "git+https://github.com/ChainSafe/zbuild?ref=refactor/comptime-library-rewrite#7ec852f1c6495b62d964e311bd210b6f9a3015be",
-            .hash = "zbuild-0.4.0-XJFav9lXAgCtcFwxSb5qEkex3kijECLtqo7z9FzrkUaf",
+            .url = "git+https://github.com/chainsafe/zbuild.git#f7d5f19de09f2808e54acf599605f9e18c9bd804",
+            .hash = "zbuild-0.4.0-XJFav-1nAgDmfVY1nVSIIzbkcbuHZj7yMb7Fv8yvznPO",
         },
     },
     .options_modules = .{
@@ -49,6 +49,11 @@
             .imports = .{.zapi},
             .link_libc = true,
         },
+        .example_register_decls = .{
+            .root_source_file = "examples/register_decls/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
         .test_fuzz_numeric = .{
             .root_source_file = "tests/fuzz/mod.zig",
             .imports = .{.zapi},
@@ -73,6 +78,12 @@
             .linkage = .dynamic,
             .linker_allow_shlib_undefined = true,
             .dest_sub_path = "example_js_dsl.node",
+        },
+        .example_register_decls = .{
+            .root_module = .example_register_decls,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "example_register_decls.node",
         },
         .test_fuzz_numeric = .{
             .root_module = .test_fuzz_numeric,

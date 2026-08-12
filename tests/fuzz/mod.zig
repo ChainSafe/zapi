@@ -94,9 +94,9 @@ pub fn rtBigIntI128LowBits(b: js.BigInt) !js.BigInt {
 ///
 /// Implementation notes:
 ///   - We pass a 64-word buffer to `getValueBigintWords`. The `src/Value.zig`
-///     wrapper now clamps the returned slice to `@min(word_count, buffer.len)`,
-///     so oversized BigInts silently truncate. The 64-word cap covers all
-///     entries in `edgeBigInts` (the largest, `1n << 256n`, is 5 words).
+///     wrapper returns `error.Overflow` for BigInts needing more words, so
+///     oversized BigInts throw. The 64-word cap covers all entries in
+///     `edgeBigInts` (the largest, `1n << 256n`, is 5 words).
 ///   - Sign bit and the populated word slice are forwarded to `fromWords`.
 pub fn rtBigIntWords(b: js.BigInt) !js.BigInt {
     var sign_bit: u1 = 0;

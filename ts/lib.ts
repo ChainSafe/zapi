@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 export const TARGETS = [
   "aarch64-apple-darwin",
   "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
   "x86_64-apple-darwin",
   "x86_64-unknown-linux-gnu",
   "x86_64-unknown-linux-musl",
@@ -121,6 +122,8 @@ export function getZigTriple(target: Target): string {
       return "x86_64-linux-musl";
     case "aarch64-unknown-linux-gnu":
       return "aarch64-linux-gnu";
+    case "aarch64-unknown-linux-musl":
+      return "aarch64-linux-musl";
     case "x86_64-apple-darwin":
       return "x86_64-macos-none";
     case "aarch64-apple-darwin":
@@ -134,10 +137,6 @@ export function getZigTriple(target: Target): string {
 let isMuslCache: boolean | null = null;
 
 const isMusl = () => {
-  if (process.platform !== "linux") {
-    return false;
-  }
-
   if (isMuslCache !== null) {
     return isMuslCache;
   }
@@ -189,7 +188,7 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
     }
   } else if (platform === "linux") {
     const abi = isMusl() ? "musl" : "gnu";
-    if (arch === "arm64" && abi === "gnu") {
+    if (arch === "arm64") {
       return `aarch64-unknown-linux-${abi}`;
     }
     if (arch === "x64") {

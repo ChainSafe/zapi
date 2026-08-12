@@ -26,6 +26,8 @@ pub const Status = enum(c.napi_status) {
     would_deadlock = c.napi_would_deadlock,
     no_external_buffers_allowed = c.napi_no_external_buffers_allowed,
     cannot_run_js = c.napi_cannot_run_js,
+    // Non-exhaustive: future Node versions may add statuses.
+    _,
 };
 
 pub const NapiError = error{
@@ -80,6 +82,7 @@ pub fn check(code: c_uint) NapiError!void {
         .would_deadlock => return error.WouldDeadlock,
         .no_external_buffers_allowed => return error.NoExternalBuffersAllowed,
         .cannot_run_js => return error.CannotRunJS,
+        _ => return error.GenericFailure,
     }
 }
 
@@ -111,4 +114,10 @@ test "check returns error on non-ok status" {
 test "isNapiError identifies napi errors" {
     try std.testing.expect(isNapiError(error.GenericFailure));
     try std.testing.expect(!isNapiError(error.OutOfMemory));
+}
+
+test "check maps unknown status codes to GenericFailure" {
+    // Future Node versions may return statuses this enum doesn't know about;
+    // they must map to an error, not invalid-enum UB.
+    try std.testing.expectError(error.GenericFailure, check(9999));
 }

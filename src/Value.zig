@@ -1,3 +1,4 @@
+const std = @import("std");
 const c = @import("c.zig").c;
 const status = @import("status.zig");
 const NapiError = @import("status.zig").NapiError;
@@ -11,6 +12,13 @@ env: c.napi_env,
 value: c.napi_value,
 
 const Value = @This();
+
+fn byteSlice(data: ?*anyopaque, byte_length: usize) []u8 {
+    if (byte_length == 0) return &.{};
+    // The N-API zero-length case, where data may be null or arbitrary, was handled above.
+    const byte_ptr: [*]u8 = @ptrCast(data.?);
+    return byte_ptr[0..byte_length];
+}
 
 /// https://nodejs.org/api/n-api.html#napi_is_array
 pub fn isArray(self: Value) NapiError!bool {
@@ -106,22 +114,22 @@ pub fn getArrayLength(self: Value) NapiError!u32 {
 
 /// https://nodejs.org/api/n-api.html#napi_get_arraybuffer_info
 pub fn getArrayBufferInfo(self: Value) NapiError![]u8 {
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var byte_length: usize = undefined;
     try status.check(
-        c.napi_get_arraybuffer_info(self.env, self.value, @ptrCast(&data), &byte_length),
+        c.napi_get_arraybuffer_info(self.env, self.value, &data, &byte_length),
     );
-    return data[0..byte_length];
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_buffer_info
 pub fn getBufferInfo(self: Value) NapiError![]u8 {
-    var data: [*]u8 = undefined;
+    var data: ?*anyopaque = undefined;
     var byte_length: usize = undefined;
     try status.check(
-        c.napi_get_buffer_info(self.env, self.value, @ptrCast(&data), &byte_length),
+        c.napi_get_buffer_info(self.env, self.value, &data, &byte_length),
     );
-    return data[0..byte_length];
+    return byteSlice(data, byte_length);
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_prototype
@@ -142,15 +150,40 @@ pub const TypedarrayInfo = struct {
     byte_offset: usize,
 };
 
+pub const TypedarrayInfoError = NapiError || error{
+    UnsupportedTypedarrayType,
+};
+
 /// https://nodejs.org/api/n-api.html#napi_get_typedarray_info
-pub fn getTypedarrayInfo(self: Value) NapiError!TypedarrayInfo {
-    var info: TypedarrayInfo = undefined;
-    var data: [*]u8 = undefined;
+pub fn getTypedarrayInfo(self: Value) TypedarrayInfoError!TypedarrayInfo {
+    var array_type_raw: c.napi_typedarray_type = undefined;
+    var length: usize = undefined;
+    var data: ?*anyopaque = undefined;
+    var arraybuffer: c.napi_value = undefined;
+    var byte_offset: usize = undefined;
     try status.check(
-        c.napi_get_typedarray_info(self.env, self.value, @ptrCast(&info.array_type), &info.length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
+        c.napi_get_typedarray_info(
+            self.env,
+            self.value,
+            &array_type_raw,
+            &length,
+            &data,
+            &arraybuffer,
+            &byte_offset,
+        ),
     );
-    info.data = data[0 .. info.length * info.array_type.elementSize()];
-    return info;
+    const array_type = std.enums.fromInt(TypedarrayType, array_type_raw) orelse
+        return error.UnsupportedTypedarrayType;
+    return .{
+        .array_type = array_type,
+        .length = length,
+        .data = byteSlice(data, length * array_type.elementSize()),
+        .arraybuffer = .{
+            .env = self.env,
+            .value = arraybuffer,
+        },
+        .byte_offset = byte_offset,
+    };
 }
 
 pub const DataViewInfo = struct {
@@ -162,13 +195,29 @@ pub const DataViewInfo = struct {
 
 /// https://nodejs.org/api/n-api.html#napi_get_dataview_info
 pub fn getDataviewInfo(self: Value) NapiError!DataViewInfo {
-    var info: DataViewInfo = undefined;
-    var data: [*]u8 = undefined;
+    var byte_length: usize = undefined;
+    var data: ?*anyopaque = undefined;
+    var arraybuffer: c.napi_value = undefined;
+    var byte_offset: usize = undefined;
     try status.check(
-        c.napi_get_dataview_info(self.env, self.value, &info.byte_length, @ptrCast(&data), @ptrCast(&info.arraybuffer), &info.byte_offset),
+        c.napi_get_dataview_info(
+            self.env,
+            self.value,
+            &byte_length,
+            &data,
+            &arraybuffer,
+            &byte_offset,
+        ),
     );
-    info.data = data[0..info.byte_length];
-    return info;
+    return .{
+        .byte_length = byte_length,
+        .data = byteSlice(data, byte_length),
+        .arraybuffer = .{
+            .env = self.env,
+            .value = arraybuffer,
+        },
+        .byte_offset = byte_offset,
+    };
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_date_value
@@ -223,11 +272,18 @@ pub fn getValueBigintUint64(self: Value, lossless: ?*bool) NapiError!u64 {
 /// In Ethereum's context, this is useful for big integers defined in the spec to be
 /// unsigned.
 ///
+/// Returns `error.Overflow` if the BigInt needs more words than `words` can hold:
+/// napi sets the out `word_count` to the *required* count, which may exceed the
+/// buffer, so slicing by it unchecked would read out of bounds. napi still fills
+/// `words` with the low-order words and `sign_bit` is set before the error is
+/// returned, so callers that want truncation semantics may catch `error.Overflow`
+/// and read the buffer directly.
+///
 /// NOTE: napi's C entry takes `int*` (4-byte aligned). Casting a u1 to int* is UB, since that
 /// is 4-bytes aligned. We use a local `c_int` for the napi call and narrow back to `u1` for the caller.
 ///
 /// Source: https://nodejs.org/api/n-api.html#napi_get_value_bigint_words
-pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError![]u64 {
+pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) (NapiError || error{Overflow})![]u64 {
     var word_count: usize = words.len;
     var raw_sign: c_int = 0;
     try status.check(
@@ -235,11 +291,8 @@ pub fn getValueBigintWords(self: Value, sign_bit: ?*u1, words: []u64) NapiError!
     );
     // napi guarantees raw_sign ∈ {0, 1}
     if (sign_bit) |s| s.* = @intCast(raw_sign);
-    // `word_count` is set by NAPI to the actual number of 64-bit words in the
-    // BigInt, which may exceed `words.len` when the value is larger than the
-    // buffer. NAPI fills `words` up to `words.len`; clamp the returned slice
-    // so callers get only the words that were actually written.
-    return words[0..@min(word_count, words.len)];
+    if (word_count > words.len) return error.Overflow;
+    return words[0..word_count];
 }
 
 /// https://nodejs.org/api/n-api.html#napi_get_value_external
@@ -530,4 +583,10 @@ pub fn objectSeal(self: Value) NapiError!void {
     try status.check(
         c.napi_object_seal(self.env, self.value),
     );
+}
+
+test "byteSlice normalizes null data for zero byte length" {
+    const bytes = byteSlice(null, 0);
+
+    try std.testing.expectEqual(@as(usize, 0), bytes.len);
 }

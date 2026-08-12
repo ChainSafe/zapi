@@ -62,6 +62,43 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
+    try module.setNamedProperty("copyArrayBuffer", try env.createFunction(
+        "copyArrayBuffer",
+        1,
+        copy_arraybuffer,
+        null,
+    ));
+
+    try module.setNamedProperty("copyBuffer", try env.createFunction(
+        "copyBuffer",
+        0,
+        copy_buffer,
+        null,
+    ));
+
+    try module.setNamedProperty("copySlice", try env.createFunction(
+        "copySlice",
+        0,
+        zapi.createCallback(0, copy_slice, .{}),
+        null,
+    ));
+
+    try module.setNamedProperty("externalBuffer", try env.createFunction(
+        "externalBuffer",
+        0,
+        zapi.createCallback(0, external_buffer, .{
+            .returns = .external_buffer,
+        }),
+        null,
+    ));
+
+    try module.setNamedProperty("externalBufferAllocatedBytes", try env.createFunction(
+        "externalBufferAllocatedBytes",
+        0,
+        zapi.createCallback(0, external_buffer_allocated_bytes, .{}),
+        null,
+    ));
+
     try module.setNamedProperty("update", try env.createFunction(
         "update",
         1,
@@ -137,6 +174,37 @@ fn add_semimanual(env: zapi.Env, a: i32, b: zapi.Value) !zapi.Value {
 
 fn surprise() []const u8 {
     return "Surprise!";
+}
+
+fn copy_arraybuffer(env: zapi.Env, cb: zapi.CallbackInfo(1)) !zapi.Value {
+    if (try cb.arg(0).getValueBool()) return try env.createArrayBufferCopy("", null);
+    return try env.createArrayBufferCopy("copy me", null);
+}
+
+fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {
+    return try env.createBufferCopy("copy me", null);
+}
+
+const external_buffer_source = [_]u8{ 1, 2, 3 };
+
+var slice_data = [_]u8{ 1, 2, 3 };
+var external_buffer_allocator: std.heap.DebugAllocator(.{
+    .enable_memory_limit = true,
+    .thread_safe = false,
+}) = .init;
+
+fn copy_slice() []u8 {
+    return &slice_data;
+}
+
+fn external_buffer() !zapi.OwnedBuffer {
+    const owned_allocator = external_buffer_allocator.allocator();
+    const data = try owned_allocator.dupe(u8, &external_buffer_source);
+    return zapi.OwnedBuffer.fromOwnedSlice(owned_allocator, data);
+}
+
+fn external_buffer_allocated_bytes() usize {
+    return external_buffer_allocator.total_requested_bytes;
 }
 
 const S = struct {

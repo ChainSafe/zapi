@@ -40,7 +40,9 @@ pub fn wrapCallback(
                         e.throwError(@errorName(err), "NapiError") catch {};
                     } else {
                         const message: [:0]const u8 = "Native callback failed";
-                        e.throwError(@tagName(error_info_status), message) catch {};
+                        // @tagName would panic on a status the enum doesn't name.
+                        const code = std.enums.tagName(status.Status, error_info_status) orelse "NapiError";
+                        e.throwError(code, message) catch {};
                     }
                 } else {
                     e.throwError(@errorName(err), @errorName(err)) catch {};

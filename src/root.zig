@@ -7,6 +7,7 @@ pub const c = napi.c;
 pub const AsyncContext = napi.AsyncContext;
 pub const Env = napi.Env;
 pub const Value = napi.Value;
+pub const OwnedBuffer = napi.OwnedBuffer;
 pub const Deferred = napi.Deferred;
 pub const EscapableHandleScope = napi.EscapableHandleScope;
 pub const HandleScope = napi.HandleScope;

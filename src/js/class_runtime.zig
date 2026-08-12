@@ -1,5 +1,6 @@
 const std = @import("std");
 const napi = @import("../napi.zig");
+const context = @import("context.zig");
 
 pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     return .{
@@ -8,15 +9,17 @@ pub fn typeTag(comptime T: type) napi.c.napi_type_tag {
     };
 }
 
+/// Tags `object`, then wraps `native_object` into it with a finalizer.
+///
+/// The wrap is done last so it is the only fallible step that transfers
+/// ownership: once it succeeds N-API's finalizer owns `native_object`, and any
+/// earlier failure leaves nothing wrapped, so the caller still owns and frees it.
 pub fn wrapTaggedObject(comptime T: type, env: napi.Env, object: napi.Value, native_object: *T) !void {
     const tag = typeTag(T);
-    try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
-    errdefer if (env.removeWrap(T, object)) |removed| {
-        destroyNativeObject(T, removed);
-    } else |_| {};
     if (!(try env.checkObjectTypeTag(object, tag))) {
         try env.typeTagObject(object, tag);
     }
+    try env.wrap(object, T, native_object, defaultFinalize(T), null, null);
 }
 
 /// Generates a deterministic 64-bit FNV-1a hash at compile-time.
@@ -41,7 +44,7 @@ pub fn destroyNativeObject(comptime T: type, obj: *T) void {
     if (@hasDecl(T, "deinit")) {
         obj.deinit();
     }
-    std.heap.c_allocator.destroy(obj);
+    context.allocator().destroy(obj);
 }
 
 pub fn defaultFinalize(comptime T: type) napi.FinalizeCallback(T) {
@@ -60,17 +63,20 @@ pub fn registerClass(comptime T: type, env: napi.Env, ctor: napi.Value) !void {
 
     if (State.find(env.env) != null) return;
 
-    const entry = try std.heap.c_allocator.create(State.Entry);
-    errdefer std.heap.c_allocator.destroy(entry);
+    const entry = try context.allocator().create(State.Entry);
+    errdefer context.allocator().destroy(entry);
 
     entry.* = .{
         .env = env.env,
         .ctor_ref = try env.createReference(ctor, 1),
         .next = State.head,
     };
-    State.head = entry;
+    errdefer entry.ctor_ref.delete() catch {};
 
+    // Link only after the cleanup hook is registered: a hook failure must not
+    // leave a freed entry reachable from the list head.
     try env.addEnvCleanupHook(State.Entry, entry, State.cleanupHook);
+    State.head = entry;
 }
 
 /// Per-thread marker set by `materializeClassInstance` to tell the generated
@@ -110,7 +116,7 @@ pub fn consumeMaterialization(comptime T: type, env: napi.Env, this_arg: napi.c.
 pub fn materializeClassInstance(comptime T: type, env: napi.Env, instance: T, preferred_ctor: ?napi.Value) !napi.Value {
     const ctor = preferred_ctor orelse try getConstructor(T, env);
 
-    const obj_ptr = try std.heap.c_allocator.create(T);
+    const obj_ptr = try context.allocator().create(T);
     errdefer destroyNativeObject(T, obj_ptr);
     obj_ptr.* = instance;
 
@@ -198,7 +204,7 @@ fn state(comptime T: type) type {
                 if (current == entry) {
                     cursor.* = current.next;
                     current.ctor_ref.delete() catch {};
-                    std.heap.c_allocator.destroy(current);
+                    context.allocator().destroy(current);
                     return;
                 }
                 cursor = &current.next;

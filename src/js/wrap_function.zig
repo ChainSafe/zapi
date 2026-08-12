@@ -167,7 +167,7 @@ pub fn convertArg(comptime T: type, raw: napi.c.napi_value, env: napi.c.napi_env
     }
     switch (@typeInfo(T)) {
         .pointer => |ptr| {
-            if (ptr.size == .one and class_meta.isClassType(ptr.child)) {
+            if (comptime ptr.size == .one and class_meta.isClassType(ptr.child)) {
                 const e = napi.Env{ .env = env };
                 return e.unwrapChecked(ptr.child, value, class_runtime.typeTag(ptr.child)) catch error.TypeMismatch;
             }

@@ -90,7 +90,7 @@ c.count; // 1 (getter, not a method call)
 | `Object(T)` | `object` | `get()`, `set(value)` — `T` fields must be DSL types |
 | `Function` | `Function` | `call(args)` |
 | `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
-| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `from(slice)` |
+| `Uint8Array` etc. | `TypedArray` | `toSlice()`, `toArray(len)`, `from(slice)` |
 | `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
 
 ---
@@ -359,6 +359,7 @@ pub fn advanced() !Value {
 | Function | Description |
 |----------|-------------|
 | `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
+| `js.io()` | Shared `std.Io` handle retained for the addon while at least one N-API environment is active |
 | `js.allocator()` | C allocator for native allocations |
 | `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
 
@@ -420,18 +421,40 @@ Control how arguments are converted:
 ```zig
 napi.createCallback(2, myFunc, .{
     .args = .{ .env, .auto, .value, .data, .string, .buffer },
-    .returns = .value,  // or .string, .buffer, .auto
+    .returns = .value,  // or .string, .buffer, .external_buffer, .auto
 });
 ```
 
 | Hint | Description |
 |------|-------------|
-| `.auto` | Automatic type conversion |
+| `.auto` | Automatic type conversion; byte-slice returns are copied into a JS Buffer |
 | `.env` | Inject `napi.Env` |
 | `.value` | Pass raw `napi.Value` |
 | `.data` | User data pointer passed to createFunction |
 | `.string` | Convert to/from `[]const u8` |
-| `.buffer` | Convert to/from byte slice |
+| `.buffer` | Borrow Buffer arguments as byte slices; copy byte-slice returns |
+| `.external_buffer` | Transfer an `OwnedBuffer` to JavaScript without copying |
+
+External buffers require explicit ownership transfer:
+
+```zig
+const allocator = std.heap.page_allocator;
+
+fn makeExternalBuffer() !napi.OwnedBuffer {
+    const data = try allocator.dupe(u8, "external data");
+    return napi.OwnedBuffer.fromOwnedSlice(allocator, data);
+}
+
+const callback = napi.createCallback(0, makeExternalBuffer, .{
+    .returns = .external_buffer,
+});
+```
+
+`OwnedBuffer.intoValue` consumes the buffer even if conversion fails, so the caller must not
+deinitialize it afterwards. Once N-API accepts the external buffer, the allocator must remain valid
+until its finalizer runs, including if N-API subsequently reports an error. If the environment
+disallows external buffers, `intoValue` copies the bytes and releases the original allocation before
+returning.
 
 ### Creating Classes
 
@@ -544,6 +567,7 @@ Add a `zapi` field to your `package.json`:
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-linux-musl",
       "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-pc-windows-msvc"
@@ -559,6 +583,7 @@ Add a `zapi` field to your `package.json`:
 | `aarch64-apple-darwin` | macOS | arm64 | - |
 | `x86_64-apple-darwin` | macOS | x64 | - |
 | `aarch64-unknown-linux-gnu` | Linux | arm64 | glibc |
+| `aarch64-unknown-linux-musl` | Linux | arm64 | musl |
 | `x86_64-unknown-linux-gnu` | Linux | x64 | glibc |
 | `x86_64-unknown-linux-musl` | Linux | x64 | musl |
 | `x86_64-pc-windows-msvc` | Windows | x64 | msvc |
@@ -675,7 +700,7 @@ GitHub releases are managed with release-please:
 
 1. Conventional commits merged to `main` update or create the release PR.
 2. Merging that PR tags a new GitHub release and bumps `package.json`.
-3. `build.zig.zon` and `zbuild.zon` are kept in sync from the same release-please version.
+3. `build.zig.zon` is kept in sync from the same release-please version.
 4. The release workflow installs dependencies, runs `pnpm build:js`, and publishes the root package directly with `npm publish` via npm trusted publishing.
 5. No `NPM_TOKEN` secret is required for npm publish; GitHub Actions OIDC (`id-token: write`) is used together with `--provenance`.
 6. The published npm package is the JS distribution only (`lib/` and `ts/`).

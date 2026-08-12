@@ -64,24 +64,23 @@ pub const BigInt = struct {
     /// Returns an error if N-API operations fail.
     pub fn toI128(self: BigInt) !i128 {
         var sign_bit: u1 = 0;
-        // Three words are enough to distinguish every in-range i128 from any
-        // oversized value, even when the lower 128 bits are zero.
-        var words: [3]u64 = .{ 0, 0, 0 };
-        const result = try self.val.getValueBigintWords(&sign_bit, &words);
-        if (result.len > 2) return error.InvalidArg;
-
+        var words: [2]u64 = .{ 0, 0 };
+        // BigInts needing more than two words are always outside the i128
+        // range; getValueBigintWords reports them as error.Overflow.
+        _ = self.val.getValueBigintWords(&sign_bit, &words) catch |err| switch (err) {
+            error.Overflow => return error.InvalidArg,
+            else => |e| return e,
+        };
         const lo: u128 = words[0];
         const hi: u128 = words[1];
         const magnitude: u128 = (hi << 64) | lo;
+        const max_positive: u128 = std.math.maxInt(i128);
         if (sign_bit == 1) {
-            if (magnitude == 0) return 0;
-            if (magnitude > (@as(u128, 1) << 127)) return error.InvalidArg;
-            return @bitCast(0 -% magnitude);
+            if (magnitude > max_positive + 1) return error.InvalidArg;
+            if (magnitude == max_positive + 1) return std.math.minInt(i128);
+            return -@as(i128, @intCast(magnitude));
         }
-
-        if (magnitude > @as(u128, @intCast(std.math.maxInt(i128)))) {
-            return error.InvalidArg;
-        }
+        if (magnitude > max_positive) return error.InvalidArg;
         return @intCast(magnitude);
     }
 
@@ -98,11 +97,14 @@ pub const BigInt = struct {
         // Pre-zeroed: NAPI writes only as many words as the BigInt has; unused
         // words stay 0. When the value is 0n NAPI returns word_count == 0, so
         // both words[0] and words[1] remain 0 — magnitude correctly becomes 0.
-        // When the BigInt exceeds 128 bits, getValueBigintWords fills only the
-        // two lower words (truncation to low 128 bits), giving BigInt.asIntN(128)
-        // semantics for out-of-range values.
+        // When the BigInt exceeds 128 bits, getValueBigintWords returns
+        // error.Overflow but NAPI has still filled the two lower words, so
+        // swallowing the error gives BigInt.asIntN(128) truncation semantics.
         var words: [2]u64 = .{ 0, 0 };
-        _ = try self.val.getValueBigintWords(&sign_bit, &words);
+        _ = self.val.getValueBigintWords(&sign_bit, &words) catch |err| switch (err) {
+            error.Overflow => {},
+            else => |e| return e,
+        };
         const lo: u128 = words[0];
         const hi: u128 = words[1];
         const magnitude: u128 = (hi << 64) | lo;

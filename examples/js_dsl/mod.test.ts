@@ -96,9 +96,9 @@ describe("primitive types", () => {
 
 	describe("getValueBigintWords", () => {
 		it("reads words with null sign_bit (unsigned only)", () => {
-			expect(mod.bigIntFirstWord(0n)).toEqual(0);
-			expect(mod.bigIntFirstWord(1n)).toEqual(1);
-			expect(mod.bigIntFirstWord(0xdeadbeefn)).toEqual(0xdeadbeef);
+			expect(mod.bigIntSingleWord(0n)).toEqual(0);
+			expect(mod.bigIntSingleWord(1n)).toEqual(1);
+			expect(mod.bigIntSingleWord(0xdeadbeefn)).toEqual(0xdeadbeef);
 		});
 
 		it("reads correct sign (non-null sign_bit path)", () => {
@@ -110,6 +110,28 @@ describe("primitive types", () => {
 			expect(mod.bigIntSign(-0xffffffffffffffffn)).toEqual(1);
 		});
 
+		it("rejects BigInts wider than the provided word buffer", () => {
+			expect(() => mod.bigIntSingleWord(2n ** 64n)).toThrow();
+			expect(() => mod.bigIntSingleWord(2n ** 200n)).toThrow();
+		});
+	});
+
+	describe("toI128", () => {
+		it("round-trips values across the i128 range", () => {
+			expect(mod.bigIntToI128String(0n)).toEqual("0");
+			expect(mod.bigIntToI128String(123n)).toEqual("123");
+			expect(mod.bigIntToI128String(-123n)).toEqual("-123");
+			expect(mod.bigIntToI128String(2n ** 127n - 1n)).toEqual((2n ** 127n - 1n).toString());
+			expect(mod.bigIntToI128String(-(2n ** 127n))).toEqual((-(2n ** 127n)).toString());
+		});
+
+		it("rejects BigInts outside the i128 range instead of crashing", () => {
+			expect(() => mod.bigIntToI128String(2n ** 127n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 127n) - 1n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 128n)).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 200n)).toThrow();
+			expect(() => mod.bigIntToI128String(-(2n ** 200n))).toThrow();
+		});
 	});
 
 	it("tomorrow adds one day", () => {
@@ -122,6 +144,25 @@ describe("primitive types", () => {
 	it("tomorrow rejects non-Date arguments at the JS boundary", () => {
 		expectTypeErrorWithMessage(() => mod.tomorrow("2025-01-01T00:00:00Z"), "Argument 1 must be a Date");
 		expectTypeErrorWithMessage(() => mod.tomorrow(123), "Argument 1 must be a Date");
+	});
+});
+
+describe("value narrowing", () => {
+	it("narrows numbers", () => {
+		expect(mod.narrowToNumber(42)).toEqual(42);
+	});
+
+	it("rejects non-numbers", () => {
+		expect(() => mod.narrowToNumber("42")).toThrow();
+		expect(() => mod.narrowToNumber({})).toThrow();
+		expect(() => mod.narrowToNumber(42n)).toThrow();
+	});
+
+	it("narrows typed arrays by exact subtype", () => {
+		expect(mod.narrowToUint8ArrayLen(new Uint8Array(3))).toEqual(3);
+		expect(() => mod.narrowToUint8ArrayLen(new Int8Array(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen(new Uint8ClampedArray(3))).toThrow();
+		expect(() => mod.narrowToUint8ArrayLen([1, 2, 3])).toThrow();
 	});
 });
 
@@ -160,11 +201,35 @@ describe("typed arrays", () => {
 		expect(mod.uint8Sum(data)).toEqual(15);
 	});
 
+	it("toArray copies a TypedArray of the expected length", () => {
+		expect(mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4]))).toEqual(10);
+	});
+
+	it("toArray rejects TypedArrays of a different length", () => {
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3]))).toThrow();
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4, 5]))).toThrow();
+	});
+
 	it("float64Scale scales values", () => {
 		const data = new Float64Array([1.0, 2.0, 3.0]);
 		const result = mod.float64Scale(data, 2.5);
 		expect(result).toBeInstanceOf(Float64Array);
 		expect(Array.from(result)).toEqual([2.5, 5.0, 7.5]);
+	});
+
+	it("accepts empty Uint8Array and Float64Array values", () => {
+		expect(mod.uint8Sum(new Uint8Array(0))).toEqual(0);
+		const result = mod.float64Scale(new Float64Array(0), 2.5);
+		expect(result).toBeInstanceOf(Float64Array);
+		expect(result).toHaveLength(0);
+	});
+
+	it("accepts a detached Uint8Array value", () => {
+		const backing = new ArrayBuffer(8);
+		const view = new Uint8Array(backing, 2, 3);
+		structuredClone(backing, { transfer: [backing] });
+
+		expect(mod.uint8Sum(view)).toEqual(0);
 	});
 
 	it("allocUint8 allocates and fills via alloc pattern", () => {
@@ -220,11 +285,30 @@ describe("Counter class", () => {
 		expect(() => getCount.call(new mod.Buffer(4))).toThrow();
 	});
 
+	it("rejects constructor calls without new", () => {
+		expect(() => mod.Counter(5)).toThrow(TypeError);
+		expect(() => mod.Point()).toThrow(TypeError);
+		expect(() => Reflect.apply(mod.Counter, undefined, [5])).toThrow(TypeError);
+	});
+
 	it("increments", () => {
 		const c = new mod.Counter(0);
 		c.increment();
 		c.increment();
 		expect(c.getCount()).toEqual(2);
+	});
+
+	it("passes class pointers to exported functions", () => {
+		const c = new mod.Counter(3);
+		mod.incrementCounter(c);
+		expect(c.getCount()).toEqual(4);
+	});
+
+	it("rejects the wrong class for pointer arguments", () => {
+		expectTypeErrorWithMessage(
+			() => mod.incrementCounter(new mod.Buffer(4)),
+			"Argument 1 must be an instance of mod.Counter",
+		);
 	});
 
 	it("isAbove returns boolean", () => {
@@ -263,6 +347,76 @@ describe("mixed DSL + N-API", () => {
 	it("makeObject creates object with property", () => {
 		const obj = mod.makeObject("x", 10);
 		expect(obj).toEqual({ x: 10 });
+	});
+
+	it("reports the active Node version", () => {
+		expect(mod.nodeVersion()).toEqual(process.versions.node);
+		expect(mod.nodeRelease()).toEqual(process.release.name);
+	});
+
+	it("returns a TypedArray's backing ArrayBuffer and range", () => {
+		const backing = new ArrayBuffer(16);
+		const view = new Uint16Array(backing, 4, 3);
+
+		expect(mod.typedArrayInfoMatches(view, backing, 3, 4)).toBe(true);
+	});
+
+	const Float16ArrayCtor = Reflect.get(globalThis, "Float16Array");
+	it.skipIf(typeof Float16ArrayCtor !== "function")(
+		"rejects unsupported TypedArray element types",
+		() => {
+			const view = Reflect.construct(Float16ArrayCtor, [3]) as Uint16Array;
+
+			expect(() =>
+				mod.typedArrayInfoMatches(view, view.buffer, 3, 0),
+			).toThrow("UnsupportedTypedarrayType");
+		},
+	);
+
+	it("returns a DataView's backing ArrayBuffer and range", () => {
+		const backing = new ArrayBuffer(16);
+		const view = new DataView(backing, 4, 6);
+
+		expect(mod.dataViewInfoMatches(view, backing, 6, 4)).toBe(true);
+	});
+
+	it("reports zero byte length for empty and detached ArrayBuffers", () => {
+		expect(mod.arrayBufferByteLength(new ArrayBuffer(0))).toEqual(0);
+
+		const detached = new ArrayBuffer(8);
+		structuredClone(detached, { transfer: [detached] });
+		expect(mod.arrayBufferByteLength(detached)).toEqual(0);
+	});
+
+	it("reports zero byte length for an empty Buffer", () => {
+		expect(mod.bufferByteLength(Buffer.alloc(0))).toEqual(0);
+	});
+
+	it("reports zero range for empty and detached TypedArrays", () => {
+		const empty = new Uint8Array(0);
+		expect(mod.typedArrayInfoMatches(empty, empty.buffer, 0, 0)).toBe(true);
+
+		const backing = new ArrayBuffer(16);
+		const view = new Uint16Array(backing, 4, 3);
+		structuredClone(backing, { transfer: [backing] });
+		expect(mod.typedArrayInfoMatches(view, backing, 0, 0)).toBe(true);
+	});
+
+	it("reports zero range for empty and detached DataViews", () => {
+		const empty = new DataView(new ArrayBuffer(0));
+		expect(mod.dataViewInfoMatches(empty, empty.buffer, 0, 0)).toBe(true);
+
+		const backing = new ArrayBuffer(16);
+		const view = new DataView(backing, 4, 6);
+		structuredClone(backing, { transfer: [backing] });
+		expect(mod.dataViewInfoMatches(view, backing, 0, 0)).toBe(true);
+	});
+
+	it("randomBytes16 uses js.io() to produce a Uint8Array", () => {
+		const bytes = mod.randomBytes16();
+		expect(bytes).toBeInstanceOf(Uint8Array);
+		expect(bytes).toHaveLength(16);
+		expect(Array.from(bytes).some((byte: number) => byte !== 0)).toBe(true);
 	});
 });
 
@@ -573,6 +727,7 @@ describe("class return interop", () => {
 
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
+		const { once } = await import("node:events");
 		const { Worker } = await import("node:worker_threads");
 		const { resolve } = await import("node:path");
 		const { fileURLToPath } = await import("node:url");
@@ -593,22 +748,15 @@ describe("module lifecycle - worker threads", () => {
 			{ eval: true, workerData: { nativePath } },
 		);
 
-		// Worker should see an incremented refcount
-		const workerRefcount = await new Promise((resolve) => {
-			worker.on("message", (msg) => {
-				resolve(msg.refcount);
-			});
-		});
-		expect(workerRefcount).toBeGreaterThan(refcountBefore);
+		// Node may drain the queued message and emit exit in the same turn.
+		// Register both listeners before yielding so neither event can be missed.
+		const [[message], [exitCode]] = await Promise.all([
+			once(worker, "message"),
+			once(worker, "exit"),
+		]);
 
-		// Wait for worker to exit (triggers cleanup hook)
-		await new Promise((resolve) => {
-			worker.on("exit", () => resolve(undefined));
-		});
-
-		// After worker exits, refcount should be back to what it was
-		// Give a small delay for cleanup hook to fire
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(message.refcount).toBeGreaterThan(refcountBefore);
+		expect(exitCode).toEqual(0);
 		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
 	});
 });
