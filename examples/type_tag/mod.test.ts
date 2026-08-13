@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const mod = require("../../zig-out/lib/example_type_tag.node");
+const mod = require("../zig-out/lib/example_type_tag.node");
 
 describe("type-tagged classes", () => {
 	it("Cat.name() returns the name", () => {

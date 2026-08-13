@@ -675,6 +675,7 @@ pub const BlsPublicKey = struct {
 
 comptime {
     js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
         .init = struct {
             fn f(refcount: u32) !void {
                 const count = module_init_count.fetchAdd(1, .monotonic);

@@ -13,16 +13,84 @@ zapi provides two main components:
 npm install -D @chainsafe/zapi
 ```
 
-Add the Zig dependency to your `build.zig.zon`:
+## Zig addon project setup
+
+[`examples/`](examples/) is a complete Zig consumer project with its own
+[`build.zig.zon`](examples/build.zig.zon) and
+[`build.zig`](examples/build.zig). The zapi package build does not configure the
+examples.
+
+Most projects produce one addon. A second logical addon exists only when the
+package produces another final `.node` library with a separate root module. The
+examples project produces six addons; `example_js_dsl.node` and
+`example_addon_isolation.node` both use DSL classes and therefore each receive
+their own identity. A project does not need to produce multiple addons for the
+identity to matter: one Node process can load addons from unrelated packages,
+and each addon must reject class objects created by the others.
+
+The consumer's `build.zig` configures the package, then attaches the generated
+identity to every final compile step whose module exports or exchanges a
+`js.class`:
 
 ```zig
-.dependencies = .{
-    .zapi = .{
-        .url = "https://github.com/chainsafe/zapi/archive/<commit>.tar.gz",
-        .hash = "...",
-    },
-},
+const std = @import("std");
+const zapi_build = @import("zapi");
+const zbuild = @import("zbuild");
+
+pub fn build(b: *std.Build) !void {
+    @setEvalBranchQuota(200_000);
+    const manifest = @import("build.zig.zon");
+    const result = try zbuild.configureBuild(b, manifest, .{});
+
+    zapi_build.addAddonIdentity(
+        b,
+        result.library("example_js_dsl").?,
+        manifest,
+    );
+    zapi_build.addAddonIdentity(
+        b,
+        result.library("example_addon_isolation").?,
+        manifest,
+    );
+}
 ```
+
+The corresponding root modules pass the generated import to `js.exportModule`:
+
+```zig
+comptime {
+    js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
+    });
+}
+```
+
+See [`examples/js_dsl/mod.zig`](examples/js_dsl/mod.zig) for a normal class
+addon and [`examples/addon_isolation/mod.zig`](examples/addon_isolation/mod.zig)
+for the same-named class in a second addon used to test cross-addon isolation.
+A function-only module does not need an identity; the complete project keeps
+[`examples/function_only_dsl/mod.zig`](examples/function_only_dsl/mod.zig) on
+`js.exportModule(@This(), .{})`.
+
+`addAddonIdentity` creates the `zapi_addon_identity` import from the consumer
+package name, version, fingerprint, and final compile-step name. Do not create
+that import as a source file. Distinct addons in one package need unique
+compile-step names and separate root modules. The identity does not use
+`dest_sub_path` or the path from which Node loads the file, so copies and
+filesystem aliases of the same compiled `.node` remain compatible.
+
+The examples declare `zapi` and `zbuild` as URL/hash dependencies. Build them
+against this checkout with:
+
+```bash
+cd examples
+zig build --fork=..
+```
+
+For another consumer project, use `zig build` normally. During local zapi
+development, keep the URL/hash dependency and override it with
+`zig build --fork=/path/to/zapi`; Zig 0.16 `.path` dependencies do not expose
+the dependency's `build.zig` as an import.
 
 ---
 
@@ -60,7 +128,11 @@ pub const Counter = struct {
     }
 };
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
+    });
+}
 ```
 
 **JavaScript usage:**
@@ -73,7 +145,23 @@ c.increment();
 c.count; // 1 (getter, not a method call)
 ```
 
-`pub` functions are auto-exported, and structs with `js_meta = js.class(...)` become JS classes. One line — `comptime { js.exportModule(@This(), .{}); }` — registers everything.
+`pub` functions are auto-exported, and structs with `js_meta = js.class(...)`
+become JS classes. Class type tags are derived at compile time from the Zig
+package name, version, fingerprint, addon artifact name, and class type name.
+This keeps two loaded copies of one addon compatible while isolating different
+addons and package versions. Consequently, addons built from `v1.0.0` and
+`v1.0.1` cannot exchange DSL class objects in the same process, even if their
+native class definitions are otherwise compatible. Modules that export only
+functions and never accept or return DSL classes may continue to use
+`js.exportModule(@This(), .{})`.
+
+```text
+FNV-1a-128(package@version#fingerprint::addon::ZigType)
+```
+
+Low-level wrapper and conversion APIs take the same identity type explicitly.
+Code paths that cannot accept or return DSL classes pass
+`js.NoAddonIdentity`.
 
 ---
 
@@ -319,7 +407,11 @@ Import Zig modules as `pub const` to create JS namespaces. The DSL recursively r
 pub const math = @import("math.zig");     // → exports.math.multiply(...)
 pub const crypto = @import("crypto.zig"); // → exports.crypto.PublicKey, etc.
 
-comptime { js.exportModule(@This(), .{}); }
+comptime {
+    js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
+    });
+}
 ```
 
 Namespaces nest arbitrarily — a sub-module with more `pub const` imports creates deeper nesting.
@@ -333,6 +425,7 @@ Namespaces nest arbitrarily — a sub-module with more `pub const` imports creat
 ```zig
 comptime {
     js.exportModule(@This(), .{
+        .identity = @import("zapi_addon_identity"),
         .init = fn (refcount: u32) !void,    // called before registration (0 = first env)
         .cleanup = fn (refcount: u32) void,  // called on env exit (0 = last env)
     });
