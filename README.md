@@ -149,8 +149,11 @@ c.count; // 1 (getter, not a method call)
 become JS classes. Class type tags are derived at compile time from the Zig
 package name, version, fingerprint, addon artifact name, and class type name.
 This keeps two loaded copies of one addon compatible while isolating different
-addons and package versions. Modules that export only functions and never
-accept or return DSL classes may continue to use `js.exportModule(@This(), .{})`.
+addons and package versions. Consequently, addons built from `v1.0.0` and
+`v1.0.1` cannot exchange DSL class objects in the same process, even if their
+native class definitions are otherwise compatible. Modules that export only
+functions and never accept or return DSL classes may continue to use
+`js.exportModule(@This(), .{})`.
 
 ```text
 FNV-1a-128(package@version#fingerprint::addon::ZigType)
