@@ -39,8 +39,9 @@ pub fn deinit(self: *OwnedBuffer) void {
 /// external memory leave ownership in `self`; failures after ownership may
 /// have transferred leave `self.data` empty.
 ///
-/// Environments that disallow external buffers receive a copied Buffer. The
-/// source is consumed only if that copy succeeds.
+/// Unsupported external buffers return `error.NoExternalBuffersAllowed`
+/// without a copy fallback. The caller may deinitialize `self` after this
+/// function returns.
 pub fn intoValue(self: *OwnedBuffer, env: Env) !Value {
     const data = self.data;
 
@@ -55,14 +56,7 @@ pub fn intoValue(self: *OwnedBuffer, env: Env) !Value {
 
     return env.createExternalBuffer(data, finalize, owner) catch |err| {
         switch (err) {
-            error.NoExternalBuffersAllowed => {
-                restoreFromHeap(self, owner);
-
-                const value = try env.createBufferCopy(data, null);
-                self.allocator.free(self.data);
-                self.data = &.{};
-                return value;
-            },
+            error.NoExternalBuffersAllowed,
             error.PendingException,
             error.CannotRunJS,
             => restoreFromHeap(self, owner),
