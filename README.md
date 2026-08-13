@@ -469,11 +469,11 @@ const callback = napi.createCallback(0, makeExternalBuffer, .{
 });
 ```
 
-`OwnedBuffer.intoValue` consumes the buffer even if conversion fails, so the caller must not
-deinitialize it afterwards. Once N-API accepts the external buffer, the allocator must remain valid
-until its finalizer runs, including if N-API subsequently reports an error. If the environment
-disallows external buffers, `intoValue` copies the bytes and releases the original allocation before
-returning.
+`OwnedBuffer.intoValue` empties the source after ownership transfers, so a deferred `deinit` is safe.
+Failures before N-API accepts the external memory leave ownership in the source; later failures leave
+it empty because the finalizer may already own the allocation. Once N-API accepts the external buffer,
+the allocator must remain valid until its finalizer runs. If the environment disallows external
+buffers, `intoValue` copies the bytes and consumes the source only after that copy succeeds.
 
 ### Creating Classes
 
