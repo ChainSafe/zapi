@@ -50,6 +50,18 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
             return typed_ptr[0..info.length];
         }
 
+        /// Copies the TypedArray into a zig array of exactly `len` elements.
+        ///
+        /// Returns:
+        /// 1) `error.LengthMismatch` when the TypedArray length differs from
+        /// `len`, or
+        /// 2) `error.TypeMismatch` when its element type is wrong.
+        pub fn toArray(self: Self, comptime len: usize) ![len]Element {
+            const slice = try self.toSlice();
+            if (slice.len != len) return error.LengthMismatch;
+            return slice[0..len].*;
+        }
+
         /// Creates a new JavaScript TypedArray backed by an *external* (native-heap)
         /// ArrayBuffer.
         ///

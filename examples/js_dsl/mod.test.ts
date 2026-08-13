@@ -201,6 +201,15 @@ describe("typed arrays", () => {
 		expect(mod.uint8Sum(data)).toEqual(15);
 	});
 
+	it("toArray copies a TypedArray of the expected length", () => {
+		expect(mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4]))).toEqual(10);
+	});
+
+	it("toArray rejects TypedArrays of a different length", () => {
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3]))).toThrow();
+		expect(() => mod.uint8Array4Sum(new Uint8Array([1, 2, 3, 4, 5]))).toThrow();
+	});
+
 	it("float64Scale scales values", () => {
 		const data = new Float64Array([1.0, 2.0, 3.0]);
 		const result = mod.float64Scale(data, 2.5);
@@ -718,6 +727,7 @@ describe("class return interop", () => {
 
 describe("module lifecycle - worker threads", () => {
 	it("worker thread increments refcount and cleanup decrements it", async () => {
+		const { once } = await import("node:events");
 		const { Worker } = await import("node:worker_threads");
 		const { resolve } = await import("node:path");
 		const { fileURLToPath } = await import("node:url");
@@ -738,22 +748,15 @@ describe("module lifecycle - worker threads", () => {
 			{ eval: true, workerData: { nativePath } },
 		);
 
-		// Worker should see an incremented refcount
-		const workerRefcount = await new Promise((resolve) => {
-			worker.on("message", (msg) => {
-				resolve(msg.refcount);
-			});
-		});
-		expect(workerRefcount).toBeGreaterThan(refcountBefore);
+		// Node may drain the queued message and emit exit in the same turn.
+		// Register both listeners before yielding so neither event can be missed.
+		const [[message], [exitCode]] = await Promise.all([
+			once(worker, "message"),
+			once(worker, "exit"),
+		]);
 
-		// Wait for worker to exit (triggers cleanup hook)
-		await new Promise((resolve) => {
-			worker.on("exit", () => resolve(undefined));
-		});
-
-		// After worker exits, refcount should be back to what it was
-		// Give a small delay for cleanup hook to fire
-		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(message.refcount).toBeGreaterThan(refcountBefore);
+		expect(exitCode).toEqual(0);
 		expect(mod.getEnvRefcount()).toEqual(refcountBefore);
 	});
 });

@@ -76,6 +76,13 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
+    try module.setNamedProperty("copySlice", try env.createFunction(
+        "copySlice",
+        0,
+        zapi.createCallback(0, copy_slice, .{}),
+        null,
+    ));
+
     try module.setNamedProperty("externalBuffer", try env.createFunction(
         "externalBuffer",
         0,
@@ -85,10 +92,10 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
-    try module.setNamedProperty("externalBufferFirstByte", try env.createFunction(
-        "externalBufferFirstByte",
+    try module.setNamedProperty("externalBufferAllocatedBytes", try env.createFunction(
+        "externalBufferAllocatedBytes",
         0,
-        zapi.createCallback(0, external_buffer_first_byte, .{}),
+        zapi.createCallback(0, external_buffer_allocated_bytes, .{}),
         null,
     ));
 
@@ -178,14 +185,26 @@ fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {
     return try env.createBufferCopy("copy me", null);
 }
 
-var external_buffer_data = [_]u8{ 1, 2, 3 };
+const external_buffer_source = [_]u8{ 1, 2, 3 };
 
-fn external_buffer() []u8 {
-    return &external_buffer_data;
+var slice_data = [_]u8{ 1, 2, 3 };
+var external_buffer_allocator: std.heap.DebugAllocator(.{
+    .enable_memory_limit = true,
+    .thread_safe = false,
+}) = .init;
+
+fn copy_slice() []u8 {
+    return &slice_data;
 }
 
-fn external_buffer_first_byte() u8 {
-    return external_buffer_data[0];
+fn external_buffer() !zapi.OwnedBuffer {
+    const owned_allocator = external_buffer_allocator.allocator();
+    const data = try owned_allocator.dupe(u8, &external_buffer_source);
+    return zapi.OwnedBuffer.fromOwnedSlice(owned_allocator, data);
+}
+
+fn external_buffer_allocated_bytes() usize {
+    return external_buffer_allocator.total_requested_bytes;
 }
 
 const S = struct {

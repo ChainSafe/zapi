@@ -190,6 +190,16 @@ pub fn uint8Sum(data: Uint8Array) !Number {
     return Number.from(sum);
 }
 
+/// Sum exactly four bytes copied from a Uint8Array into a Zig array.
+pub fn uint8Array4Sum(data: Uint8Array) !Number {
+    const array = try data.toArray(4);
+    var sum: i32 = 0;
+    for (array) |byte| {
+        sum += @intCast(byte);
+    }
+    return Number.from(sum);
+}
+
 /// Scale all values in a Float64Array by a factor. Returns a new array.
 pub fn float64Scale(data: Float64Array, factor: Number) !Float64Array {
     const slice = try data.toSlice();
