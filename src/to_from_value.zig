@@ -69,7 +69,11 @@ pub fn toValue(
         }
     }
 
-    if (T == OwnedBuffer) return try v.intoValue(env);
+    if (T == OwnedBuffer) {
+        var buffer = v;
+        defer buffer.deinit();
+        return try buffer.intoValue(env);
+    }
 
     switch (type_info) {
         .bool => {

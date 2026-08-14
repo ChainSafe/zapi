@@ -179,6 +179,7 @@ Code paths that cannot accept or return DSL classes pass
 | `Function` | `Function` | `call(args)` |
 | `Value` | `any` | `isNumber()`, `asNumber()`, type checking/narrowing |
 | `Uint8Array` etc. | `TypedArray` | `toSlice()`, `toArray(len)`, `from(slice)` |
+| `OwnedUint8Array` etc. | `TypedArray` | `fromOwnedSlice(allocator, data)`, `fromSlice(allocator, data)` |
 | `Promise(T)` | `Promise` | `resolve(value)`, `reject(err)` |
 
 ---
@@ -376,6 +377,24 @@ pub fn sum(data: Uint8Array) !Number {
 }
 ```
 
+Use an owned return type to transfer an allocator-owned slice to JavaScript
+without copying its elements:
+
+```zig
+pub fn serialize() !js.OwnedUint8Array {
+    const allocator = js.allocator();
+    const data = try allocator.alloc(u8, 32);
+    // Fill data...
+    return js.OwnedUint8Array.fromOwnedSlice(allocator, data);
+}
+```
+
+Returning the value transfers its allocation to JavaScript without copying and
+leaves the Zig owner empty. Failures before N-API accepts the external memory
+leave ownership in Zig so it can be released normally. The allocator must remain
+valid until the ArrayBuffer finalizer runs. If external ArrayBuffers are
+unsupported, the original error is returned; no copy fallback is performed.
+
 ### Promises
 
 ```zig
@@ -543,11 +562,11 @@ const callback = napi.createCallback(0, makeExternalBuffer, .{
 });
 ```
 
-`OwnedBuffer.intoValue` consumes the buffer even if conversion fails, so the caller must not
-deinitialize it afterwards. Once N-API accepts the external buffer, the allocator must remain valid
-until its finalizer runs, including if N-API subsequently reports an error. If the environment
-disallows external buffers, `intoValue` copies the bytes and releases the original allocation before
-returning.
+`OwnedBuffer.intoValue` empties the source after ownership transfers, so a deferred `deinit` is safe.
+Failures before N-API accepts the external memory leave ownership in the source; later failures leave
+it empty because the finalizer may already own the allocation. Once N-API accepts the external buffer,
+the allocator must remain valid until its finalizer runs. If the environment disallows external
+buffers, `intoValue` copies the bytes and consumes the source only after that copy succeeds.
 
 ### Creating Classes
 

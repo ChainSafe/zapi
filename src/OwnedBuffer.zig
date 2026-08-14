@@ -1,5 +1,5 @@
 //! Allocator-backed bytes whose ownership can be transferred to JavaScript.
-//! Like other Zig owning values, an OwnedBuffer must not be copied or deinitialized after transfer.
+//! Like other Zig owning values, an OwnedBuffer must not be copied while it owns data.
 
 const std = @import("std");
 const c = @import("c.zig").c;
@@ -10,11 +10,6 @@ allocator: std.mem.Allocator,
 data: []u8,
 
 const OwnedBuffer = @This();
-
-const FinalizerContext = struct {
-    allocator: std.mem.Allocator,
-    data: []u8,
-};
 
 /// Takes ownership of `data`, which must have been allocated by `allocator`.
 /// The allocator must remain valid until the buffer is deinitialized or finalized by JavaScript.
@@ -30,46 +25,59 @@ pub fn fromSlice(allocator: std.mem.Allocator, data: []const u8) !OwnedBuffer {
     return .fromOwnedSlice(allocator, try allocator.dupe(u8, data));
 }
 
-/// Releases a buffer that has not been transferred to JavaScript.
+/// Releases data that has not been transferred to JavaScript. This is also
+/// safe after a successful transfer, when `data` is empty.
 pub fn deinit(self: *OwnedBuffer) void {
     self.allocator.free(self.data);
     self.* = undefined;
 }
 
 /// Transfers ownership to a JavaScript Buffer.
-/// This consumes the buffer even on failure; the caller must not deinitialize it afterwards.
-/// On success, JavaScript releases the allocation through the N-API finalizer.
-pub fn intoValue(self: OwnedBuffer, env: Env) !Value {
-    const allocator = self.allocator;
+///
+/// On success, `self.data` is empty and JavaScript releases the original
+/// allocation through the Buffer finalizer. Failures before N-API accepts the
+/// external memory leave ownership in `self`; failures after ownership may
+/// have transferred leave `self.data` empty.
+///
+/// Unsupported external buffers return `error.NoExternalBuffersAllowed`
+/// without a copy fallback. The caller may deinitialize `self` after this
+/// function returns.
+pub fn intoValue(self: *OwnedBuffer, env: Env) !Value {
     const data = self.data;
 
     if (data.len == 0) {
-        defer allocator.free(data);
-        return try env.createBuffer(0, null);
+        const value = try env.createBuffer(0, null);
+        self.allocator.free(data);
+        self.data = &.{};
+        return value;
     }
 
-    const context = try createFinalizerContext(self);
+    const owner = try moveToHeap(self);
 
-    return env.createExternalBuffer(data, finalize, context) catch |err| {
-        if (err == error.NoExternalBuffersAllowed) {
-            defer release(context);
-            return try env.createBufferCopy(data, null);
+    return env.createExternalBuffer(data, finalize, owner) catch |err| {
+        switch (err) {
+            error.NoExternalBuffersAllowed,
+            error.PendingException,
+            error.CannotRunJS,
+            => restoreFromHeap(self, owner),
+            else => {},
         }
-        // Other failures may occur after the finalizer has taken ownership.
         return err;
     };
 }
 
-fn createFinalizerContext(self: OwnedBuffer) !*FinalizerContext {
-    const context = self.allocator.create(FinalizerContext) catch |err| {
-        self.allocator.free(self.data);
-        return err;
-    };
-    context.* = .{
-        .allocator = self.allocator,
-        .data = self.data,
-    };
-    return context;
+fn moveToHeap(self: *OwnedBuffer) !*OwnedBuffer {
+    const owner = try self.allocator.create(OwnedBuffer);
+    owner.* = self.*;
+    self.data = &.{};
+    return owner;
+}
+
+fn restoreFromHeap(self: *OwnedBuffer, owner: *OwnedBuffer) void {
+    const allocator = owner.allocator;
+    std.debug.assert(self.data.len == 0);
+    self.* = owner.*;
+    allocator.destroy(owner);
 }
 
 fn finalize(
@@ -77,15 +85,15 @@ fn finalize(
     finalize_data: ?*anyopaque,
     finalize_hint: ?*anyopaque,
 ) callconv(.c) void {
-    const context: *FinalizerContext = @ptrCast(@alignCast(finalize_hint orelse unreachable));
-    std.debug.assert(finalize_data == @as(?*anyopaque, @ptrCast(context.data.ptr)));
-    release(context);
+    const owner: *OwnedBuffer = @ptrCast(@alignCast(finalize_hint orelse unreachable));
+    std.debug.assert(finalize_data == @as(?*anyopaque, @ptrCast(owner.data.ptr)));
+    release(owner);
 }
 
-fn release(context: *FinalizerContext) void {
-    const allocator = context.allocator;
-    allocator.free(context.data);
-    allocator.destroy(context);
+fn release(owner: *OwnedBuffer) void {
+    const allocator = owner.allocator;
+    allocator.free(owner.data);
+    allocator.destroy(owner);
 }
 
 test "OwnedBuffer fromSlice owns an independent copy" {
@@ -97,14 +105,34 @@ test "OwnedBuffer fromSlice owns an independent copy" {
     try std.testing.expectEqualSlices(u8, &.{ 1, 2, 3 }, buffer.data);
 }
 
-test "OwnedBuffer releases data when finalizer context allocation fails" {
-    const data = try std.testing.allocator.dupe(u8, "external");
-
+test "OwnedBuffer retains data when moving the owner to the heap fails" {
     var failing_allocator = std.testing.FailingAllocator.init(std.testing.allocator, .{
-        .fail_index = 0,
+        .fail_index = 1,
     });
-    const buffer = OwnedBuffer.fromOwnedSlice(failing_allocator.allocator(), data);
+    {
+        var buffer = try OwnedBuffer.fromSlice(
+            failing_allocator.allocator(),
+            "external",
+        );
+        defer buffer.deinit();
 
-    try std.testing.expectError(error.OutOfMemory, createFinalizerContext(buffer));
+        try std.testing.expectError(error.OutOfMemory, moveToHeap(&buffer));
+        try std.testing.expectEqualSlices(u8, "external", buffer.data);
+        try std.testing.expectEqual(@as(usize, 0), failing_allocator.deallocations);
+    }
+
     try std.testing.expectEqual(@as(usize, 1), failing_allocator.deallocations);
+}
+
+test "OwnedBuffer restores ownership from the heap" {
+    var buffer = try OwnedBuffer.fromSlice(std.testing.allocator, "external");
+    defer buffer.deinit();
+
+    const owner = try moveToHeap(&buffer);
+    const source_is_empty = buffer.data.len == 0;
+
+    restoreFromHeap(&buffer, owner);
+
+    try std.testing.expect(source_is_empty);
+    try std.testing.expectEqualSlices(u8, "external", buffer.data);
 }
