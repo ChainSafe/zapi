@@ -437,6 +437,25 @@ Namespaces nest arbitrarily — a sub-module with more `pub const` imports creat
 
 ---
 
+## Constants and Enums
+
+Scalar and string `pub const` decls (int, float, bool, `[]const u8`) export as enumerable value properties — at the module root, inside namespaces, and on classes (as statics on the constructor):
+
+```zig
+pub const SHUFFLE_ROUNDS_MAINNET: u32 = 90; // → exports.SHUFFLE_ROUNDS_MAINNET
+pub const LIBRARY = "zapi-math";            // → exports.LIBRARY
+```
+
+A `pub const` enum exports as a frozen plain object mapping each tag name (verbatim, no case conversion) to its integer value:
+
+```zig
+pub const ByteCount = enum(u8) { one = 1, two = 2 }; // → exports.ByteCount = {one: 1, two: 2}
+```
+
+Other const shapes (struct values, arrays, etc.) are skipped; export those via the `.register` hook.
+
+---
+
 ## Module Lifecycle
 
 `exportModule` accepts optional lifecycle hooks with atomic env refcounting:

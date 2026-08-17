@@ -8,12 +8,18 @@ const wrap_class = @import("wrap_class.zig");
 const class_meta = @import("class_meta.zig");
 const class_runtime = @import("class_runtime.zig");
 
-/// Registers a Zig `Module`'s public declarations (functions, classes, namespaces)
-/// as JavaScript exports in the current Node-API environment at compile time.
+/// Registers a Zig `Module`'s public declarations (functions, classes,
+/// namespaces, constants, enums) as JavaScript exports in the current
+/// Node-API environment at compile time.
 ///
 /// This is the primary entry point for integrating ZAPI DSL-based Zig code into
 /// Node.js. It inspects the `Module`'s `pub` declarations and automatically
 /// creates corresponding JavaScript functions, classes, and sub-namespaces.
+/// Scalar/string `pub const` decls (int, float, bool, `[]const u8`) export as
+/// enumerable value properties at the module root and inside namespaces,
+/// matching class static fields (also enumerable, on the constructor).
+/// `pub const X = enum {...}` exports as a frozen plain object mapping each
+/// tag name (verbatim, no case conversion) to its integer value.
 ///
 /// Addons that export DSL classes pass the build-generated identity module:
 /// `.identity = @import("zapi_addon_identity")`. The addon's `build.zig` creates
@@ -215,7 +221,27 @@ fn registerDecls(
                         exported_any = true;
                     }
                 }
+            } else if (@typeInfo(InnerType) == .@"enum") {
+                // Enum → frozen plain object mapping tag name (verbatim) to
+                // its integer value, mirroring napi-rs `#[napi] pub enum`.
+                const enum_obj = try env.createObject();
+                inline for (@typeInfo(InnerType).@"enum".fields) |tag| {
+                    const tag_value = try wrap_class.createStaticFieldValue(env, tag.value);
+                    const tag_name: [:0]const u8 = tag.name ++ "";
+                    try enum_obj.setNamedProperty(tag_name, tag_value);
+                }
+                try enum_obj.objectFreeze();
+                const name: [:0]const u8 = decl.name ++ "";
+                try module.setNamedProperty(name, enum_obj);
+                exported_any = true;
             }
+        } else if (comptime wrap_class.isStaticValueType(FieldType)) {
+            // Scalar/string const — same auto-export as class static fields,
+            // but enumerable to match the surrounding namespace properties.
+            const const_val = try wrap_class.createStaticFieldValue(env, field);
+            const name: [:0]const u8 = decl.name ++ "";
+            try module.setNamedProperty(name, const_val);
+            exported_any = true;
         }
     }
     return exported_any;

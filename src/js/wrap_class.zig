@@ -763,7 +763,10 @@ pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value)
     }
 }
 
-fn isStaticValueType(comptime T: type) bool {
+/// True for types exportable as plain JS values: ints, floats, bools, and
+/// `[]const u8`/`*const [N]u8` strings. Shared by class statics and
+/// namespace/module-level const export in `export_module.zig`.
+pub fn isStaticValueType(comptime T: type) bool {
     return switch (@typeInfo(T)) {
         .comptime_int, .int, .comptime_float, .float, .bool => true,
         .pointer => |ptr| blk: {
@@ -776,7 +779,8 @@ fn isStaticValueType(comptime T: type) bool {
     };
 }
 
-fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
+/// Converts a static-value const (see `isStaticValueType`) to a `napi.Value`.
+pub fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .comptime_int => {

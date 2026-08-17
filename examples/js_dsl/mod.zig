@@ -688,6 +688,27 @@ pub const BlsPublicKey = struct {
     }
 };
 
+// ============================================================================
+// Section 17: Module-Level Constants and Enums
+// ============================================================================
+
+pub const VERSION_MAJOR: u32 = 3;
+pub const MODULE_NAME = "js_dsl_example";
+
+/// Sub-module demonstrating namespace-level consts and enums.
+pub const constants = @import("constants.zig");
+
+/// Enums export as frozen plain objects mapping tag name to integer value.
+pub const ByteCount = enum(u8) { one = 1, two = 2 };
+
+/// Signed tag values survive the mapping.
+pub const Direction = enum(i8) { backward = -1, forward = 1 };
+
+/// A namespace containing only constants still exports.
+pub const limits = struct {
+    pub const MAX_U8: u8 = 255;
+};
+
 comptime {
     js.exportModule(@This(), .{
         .identity = @import("zapi_addon_identity"),
