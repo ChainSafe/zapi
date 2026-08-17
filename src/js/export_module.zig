@@ -19,7 +19,8 @@ const class_runtime = @import("class_runtime.zig");
 /// enumerable value properties at the module root and inside namespaces,
 /// matching class static fields (also enumerable, on the constructor).
 /// `pub const X = enum {...}` exports as a frozen plain object mapping each
-/// tag name (verbatim, no case conversion) to its integer value.
+/// tag name (verbatim, no case conversion) to its integer value, in all three
+/// scopes. `pub var` decls are never exported (a snapshot would go stale).
 ///
 /// Addons that export DSL classes pass the build-generated identity module:
 /// `.identity = @import("zapi_addon_identity")`. The addon's `build.zig` creates
@@ -224,20 +225,24 @@ fn registerDecls(
             } else if (@typeInfo(InnerType) == .@"enum") {
                 // Enum → frozen plain object mapping tag name (verbatim) to
                 // its integer value, mirroring napi-rs `#[napi] pub enum`.
-                const enum_obj = try env.createObject();
-                inline for (@typeInfo(InnerType).@"enum".fields) |tag| {
-                    const tag_value = try wrap_class.createStaticFieldValue(env, tag.value);
-                    const tag_name: [:0]const u8 = tag.name ++ "";
-                    try enum_obj.setNamedProperty(tag_name, tag_value);
-                }
-                try enum_obj.objectFreeze();
+                const enum_obj = try wrap_class.createEnumObject(
+                    InnerType,
+                    @typeName(Module) ++ "." ++ decl.name,
+                    env,
+                );
                 const name: [:0]const u8 = decl.name ++ "";
                 try module.setNamedProperty(name, enum_obj);
                 exported_any = true;
             }
-        } else if (comptime wrap_class.isStaticValueType(FieldType)) {
-            // Scalar/string const — same auto-export as class static fields,
-            // but enumerable to match the surrounding namespace properties.
+        } else if (comptime (wrap_class.isConstDecl(Module, decl.name) and
+            wrap_class.isStaticValueType(FieldType)))
+        {
+            // Scalar/string const (never a `pub var` snapshot) — same
+            // auto-export as class static fields.
+            comptime wrap_class.assertExportableInt(
+                @typeName(Module) ++ "." ++ decl.name,
+                @field(Module, decl.name),
+            );
             const const_val = try wrap_class.createStaticFieldValue(env, field);
             const name: [:0]const u8 = decl.name ++ "";
             try module.setNamedProperty(name, const_val);

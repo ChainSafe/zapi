@@ -228,6 +228,8 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
             inline for (all_decls, 0..) |decl, idx| {
                 const name = decl.name;
                 if (shouldSkipDecl(name) or consumed_methods[idx]) continue;
+                // A `pub var`'s value can't be read at comptime.
+                if (!isConstDecl(T, name)) continue;
 
                 const field = @field(T, name);
                 const field_info = @typeInfo(@TypeOf(field));
@@ -744,22 +746,65 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
     };
 }
 
-/// Walks `T`'s public declarations and attaches each scalar/string `pub const`
-/// as an own property of the just-defined JS class constructor `class_val`.
+/// Walks `T`'s public declarations and attaches each scalar/string/enum
+/// `pub const` as an own property of the just-defined JS class constructor
+/// `class_val`.
 ///
 /// Called by `export_module.zig` right after `napi_define_class` returns, so
 /// the values land on the constructor itself (i.e. `MyClass.MY_CONST` in JS),
-/// not on instances. A decl is exposed iff its value's type is an int, float,
-/// bool, or string (`[]const u8` or `*const [N]u8`); functions, types, and
-/// other decls are silently skipped — so existing methods/getters and the
-/// `js_meta` decl naturally fall out.
+/// not on instances. A decl is exposed iff it is a `const` (never a `var`) and
+/// its value is an int, float, bool, string (`[]const u8` or `*const [N]u8`),
+/// or an enum type (exported via `createEnumObject`); functions, other types,
+/// and remaining decls are silently skipped — so existing methods/getters and
+/// the `js_meta` decl naturally fall out.
 pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value) !void {
     inline for (@typeInfo(T).@"struct".decls) |decl| {
+        if (comptime !isConstDecl(T, decl.name)) continue;
         const value = @field(T, decl.name);
-        if (comptime !isStaticValueType(@TypeOf(value))) continue;
-        const napi_value = try createStaticFieldValue(env, value);
-        const name: [:0]const u8 = decl.name ++ "";
-        try class_val.setNamedProperty(name, napi_value);
+        const ValueType = @TypeOf(value);
+        if (comptime ValueType == type and @typeInfo(value) == .@"enum") {
+            const enum_obj = try createEnumObject(value, @typeName(T) ++ "." ++ decl.name, env);
+            const name: [:0]const u8 = decl.name ++ "";
+            try class_val.setNamedProperty(name, enum_obj);
+        } else if (comptime isStaticValueType(ValueType)) {
+            comptime assertExportableInt(@typeName(T) ++ "." ++ decl.name, @field(T, decl.name));
+            const napi_value = try createStaticFieldValue(env, value);
+            const name: [:0]const u8 = decl.name ++ "";
+            try class_val.setNamedProperty(name, napi_value);
+        }
+    }
+}
+
+/// True when `T`'s decl `name` is a `const` (not a `var`). Reading a `var`'s
+/// value at comptime is a compile error and its runtime value would only be a
+/// registration-time snapshot, so reflection checks this before `@field`.
+pub fn isConstDecl(comptime T: type, comptime name: []const u8) bool {
+    return @typeInfo(@TypeOf(&@field(T, name))).pointer.is_const;
+}
+
+/// Builds the frozen plain JS object for an exported enum type: tag names
+/// verbatim, values as numbers. `path` names the decl in compile errors.
+pub fn createEnumObject(comptime E: type, comptime path: []const u8, env: napi.Env) !napi.Value {
+    const enum_obj = try env.createObject();
+    inline for (@typeInfo(E).@"enum".fields) |tag| {
+        comptime assertExportableInt(path ++ "." ++ tag.name, tag.value);
+        const tag_value = try createStaticFieldValue(env, tag.value);
+        const tag_name: [:0]const u8 = tag.name ++ "";
+        try enum_obj.setNamedProperty(tag_name, tag_value);
+    }
+    try enum_obj.objectFreeze();
+    return enum_obj;
+}
+
+/// Comptime guard: exported integer consts and enum tags must fit in an i64
+/// (`createStaticFieldValue` caps at `napi_create_int64`), otherwise the
+/// `@intCast` there fails without naming the offending decl.
+pub fn assertExportableInt(comptime path: []const u8, comptime value: anytype) void {
+    switch (@typeInfo(@TypeOf(value))) {
+        .comptime_int, .int => if (value < std.math.minInt(i64) or value > std.math.maxInt(i64)) {
+            @compileError("zapi: cannot export `" ++ path ++ "` — integer value doesn't fit in an i64");
+        },
+        else => {},
     }
 }
 
@@ -821,4 +866,13 @@ pub fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
 
 test "wrapClass compile-time validation requires class metadata" {
     try std.testing.expect(true);
+}
+
+test "isConstDecl distinguishes const from var decls" {
+    const S = struct {
+        pub const answer: u32 = 42;
+        pub var counter: u32 = 0;
+    };
+    try std.testing.expect(isConstDecl(S, "answer"));
+    try std.testing.expect(!isConstDecl(S, "counter"));
 }

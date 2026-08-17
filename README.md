@@ -443,16 +443,16 @@ Scalar and string `pub const` decls (int, float, bool, `[]const u8`) export as e
 
 ```zig
 pub const SHUFFLE_ROUNDS_MAINNET: u32 = 90; // → exports.SHUFFLE_ROUNDS_MAINNET
-pub const LIBRARY = "zapi-math";            // → exports.LIBRARY
+pub const LIBRARY = "zapi";                 // → exports.LIBRARY
 ```
 
-A `pub const` enum exports as a frozen plain object mapping each tag name (verbatim, no case conversion) to its integer value:
+A `pub const` enum exports as a frozen plain object mapping each tag name (verbatim, no case conversion) to its integer value — also at the module root, inside namespaces, and on classes:
 
 ```zig
 pub const ByteCount = enum(u8) { one = 1, two = 2 }; // → exports.ByteCount = {one: 1, two: 2}
 ```
 
-Other const shapes (struct values, arrays, etc.) are skipped; export those via the `.register` hook.
+`pub var` decls are mutable state, not constants, and are never exported. Other const shapes (struct values, arrays, etc.) are skipped; export those via the `.register` hook. Integer consts and enum tags must fit in an `i64` (compile error otherwise).
 
 ---
 

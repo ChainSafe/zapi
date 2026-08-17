@@ -681,6 +681,12 @@ pub const BlsPublicKey = struct {
     pub const COMPRESS_SIZE = 48;
     pub const SERIALIZE_SIZE = 96;
 
+    /// Class-level enums export like namespace enums, on the constructor.
+    pub const Encoding = enum(u8) { compressed = 1, uncompressed = 2 };
+
+    /// Mutable state is never exported as a static.
+    pub var instance_count: u32 = 0;
+
     bytes: [96]u8,
 
     pub fn init() BlsPublicKey {
@@ -708,6 +714,13 @@ pub const Direction = enum(i8) { backward = -1, forward = 1 };
 pub const limits = struct {
     pub const MAX_U8: u8 = 255;
 };
+
+/// `pub var` decls are mutable state, not constants — never exported.
+pub var mutable_counter: u32 = 5;
+
+/// Non-scalar const shapes (arrays, struct values) are skipped.
+pub const IDENTITY_MATRIX = [_]u32{ 1, 0, 0, 1 };
+pub const VERSION_INFO = .{ .major = 3, .minor = 1 };
 
 comptime {
     js.exportModule(@This(), .{

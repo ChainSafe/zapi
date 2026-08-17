@@ -806,6 +806,16 @@ describe("module and namespace constants", () => {
 		expect(Object.keys(mod.constants)).toContain("MAX_ITERATIONS");
 		expect(Object.keys(mod)).toContain("VERSION_MAJOR");
 	});
+
+	it("does not export pub var decls", () => {
+		expect(mod.mutable_counter).toBeUndefined();
+		expect(mod.BlsPublicKey.instance_count).toBeUndefined();
+	});
+
+	it("skips non-scalar const shapes", () => {
+		expect(mod.IDENTITY_MATRIX).toBeUndefined();
+		expect(mod.VERSION_INFO).toBeUndefined();
+	});
 });
 
 describe("enum export", () => {
@@ -823,5 +833,10 @@ describe("enum export", () => {
 		expect(() => {
 			mod.ByteCount.one = 99;
 		}).toThrow(TypeError);
+	});
+
+	it("exports class-level enums as frozen objects on the constructor", () => {
+		expect(mod.BlsPublicKey.Encoding).toEqual({ compressed: 1, uncompressed: 2 });
+		expect(Object.isFrozen(mod.BlsPublicKey.Encoding)).toBe(true);
 	});
 });
