@@ -65,9 +65,11 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         /// Creates a new JavaScript TypedArray backed by an *external* (native-heap)
         /// ArrayBuffer.
         ///
-        /// Despite the name, this *copies*: the contents of `slice` are duplicated
-        /// into a freshly allocated native buffer (via `context.allocator()`), and
-        /// the caller keeps ownership of `slice`. To transfer ownership of an
+        /// Copies and duplicates the contents of `slice`
+        /// into a freshly allocated native buffer (via `context.allocator()`).
+        /// Caller keeps ownership of `slice`.
+        ///
+        /// To transfer ownership of an
         /// existing allocation without copying, use the owned typed arrays
         /// (e.g. `js.OwnedUint8Array.fromOwnedSlice`).
         ///
