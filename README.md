@@ -405,7 +405,47 @@ pub fn asyncOp(val: Number) !Promise(Number) {
 }
 ```
 
-`Promise(T)` in this DSL path is synchronous-only: resolve or reject it before the exported function returns. For truly asynchronous completion, keep the `Deferred` handle in lower-level N-API code and bridge back with `napi.AsyncWork` or `napi.ThreadSafeFunction`.
+`Promise(T)` in this DSL path is synchronous-only: resolve or reject it before the exported function returns. For work that must run off the JS thread, use `js.spawn` below.
+
+### Async Tasks
+
+`js.spawn` runs a task on the libuv worker pool and returns a JS Promise that settles when it finishes. A task is any struct with `compute`, `resolve`, and `deinit`:
+
+```zig
+const ScaleTask = struct {
+    data: []u32,
+    factor: u32,
+
+    // Worker thread — must not touch napi or DSL values.
+    pub fn compute(self: *ScaleTask) !void {
+        for (self.data) |*value| value.* *= self.factor;
+    }
+
+    // JS thread — the DSL env context is established, so DSL types work here.
+    pub fn resolve(self: *ScaleTask, _: napi.Env) !js.OwnedUint32Array {
+        const owned: js.OwnedUint32Array = .fromOwnedSlice(js.allocator(), self.data);
+        self.data = &.{};  // ownership handed to JS, no copy
+        return owned;
+    }
+
+    // Safe to call after resolve transferred ownership.
+    pub fn deinit(self: *ScaleTask) void {
+        js.allocator().free(self.data);
+    }
+};
+
+pub fn asyncScale(data: js.Uint32Array, factor: Number) !Value {
+    const copy = try js.allocator().dupe(u32, try data.toSlice());
+    errdefer js.allocator().free(copy);
+    return js.spawn(ScaleTask, .{ .data = copy, .factor = @intCast(factor.assertI32()) }, "asyncScale");
+}
+```
+
+`resolve` may return a DSL type (`js.Number`), an owned typed array (transferred without copying), `napi.Value`, or `void`.
+
+If `compute` returns an error the promise rejects with an `Error`. Add an optional `errorMessage(err: anyerror) [:0]const u8` to control the message, or an optional `reject(self: *Task, env: napi.Env, err: anyerror) !napi.Value` to build the rejection value yourself; otherwise the message is `@errorName(err)`.
+
+Ownership: if `spawn` fails the task is not consumed, so the caller's `errdefer`s must free it (as above). Once `spawn` succeeds the helper owns the task and calls `deinit` after the promise settles.
 
 ### Callbacks
 
