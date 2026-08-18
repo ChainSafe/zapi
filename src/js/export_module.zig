@@ -223,8 +223,8 @@ fn registerDecls(
                     }
                 }
             } else if (@typeInfo(InnerType) == .@"enum") {
-                // Enum → frozen plain object mapping tag name (verbatim) to
-                // its integer value, mirroring napi-rs `#[napi] pub enum`.
+                // Enum exports as a frozen plain object mapping tag name (verbatim)
+                // to its integer value, mirroring napi-rs `#[napi] pub enum`.
                 const enum_obj = try wrap_class.createEnumObject(
                     InnerType,
                     @typeName(Module) ++ "." ++ decl.name,
