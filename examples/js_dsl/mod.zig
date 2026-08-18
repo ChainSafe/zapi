@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const js = @import("zapi").js;
+const napi = @import("zapi").napi;
 const Number = js.Number;
 const String = js.String;
 const Boolean = js.Boolean;
@@ -721,6 +722,108 @@ pub var mutable_counter: u32 = 5;
 /// Non-scalar const shapes (arrays, struct values) are skipped.
 pub const IDENTITY_MATRIX = [_]u32{ 1, 0, 0, 1 };
 pub const VERSION_INFO = .{ .major = 3, .minor = 1 };
+
+// ============================================================================
+// Section 18: Async Tasks
+// ============================================================================
+
+/// Doubles a number on the libuv worker pool.
+///
+/// `resolve` returns a DSL `js.Number` rather than a raw `napi.Value`, which
+/// works because the async complete callback establishes the DSL env context.
+const DoubleTask = struct {
+    value: i32,
+
+    pub fn compute(self: *DoubleTask) !void {
+        self.value *= 2;
+    }
+
+    pub fn resolve(self: *DoubleTask, _: napi.Env) !Number {
+        return Number.from(self.value);
+    }
+
+    pub fn deinit(_: *DoubleTask) void {}
+};
+
+/// JS: asyncDouble(n): Promise<number>
+pub fn asyncDouble(n: Number) !Value {
+    return js.spawn(DoubleTask, .{ .value = n.assertI32() }, "asyncDouble");
+}
+
+/// Scales a Uint32Array on the worker pool and hands the result back without
+/// copying, composing `js.AsyncTask` with `js.OwnedUint32Array`.
+const ScaleTask = struct {
+    data: []u32,
+    factor: u32,
+
+    pub fn compute(self: *ScaleTask) !void {
+        for (self.data) |*value| value.* *= self.factor;
+    }
+
+    pub fn resolve(self: *ScaleTask, _: napi.Env) !js.OwnedUint32Array {
+        const owned: js.OwnedUint32Array = .fromOwnedSlice(js.allocator(), self.data);
+        self.data = &.{};
+        return owned;
+    }
+
+    pub fn deinit(self: *ScaleTask) void {
+        // Empty (a no-op free) once resolve transferred ownership to JS.
+        js.allocator().free(self.data);
+    }
+};
+
+/// JS: asyncScale(data, factor): Promise<Uint32Array>
+pub fn asyncScale(data: js.Uint32Array, factor: Number) !Value {
+    const copy = try js.allocator().dupe(u32, try data.toSlice());
+    errdefer js.allocator().free(copy);
+    return js.spawn(ScaleTask, .{
+        .data = copy,
+        .factor = @intCast(factor.assertI32()),
+    }, "asyncScale");
+}
+
+/// Rejects with a task-supplied message via the optional `errorMessage` decl.
+const FailTask = struct {
+    pub fn compute(_: *FailTask) !void {
+        return error.ComputeFailed;
+    }
+
+    pub fn resolve(_: *FailTask, _: napi.Env) !Number {
+        return Number.from(0);
+    }
+
+    pub fn errorMessage(err: anyerror) [:0]const u8 {
+        return switch (err) {
+            error.ComputeFailed => "worker could not finish the job",
+            else => @errorName(err),
+        };
+    }
+
+    pub fn deinit(_: *FailTask) void {}
+};
+
+/// JS: asyncFail(): Promise<never>
+pub fn asyncFail() !Value {
+    return js.spawn(FailTask, .{}, "asyncFail");
+}
+
+/// Without `errorMessage`, the rejection message defaults to `@errorName`.
+const BareFailTask = struct {
+    pub fn compute(_: *BareFailTask) !void {
+        return error.Unlucky;
+    }
+
+    pub fn resolve(_: *BareFailTask, _: napi.Env) !Number {
+        return Number.from(0);
+    }
+
+    pub fn deinit(_: *BareFailTask) void {}
+};
+
+/// JS: asyncFailBare(): Promise<never>
+pub fn asyncFailBare() !Value {
+    return js.spawn(BareFailTask, .{}, "asyncFailBare");
+}
 
 comptime {
     js.exportModule(@This(), .{

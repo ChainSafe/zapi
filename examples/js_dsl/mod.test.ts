@@ -840,3 +840,45 @@ describe("enum export", () => {
 		expect(Object.isFrozen(mod.BlsPublicKey.Encoding)).toBe(true);
 	});
 });
+
+// Section 18: Async Tasks
+describe("async tasks", () => {
+	it("resolves with a DSL value built in the complete callback", async () => {
+		await expect(mod.asyncDouble(21)).resolves.toEqual(42);
+	});
+
+	it("returns a real Promise", () => {
+		const promise = mod.asyncDouble(1);
+		expect(promise).toBeInstanceOf(Promise);
+		return promise;
+	});
+
+	it("runs concurrent tasks independently", async () => {
+		const results = await Promise.all([1, 2, 3, 4, 5].map((n) => mod.asyncDouble(n)));
+		expect(results).toEqual([2, 4, 6, 8, 10]);
+	});
+
+	it("transfers an owned typed array without copying", async () => {
+		const result = await mod.asyncScale(new Uint32Array([1, 2, 3]), 3);
+		expect(result).toBeInstanceOf(Uint32Array);
+		expect(Array.from(result)).toEqual([3, 6, 9]);
+	});
+
+	it("handles empty typed array transfer", async () => {
+		const result = await mod.asyncScale(new Uint32Array(0), 2);
+		expect(result).toBeInstanceOf(Uint32Array);
+		expect(result.length).toEqual(0);
+	});
+
+	it("rejects with the task-supplied error message", async () => {
+		await expect(mod.asyncFail()).rejects.toThrow("worker could not finish the job");
+	});
+
+	it("rejects with the error name when errorMessage is absent", async () => {
+		await expect(mod.asyncFailBare()).rejects.toThrow("Unlucky");
+	});
+
+	it("rejects with an Error instance", async () => {
+		await expect(mod.asyncFail()).rejects.toBeInstanceOf(Error);
+	});
+});

@@ -12,9 +12,11 @@ const String = @import("string.zig").String;
 /// IMPORTANT: When returning `js.Promise(T)` from a DSL function, the promise
 /// must be resolved or rejected *before* the function returns. The `deferred`
 /// handle is not preserved across the JS boundary — only the `.val` (the JS
-/// promise object) is returned to the caller. For async resolution (e.g., from
-/// a worker thread), store the `Deferred` handle separately and use `napi.AsyncWork`
-/// or `napi.ThreadSafeFunction` from the low-level N-API layer.
+/// promise object) is returned to the caller. For async resolution from a
+/// worker thread, use `js.spawn` (see `js/async_task.zig`), which owns the
+/// `Deferred` handle and settles it after the work completes. Dropping to
+/// `napi.AsyncWork` or `napi.ThreadSafeFunction` directly remains an option
+/// when you need control `js.spawn` does not expose.
 pub fn Promise(comptime T: type) type {
     return struct {
         /// The underlying `napi.Value` representing the JavaScript Promise object.
