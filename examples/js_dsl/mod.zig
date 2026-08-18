@@ -681,12 +681,46 @@ pub const BlsPublicKey = struct {
     pub const COMPRESS_SIZE = 48;
     pub const SERIALIZE_SIZE = 96;
 
+    /// Class-level enums export like namespace enums, on the constructor.
+    pub const Encoding = enum(u8) { compressed = 1, uncompressed = 2 };
+
+    /// Mutable state is never exported as a static.
+    pub var instance_count: u32 = 0;
+
     bytes: [96]u8,
 
     pub fn init() BlsPublicKey {
         return .{ .bytes = [_]u8{0} ** 96 };
     }
 };
+
+// ============================================================================
+// Section 17: Module-Level Constants and Enums
+// ============================================================================
+
+pub const VERSION_MAJOR: u32 = 3;
+pub const MODULE_NAME = "js_dsl_example";
+
+/// Sub-module demonstrating namespace-level consts and enums.
+pub const constants = @import("constants.zig");
+
+/// Enums export as frozen plain objects mapping tag name to integer value.
+pub const ByteCount = enum(u8) { one = 1, two = 2 };
+
+/// Signed tag values survive the mapping.
+pub const Direction = enum(i8) { backward = -1, forward = 1 };
+
+/// A namespace containing only constants still exports.
+pub const limits = struct {
+    pub const MAX_U8: u8 = 255;
+};
+
+/// `pub var` decls are mutable state, not constants — never exported.
+pub var mutable_counter: u32 = 5;
+
+/// Non-scalar const shapes (arrays, struct values) are skipped.
+pub const IDENTITY_MATRIX = [_]u32{ 1, 0, 0, 1 };
+pub const VERSION_INFO = .{ .major = 3, .minor = 1 };
 
 comptime {
     js.exportModule(@This(), .{

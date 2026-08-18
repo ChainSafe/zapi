@@ -65,11 +65,20 @@ pub fn TypedArray(comptime Element: type, comptime array_type: TypedarrayType) t
         /// Creates a new JavaScript TypedArray backed by an *external* (native-heap)
         /// ArrayBuffer.
         ///
-        /// The contents of `slice` are copied into a freshly allocated native buffer
-        /// (via `context.allocator()`).
+        /// Copies and duplicates the contents of `slice`
+        /// into a freshly allocated native buffer (via `context.allocator()`).
+        /// Caller keeps ownership of `slice`.
+        ///
+        /// To transfer ownership of an
+        /// existing allocation without copying, use the owned typed arrays
+        /// (e.g. `js.OwnedUint8Array.fromOwnedSlice`).
         ///
         /// V8 holds the pointer to manage the JS-side lifetime; the
         /// native buffer is freed by a finalizer when V8 collects the ArrayBuffer.
+        ///
+        /// Panics if called outside a DSL callback (`context.env()` requires the
+        /// wrapped-function context) — e.g. inside a raw `napi.AsyncWork` complete
+        /// callback. Use the owned typed arrays' env-explicit `intoValue(env)` there.
         pub fn fromExternal(slice: []const Element) !Self {
             const e = context.env();
             const buf = try context.allocator().dupe(Element, slice);

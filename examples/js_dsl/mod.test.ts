@@ -783,3 +783,60 @@ describe("static class fields", () => {
 		expect(Object.prototype.hasOwnProperty.call(pk, "COMPRESS_SIZE")).toBe(false);
 	});
 });
+
+// Section 17: Module-Level Constants and Enums
+describe("module and namespace constants", () => {
+	it("exports module-root scalar and string consts", () => {
+		expect(mod.VERSION_MAJOR).toEqual(3);
+		expect(mod.MODULE_NAME).toEqual("js_dsl_example");
+	});
+
+	it("exports namespace consts", () => {
+		expect(mod.constants.MAX_ITERATIONS).toEqual(90);
+		expect(mod.constants.EPSILON).toEqual(0.001);
+		expect(mod.constants.LIBRARY).toEqual("zapi");
+		expect(mod.constants.IS_FAST).toEqual(true);
+	});
+
+	it("exports a namespace containing only consts", () => {
+		expect(mod.limits.MAX_U8).toEqual(255);
+	});
+
+	it("consts are enumerable, matching namespace functions", () => {
+		expect(Object.keys(mod.constants)).toContain("MAX_ITERATIONS");
+		expect(Object.keys(mod)).toContain("VERSION_MAJOR");
+	});
+
+	it("does not export pub var decls", () => {
+		expect(mod.mutable_counter).toBeUndefined();
+		expect(mod.BlsPublicKey.instance_count).toBeUndefined();
+	});
+
+	it("skips non-scalar const shapes", () => {
+		expect(mod.IDENTITY_MATRIX).toBeUndefined();
+		expect(mod.VERSION_INFO).toBeUndefined();
+	});
+});
+
+describe("enum export", () => {
+	it("exports enums as plain objects with verbatim tag names", () => {
+		expect(mod.ByteCount).toEqual({ one: 1, two: 2 });
+		expect(mod.constants.Precision).toEqual({ single: 1, double: 2 });
+	});
+
+	it("preserves signed tag values", () => {
+		expect(mod.Direction).toEqual({ backward: -1, forward: 1 });
+	});
+
+	it("exported enum objects are frozen", () => {
+		expect(Object.isFrozen(mod.ByteCount)).toBe(true);
+		expect(() => {
+			mod.ByteCount.one = 99;
+		}).toThrow(TypeError);
+	});
+
+	it("exports class-level enums as frozen objects on the constructor", () => {
+		expect(mod.BlsPublicKey.Encoding).toEqual({ compressed: 1, uncompressed: 2 });
+		expect(Object.isFrozen(mod.BlsPublicKey.Encoding)).toBe(true);
+	});
+});
