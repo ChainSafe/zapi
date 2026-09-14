@@ -724,7 +724,7 @@ pub const IDENTITY_MATRIX = [_]u32{ 1, 0, 0, 1 };
 pub const VERSION_INFO = .{ .major = 3, .minor = 1 };
 
 // ============================================================================
-// Section 18: Async Tasks
+// Async Tasks
 // ============================================================================
 
 /// Doubles a number on the libuv worker pool.

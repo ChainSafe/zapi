@@ -841,7 +841,7 @@ describe("enum export", () => {
 	});
 });
 
-// Section 18: Async Tasks
+// Async Tasks
 describe("async tasks", () => {
 	it("resolves with a DSL value built in the complete callback", async () => {
 		await expect(mod.asyncDouble(21)).resolves.toEqual(42);
