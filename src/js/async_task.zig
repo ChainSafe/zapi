@@ -5,8 +5,8 @@
 //!  - `resolve(*Task, napi.Env) !T` — JS thread; `T` may be a DSL type, an owned
 //!    typed array, `napi.Value`, or `void`
 //!  - `deinit(*Task) void` — must be safe after `resolve` transferred ownership
-//!  - optional `reject(*Task, napi.Env, anyerror) !napi.Value`, else optional
-//!    `errorMessage(anyerror) [:0]const u8`, else `@errorName`
+//!  - optional `reject(*Task, napi.Env, anyerror) !napi.Value`, else the
+//!    rejection is `Error(@errorName(err))`
 //!
 //! `spawn` failing leaves the task to the caller; succeeding transfers ownership.
 
@@ -15,6 +15,7 @@ const napi = @import("../napi.zig");
 const context = @import("context.zig");
 const typed_arrays = @import("typed_arrays.zig");
 const wrap_function = @import("wrap_function.zig");
+const js_error = @import("error.zig");
 const Value = @import("value.zig").Value;
 
 /// Runs `task.compute` on the libuv worker pool, returning a JS Promise that
@@ -62,11 +63,7 @@ pub fn spawn(comptime Task: type, task: Task, comptime resource_name: []const u8
                 if (comptime @hasDecl(Task, "reject")) {
                     return ctx.deferred.reject(try ctx.task.reject(env, err));
                 }
-                const message = if (comptime @hasDecl(Task, "errorMessage"))
-                    Task.errorMessage(err)
-                else
-                    @errorName(err);
-                return rejectWithMessage(env, ctx.deferred, message);
+                return rejectWithMessage(env, ctx.deferred, @errorName(err));
             }
             try ctx.deferred.resolve(try resolveValue(&ctx.task, env));
         }
@@ -144,9 +141,7 @@ fn rejectAfterFailedSettle(env: napi.Env, deferred: napi.Deferred) !void {
 
 /// Rejects with `new Error(message)` so JS can match on `err.message`.
 fn rejectWithMessage(env: napi.Env, deferred: napi.Deferred, message: []const u8) !void {
-    const msg_val = try env.createStringUtf8(message);
-    const err_val = try env.createError(napi.Value{ .env = env.env, .value = null }, msg_val);
-    try deferred.reject(err_val);
+    try deferred.reject(try js_error.errorWithMessage(env, message));
 }
 
 fn validateTask(comptime Task: type) void {

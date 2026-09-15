@@ -874,7 +874,7 @@ describe("async tasks", () => {
 		await expect(mod.asyncFail()).rejects.toThrow("worker could not finish the job");
 	});
 
-	it("rejects with the error name when errorMessage is absent", async () => {
+	it("rejects with the error name when reject is absent", async () => {
 		await expect(mod.asyncFailBare()).rejects.toThrow("Unlucky");
 	});
 

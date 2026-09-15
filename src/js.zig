@@ -51,6 +51,7 @@ pub const OwnedBigUint64Array = typed_arrays.OwnedBigUint64Array;
 
 pub const Promise = @import("js/promise.zig").Promise;
 pub const spawn = @import("js/async_task.zig").spawn;
+pub const errorWithMessage = @import("js/error.zig").errorWithMessage;
 pub const createPromise = @import("js/promise.zig").createPromise;
 
 pub const NoAddonIdentity = @import("js/class_runtime.zig").NoAddonIdentity;

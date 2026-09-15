@@ -443,7 +443,16 @@ pub fn asyncScale(data: js.Uint32Array, factor: Number) !Value {
 
 `resolve` may return a DSL type (`js.Number`), an owned typed array (transferred without copying), `napi.Value`, or `void`.
 
-If `compute` returns an error the promise rejects with an `Error`. Add an optional `errorMessage(err: anyerror) [:0]const u8` to control the message, or an optional `reject(self: *Task, env: napi.Env, err: anyerror) !napi.Value` to build the rejection value yourself; otherwise the message is `@errorName(err)`.
+If `compute` returns an error the promise rejects with `Error(@errorName(err))`. Add an optional `reject(self: *Task, env: napi.Env, err: anyerror) !napi.Value` to build the rejection value yourself — `js.errorWithMessage(env, msg)` builds a plain `Error` for the common case:
+
+```zig
+pub fn reject(_: *Task, env: napi.Env, err: anyerror) !napi.Value {
+    return js.errorWithMessage(env, switch (err) {
+        error.ComputeFailed => "worker could not finish the job",
+        else => @errorName(err),
+    });
+}
+```
 
 Ownership: if `spawn` fails the task is not consumed, so the caller's `errdefer`s must free it (as above). Once `spawn` succeeds the helper owns the task and calls `deinit` after the promise settles.
 

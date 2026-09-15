@@ -778,7 +778,7 @@ pub fn asyncScale(data: js.Uint32Array, factor: Number) !Value {
     }, "asyncScale");
 }
 
-/// Rejects with a task-supplied message via the optional `errorMessage` decl.
+/// Builds its own rejection value via the optional `reject` decl.
 const FailTask = struct {
     pub fn compute(_: *FailTask) !void {
         return error.ComputeFailed;
@@ -788,11 +788,11 @@ const FailTask = struct {
         return Number.from(0);
     }
 
-    pub fn errorMessage(err: anyerror) [:0]const u8 {
-        return switch (err) {
+    pub fn reject(_: *FailTask, env: napi.Env, err: anyerror) !napi.Value {
+        return js.errorWithMessage(env, switch (err) {
             error.ComputeFailed => "worker could not finish the job",
             else => @errorName(err),
-        };
+        });
     }
 
     pub fn deinit(_: *FailTask) void {}
@@ -803,7 +803,7 @@ pub fn asyncFail() !Value {
     return js.spawn(FailTask, .{}, "asyncFail");
 }
 
-/// Without `errorMessage`, the rejection message defaults to `@errorName`.
+/// Without `reject`, the rejection message defaults to `@errorName`.
 const BareFailTask = struct {
     pub fn compute(_: *BareFailTask) !void {
         return error.Unlucky;
