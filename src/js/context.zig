@@ -19,8 +19,11 @@ threadlocal var current_env: ?napi.Env = null;
 /// execution scope of a JavaScript function, method, getter, or setter that
 /// was exposed to JS via the ZAPI DSL. Calling it outside such a context
 /// (e.g., from a background thread or a Zig-initiated function call) will
-/// result in a panic. For asynchronous N-API work, use `napi.AsyncWork` or
-/// `napi.ThreadSafeFunction` which provide explicit `napi_env` parameters.
+/// result in a panic. `js.spawn`'s completion callback establishes this
+/// context, so a task's `resolve` may build DSL values; its `compute` runs on
+/// a worker thread and deliberately does not. For raw asynchronous N-API work,
+/// use `napi.AsyncWork` or `napi.ThreadSafeFunction`, which provide explicit
+/// `napi_env` parameters.
 pub fn env() napi.Env {
     return current_env orelse @panic("js.env() called outside of a JS callback context");
 }
