@@ -727,10 +727,7 @@ pub const VERSION_INFO = .{ .major = 3, .minor = 1 };
 // Async Tasks
 // ============================================================================
 
-/// Doubles a number on the libuv worker pool.
-///
-/// `resolve` returns a DSL `js.Number` rather than a raw `napi.Value`, which
-/// works because the async complete callback establishes the DSL env context.
+/// `resolve` returns a DSL `js.Number`, which needs the complete callback's env.
 const DoubleTask = struct {
     value: i32,
 
@@ -750,8 +747,7 @@ pub fn asyncDouble(n: Number) !Value {
     return js.spawn(DoubleTask, .{ .value = n.assertI32() }, "asyncDouble");
 }
 
-/// Scales a Uint32Array on the worker pool and hands the result back without
-/// copying, composing `js.AsyncTask` with `js.OwnedUint32Array`.
+/// Hands the result back without copying, via `js.OwnedUint32Array`.
 const ScaleTask = struct {
     data: []u32,
     factor: u32,
