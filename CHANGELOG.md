@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.0.0...zapi-v4.1.0) (2026-09-15)
+
+
+### Features
+
+* **js:** add js.spawn async task DSL ([#76](https://github.com/ChainSafe/zapi/issues/76)) ([e60cca6](https://github.com/ChainSafe/zapi/commit/e60cca6aa633cb1f54feb9d7f74474997e22bfb2))
+
 ## [4.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.1.0...zapi-v4.0.0) (2026-08-18)
 
 
