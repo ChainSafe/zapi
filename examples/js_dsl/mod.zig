@@ -825,6 +825,24 @@ pub fn asyncFailBare() !Value {
     return js.spawn(BareFailTask, .{}, "asyncFailBare");
 }
 
+/// Leaves a pending JS exception, so settling the promise itself fails.
+const PendingExceptionTask = struct {
+    pub fn compute(_: *PendingExceptionTask) !void {}
+
+    pub fn resolve(_: *PendingExceptionTask, env: napi.Env) !Number {
+        const value = Number.from(0);
+        try env.throwError("PendingBoom", "exception raised while resolving");
+        return value;
+    }
+
+    pub fn deinit(_: *PendingExceptionTask) void {}
+};
+
+/// JS: asyncPendingException(): Promise<never>
+pub fn asyncPendingException() !Value {
+    return js.spawn(PendingExceptionTask, .{}, "asyncPendingException");
+}
+
 comptime {
     js.exportModule(@This(), .{
         .identity = @import("zapi_addon_identity"),

@@ -881,4 +881,8 @@ describe("async tasks", () => {
 	it("rejects with an Error instance", async () => {
 		await expect(mod.asyncFail()).rejects.toBeInstanceOf(Error);
 	});
+
+	it("rejects with the pending exception when settling fails", async () => {
+		await expect(mod.asyncPendingException()).rejects.toThrow("exception raised while resolving");
+	});
 });

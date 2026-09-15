@@ -75,7 +75,7 @@ pub fn spawn(comptime Task: type, task: Task, comptime resource_name: []const u8
             }
 
             settle(env, status, ctx) catch {
-                rejectWithMessage(env, ctx.deferred, "InternalError") catch {};
+                rejectAfterFailedSettle(env, ctx.deferred) catch {};
             };
         }
 
@@ -158,6 +158,15 @@ fn toNapiValue(comptime T: type, value: T, env: napi.Env) !napi.Value {
     if (comptime wrap_function.isDslType(T)) return value.val;
     @compileError("zapi: `resolve` cannot return " ++ @typeName(T) ++
         " — return a DSL type (e.g. `js.Number`), an owned typed array, `napi.Value`, or `void`");
+}
+
+/// A failed N-API call may leave a pending exception, which fails every later
+/// call — including a fresh reject — and would strand the promise unsettled.
+fn rejectAfterFailedSettle(env: napi.Env, deferred: napi.Deferred) !void {
+    if (try env.isExceptionPending()) {
+        return deferred.reject(try env.getAndClearLastException());
+    }
+    return rejectWithMessage(env, deferred, "InternalError");
 }
 
 /// Reject `deferred` with `new Error(message)` so JS callers can match on
