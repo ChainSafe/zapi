@@ -79,6 +79,11 @@ pub fn largeUnsignedBoundary() Number {
     return Number.from(@as(u64, std.math.maxInt(i64)) + 1);
 }
 
+/// Return a number validated as an exact u64 by `toU64Exact`.
+pub fn exactU64(n: Number) !Number {
+    return Number.from(try n.toU64Exact());
+}
+
 /// Negate a boolean.
 pub fn toggleBool(b: Boolean) Boolean {
     return Boolean.from(!b.assertBool());

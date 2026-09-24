@@ -59,6 +59,18 @@ describe("primitive types", () => {
 		expectTypeErrorWithMessage(() => mod.doubleNumber("21"), "Argument 1 must be a number");
 	});
 
+	it("exactU64 accepts safe unsigned integers", () => {
+		expect(mod.exactU64(0)).toEqual(0);
+		expect(mod.exactU64(2 ** 32)).toEqual(2 ** 32);
+		expect(mod.exactU64(Number.MAX_SAFE_INTEGER)).toEqual(Number.MAX_SAFE_INTEGER);
+	});
+
+	it("exactU64 rejects values that are not exact u64 integers", () => {
+		for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, -Infinity, NaN]) {
+			expect(() => mod.exactU64(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
+		}
+	});
+
 	it("toggleBool", () => {
 		expect(mod.toggleBool(true)).toBe(false);
 		expect(mod.toggleBool(false)).toBe(true);

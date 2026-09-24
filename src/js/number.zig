@@ -61,6 +61,27 @@ pub const Number = struct {
         return @intFromFloat(value);
     }
 
+    /// Attempts to convert the JavaScript number to a `u64` without coercion.
+    ///
+    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// fractional, non-finite, or greater than `Number.MAX_SAFE_INTEGER`
+    /// (2^53 - 1).
+    ///
+    /// Larger values cannot be represented exactly by a JS number;
+    /// use `BigInt.toU64` for the full `u64` range.
+    pub fn toU64Exact(self: Number) !u64 {
+        const max: f64 = @floatFromInt(std.math.maxInt(u53));
+        const value = try self.toF64();
+        if (!std.math.isFinite(value) or
+            value < 0 or
+            value > max or
+            @trunc(value) != value)
+        {
+            return error.InvalidUnsignedInteger;
+        }
+        return @intFromFloat(value);
+    }
+
     /// Attempts to convert the JavaScript number to a Zig `f64`.
     ///
     /// This conversion is generally lossless for most JS numbers, which are typically `f64`.
