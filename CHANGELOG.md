@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.0.0...zapi-v4.1.0) (2026-09-25)
+
+
+### Features
+
+* **js:** add exact u64 conversion ([#80](https://github.com/ChainSafe/zapi/issues/80)) ([7626863](https://github.com/ChainSafe/zapi/commit/762686334a737ebedde32bcb8cb4bbf451e918f2))
+* **js:** add js.spawn async task DSL ([#76](https://github.com/ChainSafe/zapi/issues/76)) ([e60cca6](https://github.com/ChainSafe/zapi/commit/e60cca6aa633cb1f54feb9d7f74474997e22bfb2))
+
 ## [4.0.0](https://github.com/ChainSafe/zapi/compare/zapi-v3.1.0...zapi-v4.0.0) (2026-08-18)
 
 
