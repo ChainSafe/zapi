@@ -45,14 +45,16 @@ pub const Number = struct {
     }
 
     /// Attempts to convert the JavaScript number to an unsigned `T` without
-    /// coercion, rejecting anything a JS number cannot hold exactly.
+    /// coercion, rejecting anything outside `[0, max_int]` and anything a JS
+    /// number cannot hold exactly.
     ///
-    /// The upper bound is clamped to `Number.MAX_SAFE_INTEGER` (2^53 - 1): a JS
-    /// number is an `f64`, so no larger integer round-trips, and
-    /// `@floatFromInt(std.math.maxInt(u64))` rounds *up* to 2^64, which would
-    /// admit a value `@intFromFloat` cannot represent.
-    fn toUnsignedExact(self: Number, comptime T: type) !T {
-        const max: f64 = @floatFromInt(@min(std.math.maxInt(T), std.math.maxInt(u53)));
+    /// `max_int` may not exceed `Number.MAX_SAFE_INTEGER` (2^53 - 1). A JS
+    /// number is an `f64`, so nothing larger round-trips, and
+    /// `@floatFromInt(std.math.maxInt(u64))` rounds *up* to 2^64 — a bound that
+    /// would admit a value `@intFromFloat` cannot represent.
+    fn toUnsignedExact(self: Number, comptime T: type, comptime max_int: comptime_int) !T {
+        comptime std.debug.assert(max_int <= std.math.maxInt(u53));
+        const max: f64 = @floatFromInt(max_int);
         const value = try self.toF64();
         if (!std.math.isFinite(value) or
             value < 0 or
@@ -71,7 +73,7 @@ pub const Number = struct {
     /// Returns `error.InvalidUnsignedInteger` if the number is negative,
     /// fractional, non-finite, or greater than `std.math.maxInt(u32)`.
     pub fn toU32Exact(self: Number) !u32 {
-        return self.toUnsignedExact(u32);
+        return self.toUnsignedExact(u32, std.math.maxInt(u32));
     }
 
     /// Attempts to convert the JavaScript number to a non-negative JS safe
@@ -85,7 +87,7 @@ pub const Number = struct {
     /// a JS number: values above 2^53 - 1 are already imprecise by the time
     /// they reach Zig. Use `BigInt.toU64` for the full `u64` range.
     pub fn toSafeInteger(self: Number) !u64 {
-        return self.toUnsignedExact(u64);
+        return self.toUnsignedExact(u64, std.math.maxInt(u53));
     }
 
     /// Attempts to convert the JavaScript number to a Zig `f64`.
