@@ -59,16 +59,34 @@ describe("primitive types", () => {
 		expectTypeErrorWithMessage(() => mod.doubleNumber("21"), "Argument 1 must be a number");
 	});
 
-	it("exactU64 accepts safe unsigned integers", () => {
-		expect(mod.exactU64(0)).toEqual(0);
-		expect(mod.exactU64(2 ** 32)).toEqual(2 ** 32);
-		expect(mod.exactU64(Number.MAX_SAFE_INTEGER)).toEqual(Number.MAX_SAFE_INTEGER);
+	it("exactU32 accepts every value in the u32 range", () => {
+		expect(mod.exactU32(0)).toEqual(0);
+		expect(mod.exactU32(2 ** 31)).toEqual(2 ** 31);
+		expect(mod.exactU32(2 ** 32 - 1)).toEqual(2 ** 32 - 1);
 	});
 
-	it("exactU64 rejects values that are not exact u64 integers", () => {
-		for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, -Infinity, NaN]) {
-			expect(() => mod.exactU64(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
+	it("exactU32 rejects values outside the u32 range", () => {
+		for (const value of [-1, 1.5, 2 ** 32, Number.MAX_SAFE_INTEGER, Infinity, -Infinity, NaN]) {
+			expect(() => mod.exactU32(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
 		}
+	});
+
+	it("safeInteger accepts every non-negative JS safe integer", () => {
+		expect(mod.safeInteger(0)).toEqual(0);
+		expect(mod.safeInteger(2 ** 32)).toEqual(2 ** 32);
+		expect(mod.safeInteger(Number.MAX_SAFE_INTEGER)).toEqual(Number.MAX_SAFE_INTEGER);
+	});
+
+	it("safeInteger rejects values that are not non-negative safe integers", () => {
+		for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, -Infinity, NaN]) {
+			expect(() => mod.safeInteger(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
+		}
+	});
+
+	// 2^32 separates the two: in range for a safe integer, out of range for a u32.
+	it("safeInteger and exactU32 differ exactly at the u32 boundary", () => {
+		expect(mod.safeInteger(2 ** 32)).toEqual(2 ** 32);
+		expect(() => mod.exactU32(2 ** 32)).toThrow("InvalidUnsignedInteger");
 	});
 
 	it("toggleBool", () => {

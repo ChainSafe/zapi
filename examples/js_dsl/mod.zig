@@ -79,9 +79,14 @@ pub fn largeUnsignedBoundary() Number {
     return Number.from(@as(u64, std.math.maxInt(i64)) + 1);
 }
 
-/// Return a number validated as an exact u64 by `toU64Exact`.
-pub fn exactU64(n: Number) !Number {
-    return Number.from(try n.toU64Exact());
+/// Return a number validated as an exact u32 by `toU32Exact`.
+pub fn exactU32(n: Number) !Number {
+    return Number.from(try n.toU32Exact());
+}
+
+/// Return a number validated as a JS safe integer by `toSafeInteger`.
+pub fn safeInteger(n: Number) !Number {
+    return Number.from(try n.toSafeInteger());
 }
 
 /// Negate a boolean.
