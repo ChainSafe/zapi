@@ -48,10 +48,9 @@ pub const Number = struct {
     /// coercion, rejecting anything outside `[0, max_int]` and anything a JS
     /// number cannot hold exactly.
     ///
-    /// `max_int` may not exceed `Number.MAX_SAFE_INTEGER` (2^53 - 1). A JS
-    /// number is an `f64`, so nothing larger round-trips, and
-    /// `@floatFromInt(std.math.maxInt(u64))` rounds *up* to 2^64 — a bound that
-    /// would admit a value `@intFromFloat` cannot represent.
+    /// The largest representable unsigned integer in zapi is
+    /// bounded by `self`'s bound which is
+    /// `Number.MAX_SAFE_INTEGER` (2^53 - 1), a u53 in Zig.
     fn toUnsignedExact(self: Number, comptime T: type, comptime max_int: comptime_int) !T {
         comptime std.debug.assert(max_int <= std.math.maxInt(u53));
         const max: f64 = @floatFromInt(max_int);
