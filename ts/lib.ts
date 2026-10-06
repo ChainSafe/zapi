@@ -2,7 +2,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {join} from "node:path";
-import {parsePkgJson} from "./config.js";
+import {parsePkgJson, presetPackageName, resolvePreset} from "./config.js";
 
 const require = createRequire(import.meta.url);
 
@@ -208,19 +208,21 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
  * First, it checks the local build path, then it checks published paths.
  *
  * Eg:
- * - built locally, `zig-out/lib/${binaryName}.node`
- * - published, `${targetPackageName}`
+ * - built locally, `zig-out/lib/${preset.file}`
+ * - published, `${presetPackageName}/${preset.file}`
+ *
+ * @param presetName - One of `zapi.presets[].name`; defaults to the first (default) preset
  */
-export function requireNapiLibrary(packageDir: string): unknown {
+export function requireNapiLibrary(packageDir: string, presetName?: string): unknown {
   const pkgJson = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf-8"));
   const config = parsePkgJson(pkgJson);
-  const localPath = join(packageDir, `zig-out/lib/${config.binaryName}.node`);
+  const preset = resolvePreset(config, presetName);
+  const localPath = join(packageDir, "zig-out", "lib", preset.file);
   if (existsSync(localPath)) {
     return require(localPath);
   }
   const platform = process.platform;
   const arch = process.arch;
   const target = getTarget(platform, arch);
-  const targetPkgName = `${pkgJson.name}-${target}`;
-  return require(targetPkgName);
+  return require(`${presetPackageName(pkgJson, preset, target)}/${preset.file}`);
 }
