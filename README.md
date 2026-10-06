@@ -751,10 +751,25 @@ Add a `zapi` field to your `package.json`:
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-pc-windows-msvc"
+    ],
+    "presets": [
+      { "name": "default" },
+      { "name": "small", "args": ["-Dsmall=true"] },
+      { "name": "debug", "args": ["-Ddebug-hooks=true"], "standalone": true }
     ]
   }
 }
 ```
+
+`presets` is optional. Each preset is a separate build of the same step with its own extra
+`zig build` args. The first preset is the default and keeps the `<binaryName>.node` file name,
+so a config without `presets` behaves exactly as before. Every later preset is built as
+`<binaryName>-<preset>.node` and selected at runtime with `requireNapiLibrary(dir, "<preset>")`.
+
+By default a preset's file is bundled into the same target packages as the default preset.
+A preset marked `"standalone": true` is published instead as its own `<name>-<preset>-<target>`
+packages, which are not added to the main package's `optionalDependencies`, so consumers only
+download it when they depend on it explicitly.
 
 ### Supported Targets
 
@@ -790,11 +805,14 @@ zapi build [options]
 | `--step` | Zig build step | `zapi.step` from package.json |
 | `--target` | Target triple | Current platform |
 | `--optimize` | `Debug`, `ReleaseSafe`, `ReleaseFast`, `ReleaseSmall` | - |
+| `--preset` | Preset name from `zapi.presets` | First preset |
 | `--zig-cwd` | Working directory for zig build | `.` |
+
+A non-default preset is renamed to `zig-out/lib/<binaryName>-<preset>.node` after the build.
 
 #### `zapi build-artifacts`
 
-Build for all configured targets and collect artifacts.
+Build every preset for all configured targets and collect artifacts.
 
 ```bash
 zapi build-artifacts [options]
@@ -821,8 +839,8 @@ zapi build-artifacts [options]
 #### `zapi prepublish`
 
 Prepare npm packages for publishing:
-- Creates `npm/<target>/` directories for each target
-- Moves compiled `.node` binaries from artifacts into target packages
+- Creates `npm/<target>/` directories for each target, and `npm/<preset>-<target>/` for each standalone preset
+- Moves every preset's compiled `.node` binary from artifacts into its package
 - Generates `package.json` for each target package (with correct `os`, `cpu`, `libc`)
 - Updates the main `package.json` with `optionalDependencies`
 
@@ -893,9 +911,10 @@ Set `DEBUG=1` for full stack traces on errors.
 
 ## Runtime Loading
 
-### `requireNapiLibrary(packageDir)`
+### `requireNapiLibrary(packageDir, preset?)`
 
-Load the native addon, automatically selecting the correct binary for the current platform:
+Load the native addon, automatically selecting the correct binary for the current platform.
+`preset` is one of `zapi.presets[].name` and defaults to the first preset:
 
 ```typescript
 import { requireNapiLibrary } from "@chainsafe/zapi";
@@ -906,9 +925,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const addon = requireNapiLibrary(__dirname);
 ```
 
-Resolution order:
-1. Local build: `zig-out/lib/<binaryName>.node`
-2. Published package: `<pkg-name>-<target>`
+Resolution order (`<file>` is `<binaryName>.node` for the default preset, `<binaryName>-<preset>.node` otherwise):
+1. Local build: `zig-out/lib/<file>`
+2. Published package: `<pkg-name>-<target>/<file>`, or `<pkg-name>-<preset>-<target>/<file>` for a standalone preset
 
 ---
 

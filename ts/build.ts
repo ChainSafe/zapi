@@ -1,14 +1,18 @@
 import {spawn} from "node:child_process";
+import {promises as fs} from "node:fs";
+import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
-import {loadConfig} from "./config.js";
+import {type Config, type Preset, loadConfig, resolvePreset} from "./config.js";
 import {type Optimize, type Target, getZigTriple, validateOptimize, validateTarget} from "./lib.js";
-import {logInfo, logSuccess} from "./log.js";
+import {logDetail, logInfo, logSuccess} from "./log.js";
 
 export type BuildOptions = {
   target: Target;
   optimize?: Optimize;
   zigCwd: string;
   step: string;
+  /** Extra `zig build` args, e.g. a preset's `-D` options */
+  extraArgs?: string[];
   prefix?: string;
   cacheDir?: string;
   globalCacheDir?: string;
@@ -25,6 +29,8 @@ export async function build(opts: BuildOptions): Promise<void> {
   if (opts.optimize) {
     args.push(`-Doptimize=${opts.optimize}`);
   }
+
+  args.push(...(opts.extraArgs ?? []));
 
   if (opts.prefix) {
     args.push("--prefix", opts.prefix);
@@ -66,8 +72,50 @@ export async function build(opts: BuildOptions): Promise<void> {
   }
 }
 
+export function resolveStep(config: Config, step?: string): string {
+  const resolved = step ?? config.step;
+  if (!resolved) {
+    throw new Error("--step is required (or set zapi.step in package.json)");
+  }
+  return resolved;
+}
+
+export type BuildLocalOptions = {
+  config: Config;
+  preset: Preset;
+  target: Target;
+  optimize?: Optimize;
+  zigCwd: string;
+  step?: string;
+};
+
+/**
+ * Build one preset into `zig-out/lib` and give it the preset's file name, which is where
+ * `requireNapiLibrary` looks for a local build of that preset.
+ */
+export async function buildLocal(opts: BuildLocalOptions): Promise<void> {
+  await build({
+    extraArgs: opts.preset.args,
+    optimize: opts.optimize,
+    step: resolveStep(opts.config, opts.step),
+    target: opts.target,
+    zigCwd: opts.zigCwd,
+  });
+
+  const libDir = join(opts.zigCwd, "zig-out", "lib");
+  const built = join(libDir, `${opts.config.binaryName}.node`);
+  const wanted = join(libDir, opts.preset.file);
+  if (built !== wanted) {
+    await fs.rename(built, wanted);
+    logDetail(`Renamed to ${wanted}`);
+  }
+}
+
 const buildCliOptions = {
   optimize: {
+    type: "string",
+  },
+  preset: {
     type: "string",
   },
   step: {
@@ -89,19 +137,16 @@ export async function buildCli(): Promise<void> {
   });
 
   const {config} = await loadConfig();
-  const step = values.step ?? config.step;
-  if (!step) {
-    throw new Error("--step is required (or set zapi.step in package.json)");
-  }
   const target = validateTarget(values.target as string | undefined);
   const optimize = validateOptimize(values.optimize as string | undefined);
+  const preset = resolvePreset(config, values.preset as string | undefined);
 
-  const buildOptions: BuildOptions = {
+  await buildLocal({
+    config,
     optimize,
-    step,
+    preset,
+    step: values.step as string | undefined,
     target,
     zigCwd: values["zig-cwd"],
-  };
-
-  await build(buildOptions);
+  });
 }

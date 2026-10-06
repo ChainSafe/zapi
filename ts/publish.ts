@@ -1,7 +1,7 @@
 import {spawn} from "node:child_process";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
-import {loadConfig} from "./config.js";
+import {loadConfig, targetPackages} from "./config.js";
 import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
@@ -24,6 +24,10 @@ export type PublishOpts = {
   "npm-dir": string;
   "dry-run": boolean;
   concurrency: number;
+  /** Package root holding package.json and the npm dir (default: process.cwd()) */
+  cwd?: string;
+  /** Extra args appended to every `npm publish` (default: everything after `--` on the CLI) */
+  npmArgs?: string[];
 };
 
 function extraPublishArgs(): string[] {
@@ -59,45 +63,44 @@ async function runNpm(args: string[], cwd: string): Promise<void> {
 }
 
 export async function publish(opts: PublishOpts): Promise<void> {
-  const extraArgs = extraPublishArgs();
+  const cwd = opts.cwd ?? process.cwd();
+  const extraArgs = opts.npmArgs ?? extraPublishArgs();
   const publishArgv = ["publish", ...extraArgs];
 
-  const {config} = await loadConfig();
-  const total = config.targets.length + 1; // +1 for main package
+  const {pkgJson, config} = await loadConfig(cwd);
+  const packages = targetPackages(pkgJson, config);
+  const total = packages.length + 1; // +1 for main package
 
   if (opts["dry-run"]) {
     logInfo(
-      `[DRY RUN] Would publish ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}`
+      `[DRY RUN] Would publish ${packages.length} package(s) + main package with concurrency ${opts.concurrency}`
     );
     logDetail(`Extra npm args: ${extraArgs.length > 0 ? extraArgs.join(" ") : "(none)"}`);
 
-    for (let i = 0; i < config.targets.length; i++) {
-      const target = config.targets[i];
-      const cwd = join(process.cwd(), opts["npm-dir"], target);
-      logStep(i + 1, total, `Would publish ${target}`);
-      logDetail(`Directory: ${cwd}`);
+    for (let i = 0; i < packages.length; i++) {
+      const pkg = packages[i];
+      logStep(i + 1, total, `Would publish ${pkg.name}`);
+      logDetail(`Directory: ${join(cwd, opts["npm-dir"], pkg.dir)}`);
     }
 
     logStep(total, total, "Would publish main package");
-    logDetail(`Directory: ${process.cwd()}`);
+    logDetail(`Directory: ${cwd}`);
 
     logSuccess(`[DRY RUN] ${total} package(s) would be published`);
     return;
   }
 
-  logInfo(
-    `Publishing ${config.targets.length} target package(s) + main package with concurrency ${opts.concurrency}...`
-  );
+  logInfo(`Publishing ${packages.length} package(s) + main package with concurrency ${opts.concurrency}...`);
 
   let started = 0;
-  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
+  await runWithConcurrency(packages, opts.concurrency, async (pkg) => {
     started += 1;
-    logStep(started, total, `Publishing ${target}...`);
-    await runNpm(publishArgv, join(process.cwd(), opts["npm-dir"], target));
+    logStep(started, total, `Publishing ${pkg.name}...`);
+    await runNpm(publishArgv, join(cwd, opts["npm-dir"], pkg.dir));
   });
 
   logStep(total, total, "Publishing main package...");
-  await runNpm(publishArgv, process.cwd());
+  await runNpm(publishArgv, cwd);
 
   logSuccess(`Published ${total} package(s) successfully!`);
 }
@@ -110,7 +113,7 @@ export async function publishCli(): Promise<void> {
   });
 
   await publish({
-    concurrency: parsePositiveIntOption("concurrency", values["concurrency"] as string | undefined, 1),
+    concurrency: parsePositiveIntOption("concurrency", values.concurrency as string | undefined, 1),
     "dry-run": values["dry-run"] as boolean,
     "npm-dir": values["npm-dir"] as string,
   });

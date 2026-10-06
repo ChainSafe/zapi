@@ -21,9 +21,10 @@ Commands:
       --target      Target triple (default: current platform)
       --optimize    Optimization level: Debug, ReleaseSafe, ReleaseFast, ReleaseSmall
       --step        Zig build step (required)
+      --preset      Preset name from zapi.presets (default: first preset)
       --zig-cwd     Working directory for zig build (default: .)
 
-  build-artifacts   Build for all configured targets
+  build-artifacts   Build every preset for all configured targets
       --optimize       Optimization level
       --step           Zig build step (required)
       --zig-cwd        Working directory for zig build (default: .)
@@ -50,9 +51,14 @@ Configuration:
   {
     "zapi": {
       "binaryName": "my-addon",
-      "targets": ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", ...]
+      "targets": ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", ...],
+      "presets": [{"name": "default"}, {"name": "small", "args": ["-Dsmall=true"]}]
     }
   }
+  "presets" is optional. The first preset is the default and keeps the
+  <binaryName>.node file name; later ones are published as
+  <binaryName>-<preset>.node inside the same target packages, or as their
+  own <name>-<preset>-<target> packages when marked "standalone": true.
 `.trim();
 
 export async function cli(): Promise<void> {

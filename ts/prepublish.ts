@@ -2,7 +2,7 @@ import {promises as fs} from "node:fs";
 import {availableParallelism} from "node:os";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
-import {type Config, type PkgJson, getTargetParts, loadConfig} from "./config.js";
+import {type Config, type PkgJson, getTargetParts, loadConfig, targetPackages} from "./config.js";
 import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logSuccess, logWarn} from "./log.js";
 
@@ -13,64 +13,68 @@ export type CreateNpmDirsOpts = {
   concurrency: number;
 };
 
-export async function createNpmDirs(config: Config, opts: CreateNpmDirsOpts): Promise<void> {
-  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
-    await fs.mkdir(join(opts["npm-dir"], target), {recursive: true});
+export async function createNpmDirs(pkgJson: PkgJson, config: Config, opts: CreateNpmDirsOpts): Promise<void> {
+  await runWithConcurrency(targetPackages(pkgJson, config), opts.concurrency, async (pkg) => {
+    await fs.mkdir(join(opts["npm-dir"], pkg.dir), {recursive: true});
   });
 }
 
-export async function moveArtifacts(_pkgJson: PkgJson, config: Config, opts: PrepublishOpts): Promise<void> {
+export async function moveArtifacts(pkgJson: PkgJson, config: Config, opts: PrepublishOpts): Promise<void> {
   logInfo("Moving artifacts to npm packages...");
-  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
-    const artifactPath = join(opts["artifacts-dir"], target, `${config.binaryName}.node`);
-    const destPath = join(opts["npm-dir"], target, `${config.binaryName}.node`);
+  await runWithConcurrency(targetPackages(pkgJson, config), opts.concurrency, async (pkg) => {
+    for (const file of pkg.files) {
+      const artifactPath = join(opts["artifacts-dir"], pkg.target, file);
+      const destPath = join(opts["npm-dir"], pkg.dir, file);
 
-    await fs.rename(artifactPath, destPath).catch((err) => {
-      if (err.code === "ENOENT") {
-        logWarn(`Artifact not found: ${artifactPath}`);
-        return;
-      }
-      throw err;
-    });
-    logDetail(`${target} → ${destPath}`);
+      await fs.rename(artifactPath, destPath).catch((err) => {
+        if (err.code === "ENOENT") {
+          logWarn(`Artifact not found: ${artifactPath}`);
+          return;
+        }
+        throw err;
+      });
+      logDetail(`${pkg.target} → ${destPath}`);
+    }
   });
 }
 
 export async function updateTargetPkgJsons(pkgJson: PkgJson, config: Config, opts: PrepublishOpts): Promise<void> {
   logInfo("Generating target package.json files...");
-  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
-    const {platform, arch, abi} = getTargetParts(target);
+  await runWithConcurrency(targetPackages(pkgJson, config), opts.concurrency, async (pkg) => {
+    const {platform, arch, abi} = getTargetParts(pkg.target);
 
     const libc = platform !== "linux" ? undefined : abi === "gnu" ? "glibc" : abi === "musl" ? "musl" : undefined;
 
-    const targetDir = join(opts["npm-dir"], target);
+    const pkgDir = join(opts["npm-dir"], pkg.dir);
     const targetPkgJson = {
       cpu: [arch],
-      files: [`${config.binaryName}.node`],
+      files: pkg.files,
       license: pkgJson.license,
-      main: `${config.binaryName}.node`,
-      name: `${pkgJson.name}-${target}`,
+      main: pkg.files[0],
+      name: pkg.name,
       os: [platform],
       repository: pkgJson.repository,
       version: pkgJson.version,
       ...(libc ? {libc: [libc]} : {}),
     };
-    await fs.writeFile(join(targetDir, "package.json"), JSON.stringify(targetPkgJson, null, 2));
+    await fs.writeFile(join(pkgDir, "package.json"), JSON.stringify(targetPkgJson, null, 2));
     await fs.writeFile(
-      join(targetDir, "README.md"),
+      join(pkgDir, "README.md"),
       `# \`${targetPkgJson.name}\`\n
-This is the ${target} target package for ${pkgJson.name}.
+This is the ${pkg.target} target package for ${pkgJson.name}.
 
 `
     );
-    logDetail(`Created ${join(targetDir, "package.json")}`);
+    logDetail(`Created ${join(pkgDir, "package.json")}`);
   });
 }
 
 export function updateOptionalDependencies(pkgJson: PkgJson, config: Config): PkgJson {
   const optionalDependencies: Record<string, string> = {};
-  for (const target of config.targets) {
-    optionalDependencies[`${pkgJson.name}-${target}`] = pkgJson.version;
+  for (const pkg of targetPackages(pkgJson, config)) {
+    if (pkg.optional) {
+      optionalDependencies[pkg.name] = pkgJson.version;
+    }
   }
   pkgJson.optionalDependencies = optionalDependencies;
   return pkgJson;
@@ -118,7 +122,7 @@ export async function prepublishCli(): Promise<void> {
     "npm-dir": values["npm-dir"],
   };
 
-  await createNpmDirs(config, opts);
+  await createNpmDirs(pkgJson, config, opts);
   await moveArtifacts(pkgJson, config, opts);
   await updateTargetPkgJsons(pkgJson, config, opts);
 
@@ -126,5 +130,5 @@ export async function prepublishCli(): Promise<void> {
   const updatedPkgJson = await updateOptionalDependencies(pkgJson, config);
   await fs.writeFile("package.json", JSON.stringify(updatedPkgJson, null, 2));
 
-  logSuccess(`Prepared ${config.targets.length} target package(s) in ${values["npm-dir"]}/`);
+  logSuccess(`Prepared ${targetPackages(pkgJson, config).length} package(s) in ${values["npm-dir"]}/`);
 }
