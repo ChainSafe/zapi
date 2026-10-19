@@ -84,8 +84,7 @@ pub const BigInt = struct {
     /// Creates a JavaScript `BigInt` from a Zig integer value.
     ///
     /// Accepts `i64`, `u64`, and `comptime_int` values within this range.
-    /// For `i128`/`u128` values, use `fromWords` (not currently exposed but
-    /// available at the `napi.Env` level).
+    /// For `i128`/`u128` values, use `fromWords`.
     ///
     /// Panics if N-API operations fail (e.g., invalid environment) or for Zig
     /// integer types larger than `u64` that cannot be converted to `i64`/`u64`.
@@ -115,6 +114,23 @@ pub const BigInt = struct {
             },
             else => @compileError("BigInt.from: unsupported type " ++ @typeName(T) ++ ". Use integer types."),
         };
+        return .{ .val = val };
+    }
+
+    /// Creates a JavaScript `BigInt` from a sign bit and word array.
+    ///
+    /// `sign_bit` is 0 for non-negative, 1 for negative. `words` is the
+    /// little-endian unsigned magnitude. The resulting BigInt equals
+    /// `(sign_bit == 1 ? -1 : 1) * sum(words[i] << (64 * i))`.
+    ///
+    /// Use this for constructing BigInts whose magnitude exceeds `u64` (e.g.,
+    /// i128 or larger). For `i64`/`u64` values, prefer `BigInt.from`.
+    ///
+    /// Panics if N-API operations fail (e.g., invalid environment).
+    pub fn fromWords(sign_bit: u1, words: []const u64) BigInt {
+        const e = context.env();
+        const val = e.createBigintWords(sign_bit, words) catch
+            @panic("BigInt.fromWords: createBigintWords failed");
         return .{ .val = val };
     }
 
