@@ -65,7 +65,7 @@ pub const Number = struct {
             value > max or
             @trunc(value) != value)
         {
-            return error.InvalidUnsignedInteger;
+            return error.LossyConversion;
         }
         return @intFromFloat(value);
     }
@@ -74,7 +74,7 @@ pub const Number = struct {
     ///
     /// Exact across the whole `u32` range.
     ///
-    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// Returns `error.LossyConversion` if the number is negative,
     /// fractional, non-finite, or greater than `std.math.maxInt(u32)`.
     pub fn toU32Exact(self: Number) !u32 {
         return self.toUnsignedExact(u32, std.math.maxInt(u32));
@@ -83,7 +83,7 @@ pub const Number = struct {
     /// Attempts to convert the JavaScript number to a non-negative JS safe
     /// integer, returned as a `u64`.
     ///
-    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// Returns `error.LossyConversion` if the number is negative,
     /// fractional, non-finite, or greater than `Number.MAX_SAFE_INTEGER`
     /// (2^53 - 1).
     ///

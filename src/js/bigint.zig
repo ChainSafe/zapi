@@ -16,12 +16,12 @@ pub const BigInt = struct {
 
     /// Attempts to convert the JavaScript BigInt exactly to a Zig `i64`.
     ///
-    /// Returns `error.InvalidArg` if the value is outside the `i64` range. Use
+    /// Returns `error.LossyConversion` if the value is outside the `i64` range. Use
     /// `toI64LowBits` when low-64-bit conversion is intended.
     pub fn toI64(self: BigInt) !i64 {
         var lossless = false;
         const value = try self.toI64LowBits(&lossless);
-        if (!lossless) return error.InvalidArg;
+        if (!lossless) return error.LossyConversion;
         return value;
     }
 
@@ -37,12 +37,12 @@ pub const BigInt = struct {
 
     /// Attempts to convert the JavaScript BigInt exactly to a Zig `u64`.
     ///
-    /// Returns `error.InvalidArg` if the value is negative or outside the `u64`
+    /// Returns `error.LossyConversion` if the value is negative or outside the `u64`
     /// range. Use `toU64LowBits` when low-64-bit conversion is intended.
     pub fn toU64(self: BigInt) !u64 {
         var lossless = false;
         const value = try self.toU64LowBits(&lossless);
-        if (!lossless) return error.InvalidArg;
+        if (!lossless) return error.LossyConversion;
         return value;
     }
 
@@ -58,7 +58,7 @@ pub const BigInt = struct {
 
     /// Attempts to convert the JavaScript BigInt exactly to a Zig `i128`.
     ///
-    /// Returns `error.InvalidArg` if the value is outside `[-2^127, 2^127)`.
+    /// Returns `error.LossyConversion` if the value is outside `[-2^127, 2^127)`.
     /// Use `toI128LowBits` when low-128-bit conversion is intended.
     ///
     /// Returns an error if N-API operations fail.
@@ -68,7 +68,7 @@ pub const BigInt = struct {
         // BigInts needing more than two words are always outside the i128
         // range; getValueBigintWords reports them as error.Overflow.
         _ = self.val.getValueBigintWords(&sign_bit, &words) catch |err| switch (err) {
-            error.Overflow => return error.InvalidArg,
+            error.Overflow => return error.LossyConversion,
             else => |e| return e,
         };
         const lo: u128 = words[0];
@@ -76,11 +76,11 @@ pub const BigInt = struct {
         const magnitude: u128 = (hi << 64) | lo;
         const max_positive: u128 = std.math.maxInt(i128);
         if (sign_bit == 1) {
-            if (magnitude > max_positive + 1) return error.InvalidArg;
+            if (magnitude > max_positive + 1) return error.LossyConversion;
             if (magnitude == max_positive + 1) return std.math.minInt(i128);
             return -@as(i128, @intCast(magnitude));
         }
-        if (magnitude > max_positive) return error.InvalidArg;
+        if (magnitude > max_positive) return error.LossyConversion;
         return @intCast(magnitude);
     }
 
