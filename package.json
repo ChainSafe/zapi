@@ -12,9 +12,12 @@
 	"scripts": {
 		"build": "pnpm build:js && pnpm build:zig",
 		"build:js": "tsc --outDir lib",
-		"build:zig": "cd examples && zig build --fork=..",
+		"build:zig": "pnpm build:zig:examples && pnpm build:zig:tests",
+		"build:zig:examples": "cd examples && zig build --fork=..",
+		"build:zig:tests": "cd tests && zig build --fork=.. --prefix ../zig-out",
 		"test:zig": "zig build test:zapi",
 		"test:js": "vitest run examples/**/*.test.ts",
+		"test:fuzz:round_trip": "pnpm build:zig && vitest run tests/**/*.test.ts",
 		"test": "pnpm test:zig && pnpm test:js",
 		"lint:zig": "zig fmt src",
 		"lint:js": "pnpm biome check",
@@ -34,6 +37,7 @@
 		"@biomejs/biome": "^2.5.8",
 		"@chainsafe/biomejs-config": "^1.0.0",
 		"@types/node": "^24.1.0",
+		"fast-check": "^4.8.0",
 		"typescript": "^5.8.3",
 		"vitest": "^4.1.10"
 	},

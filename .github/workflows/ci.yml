@@ -36,6 +36,19 @@ jobs:
       - name: Test
         run: pnpm test:js
 
+  test-fuzz:
+    name: Fuzz Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-env
+      - name: Build
+        run: pnpm build
+      - name: Fuzz
+        run: pnpm test:fuzz:round_trip
+        env:
+          FUZZ_RUNS: "1000"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
