@@ -27,19 +27,24 @@ pub const Number = struct {
 
     /// Attempts to convert the JavaScript number to a Zig `i32`.
     ///
-    /// Returns an error if the conversion fails (e.g., number is too large).
+    /// Follows N-API int32 conversion semantics: finite values outside the
+    /// 32-bit range are truncated to the equivalent low 32 bits, and non-finite
+    /// values (`NaN`, `+Infinity`, `-Infinity`) become 0.
+    ///
+    /// Returns an error if the underlying value is not a number or the N-API
+    /// call fails.
     pub fn toI32(self: Number) !i32 {
         return self.val.getValueInt32();
     }
 
     /// Attempts to convert the JavaScript number to a Zig `u32`.
     ///
-    /// Safety: The underlying napi implementation does not reject numbers out of
-    /// the range [0, 2^32). The caller is responsible for bounds checking.
+    /// Follows N-API uint32 conversion semantics: finite values outside the
+    /// 32-bit range are truncated to the equivalent low 32 bits, and non-finite
+    /// values (`NaN`, `+Infinity`, `-Infinity`) become 0.
     ///
-    /// Returns an error if the given `self.val` is not a number.
-    ///
-    /// Source: https://tc39.es/ecma262/#sec-touint32
+    /// Returns an error if the underlying value is not a number or the N-API
+    /// call fails.
     pub fn toU32(self: Number) !u32 {
         return self.val.getValueUint32();
     }
@@ -60,7 +65,7 @@ pub const Number = struct {
             value > max or
             @trunc(value) != value)
         {
-            return error.InvalidUnsignedInteger;
+            return error.LossyConversion;
         }
         return @intFromFloat(value);
     }
@@ -69,7 +74,7 @@ pub const Number = struct {
     ///
     /// Exact across the whole `u32` range.
     ///
-    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// Returns `error.LossyConversion` if the number is negative,
     /// fractional, non-finite, or greater than `std.math.maxInt(u32)`.
     pub fn toU32Exact(self: Number) !u32 {
         return self.toUnsignedExact(u32, std.math.maxInt(u32));
@@ -78,7 +83,7 @@ pub const Number = struct {
     /// Attempts to convert the JavaScript number to a non-negative JS safe
     /// integer, returned as a `u64`.
     ///
-    /// Returns `error.InvalidUnsignedInteger` if the number is negative,
+    /// Returns `error.LossyConversion` if the number is negative,
     /// fractional, non-finite, or greater than `Number.MAX_SAFE_INTEGER`
     /// (2^53 - 1).
     ///
@@ -98,7 +103,13 @@ pub const Number = struct {
 
     /// Attempts to convert the JavaScript number to a Zig `i64`.
     ///
-    /// Returns an error if the conversion fails (e.g., number is too large).
+    /// Follows N-API int64 conversion semantics: non-finite values (`NaN`,
+    /// `+Infinity`, `-Infinity`) become 0. Values outside JavaScript's safe
+    /// integer range may lose precision, and finite values outside the `i64`
+    /// range are clamped by Node to `minInt(i64)`/`maxInt(i64)`.
+    ///
+    /// Returns an error if the underlying value is not a number or the N-API
+    /// call fails.
     pub fn toI64(self: Number) !i64 {
         return self.val.getValueInt64();
     }

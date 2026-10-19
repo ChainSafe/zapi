@@ -67,7 +67,7 @@ describe("primitive types", () => {
 
 	it("exactU32 rejects values outside the u32 range", () => {
 		for (const value of [-1, 1.5, 2 ** 32, Number.MAX_SAFE_INTEGER, Infinity, -Infinity, NaN]) {
-			expect(() => mod.exactU32(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
+			expect(() => mod.exactU32(value), `value ${value}`).toThrow("LossyConversion");
 		}
 	});
 
@@ -79,14 +79,14 @@ describe("primitive types", () => {
 
 	it("safeInteger rejects values that are not non-negative safe integers", () => {
 		for (const value of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, Infinity, -Infinity, NaN]) {
-			expect(() => mod.safeInteger(value), `value ${value}`).toThrow("InvalidUnsignedInteger");
+			expect(() => mod.safeInteger(value), `value ${value}`).toThrow("LossyConversion");
 		}
 	});
 
 	// 2^32 separates the two: in range for a safe integer, out of range for a u32.
 	it("safeInteger and exactU32 differ exactly at the u32 boundary", () => {
 		expect(mod.safeInteger(2 ** 32)).toEqual(2 ** 32);
-		expect(() => mod.exactU32(2 ** 32)).toThrow("InvalidUnsignedInteger");
+		expect(() => mod.exactU32(2 ** 32)).toThrow("LossyConversion");
 	});
 
 	it("toggleBool", () => {
@@ -156,11 +156,11 @@ describe("primitive types", () => {
 		});
 
 		it("rejects BigInts outside the i128 range instead of crashing", () => {
-			expect(() => mod.bigIntToI128String(2n ** 127n)).toThrow();
-			expect(() => mod.bigIntToI128String(-(2n ** 127n) - 1n)).toThrow();
-			expect(() => mod.bigIntToI128String(2n ** 128n)).toThrow();
-			expect(() => mod.bigIntToI128String(2n ** 200n)).toThrow();
-			expect(() => mod.bigIntToI128String(-(2n ** 200n))).toThrow();
+			expect(() => mod.bigIntToI128String(2n ** 127n)).toThrow("LossyConversion");
+			expect(() => mod.bigIntToI128String(-(2n ** 127n) - 1n)).toThrow("LossyConversion");
+			expect(() => mod.bigIntToI128String(2n ** 128n)).toThrow("LossyConversion");
+			expect(() => mod.bigIntToI128String(2n ** 200n)).toThrow("LossyConversion");
+			expect(() => mod.bigIntToI128String(-(2n ** 200n))).toThrow("LossyConversion");
 		});
 	});
 
