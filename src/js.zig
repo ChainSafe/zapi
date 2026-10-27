@@ -7,6 +7,7 @@ const class_meta = @import("js/class_meta.zig");
 pub const env = context.env;
 pub const io = io_context.io;
 pub const allocator = context.allocator;
+pub const scratch = context.scratch;
 pub const setEnv = context.setEnv;
 pub const restoreEnv = context.restoreEnv;
 pub const thisArg = context.thisArg;

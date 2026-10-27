@@ -309,6 +309,17 @@ describe("callbacks", () => {
 		const result = mod.applyCallback(5, (n: number) => n * 3);
 		expect(result).toEqual(15);
 	});
+
+	it("repeatString builds its result in scratch memory", () => {
+		expect(mod.repeatString("ab", 3)).toEqual("ababab");
+		expect(mod.repeatString("ab", 0)).toEqual("");
+		expect(mod.repeatString("x", 100_000)).toHaveLength(100_000);
+	});
+
+	it("scratch memory survives a re-entrant callback", () => {
+		const result = mod.scratchAcrossCallback("keep me", () => mod.repeatString("zz", 4));
+		expect(result).toEqual("keep me-after");
+	});
 });
 
 // Section 9: Classes

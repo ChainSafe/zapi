@@ -104,6 +104,7 @@ pub fn exportModule(comptime Module: type, comptime options: anytype) void {
         fn cleanupHook(_: *CleanupData) void {
             Lifecycle.release();
             io_context.release();
+            context.freeScratch();
         }
     };
 

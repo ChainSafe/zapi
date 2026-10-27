@@ -541,7 +541,21 @@ pub fn advanced() !Value {
 | `js.env()` | Current N-API environment (thread-local, set by DSL callbacks) |
 | `js.io()` | Shared `std.Io` handle retained for the addon while at least one N-API environment is active |
 | `js.allocator()` | C allocator for native allocations |
+| `js.scratch()` | Per-call arena for temporary allocations, freed when the outermost callback returns |
 | `js.thisArg()` | JS `this` value (available inside instance methods/getters/setters) |
+
+`js.scratch()` removes the free bookkeeping for short-lived buffers:
+
+```zig
+pub fn shout(name: String) !String {
+    const s = try name.toOwnedSlice(js.scratch()); // no free needed
+    return String.from(try std.ascii.allocUpperString(js.scratch(), s));
+}
+```
+
+Nested callbacks (Zig calls JS, which calls back into Zig) share the arena, so outer memory stays
+valid until the outermost callback returns. Use `js.allocator()` for anything that outlives the
+call, such as class fields, finalizer-owned data, or work done in `js.spawn`'s `compute`.
 
 ---
 

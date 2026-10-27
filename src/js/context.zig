@@ -52,10 +52,12 @@ pub fn allocator() std.mem.Allocator {
 /// temporarily change the active environment.
 ///
 /// It returns the previously active `napi.Env`, allowing for proper restoration
-/// using `restoreEnv` (typically with `defer`).
+/// using `restoreEnv` (typically with `defer`). Every `setEnv` must be paired
+/// with exactly one `restoreEnv`, since the pair also scopes `js.scratch()`.
 pub fn setEnv(e: napi.Env) ?napi.Env {
     const prev = current_env;
     current_env = e;
+    scratch_depth += 1;
     return prev;
 }
 
@@ -66,6 +68,39 @@ pub fn setEnv(e: napi.Env) ?napi.Env {
 /// to see `defer restoreEnv(prev)` immediately after a `setEnv` call.
 pub fn restoreEnv(prev: ?napi.Env) void {
     current_env = prev;
+    scratch_depth -= 1;
+    if (scratch_depth == 0) {
+        _ = scratch_arena.reset(.{ .retain_with_limit = scratch_retain_limit });
+    }
+}
+
+/// Per-thread arena behind `js.scratch()`. `scratch_depth` counts nested
+/// `setEnv` scopes so the arena is reset only when the outermost one exits.
+threadlocal var scratch_arena: std.heap.ArenaAllocator = .init(std.heap.c_allocator);
+threadlocal var scratch_depth: u32 = 0;
+
+/// Capacity kept across resets so steady-state calls don't hit the C allocator.
+const scratch_retain_limit = 64 * 1024;
+
+/// Returns an arena allocator for temporary allocations within the current
+/// JS callback. Everything allocated from it is freed when the outermost
+/// callback on this thread returns, so there is no need to call `free`.
+///
+/// Nested callbacks (Zig calls JS which calls back into Zig) share the arena,
+/// so memory from an outer callback stays valid while inner ones run.
+///
+/// SAFETY: Valid in the same scope as `js.env()`. Never store scratch memory
+/// past the callback, hand it to a finalizer, or use it from a worker thread
+/// (e.g. `js.spawn`'s `compute`); use `js.allocator()` for those.
+pub fn scratch() std.mem.Allocator {
+    if (scratch_depth == 0) @panic("js.scratch() called outside of a JS callback context");
+    return scratch_arena.allocator();
+}
+
+/// Frees this thread's scratch arena, including retained capacity. Called from
+/// the env cleanup hook installed by `js.exportModule(...)`.
+pub fn freeScratch() void {
+    if (scratch_depth == 0) _ = scratch_arena.reset(.free_all);
 }
 
 /// Thread-local JS `this` value, set by method/getter/setter callback wrappers.
@@ -113,6 +148,29 @@ test "current_env is null by default" {
 }
 
 test "restoreEnv with null preserves null state" {
-    restoreEnv(null);
+    const prev = setEnv(.{ .env = null });
+    restoreEnv(prev);
     try std.testing.expect(current_env == null);
+}
+
+test "scratch memory survives nested scopes and resets after the outermost" {
+    const outer_prev = setEnv(.{ .env = null });
+    const outer = try scratch().dupe(u8, "outer");
+
+    const inner_prev = setEnv(.{ .env = null });
+    _ = try scratch().alloc(u8, 1024);
+    restoreEnv(inner_prev);
+
+    _ = try scratch().dupe(u8, "XXXXX");
+    try std.testing.expectEqualStrings("outer", outer);
+    try std.testing.expectEqual(@as(u32, 1), scratch_depth);
+
+    _ = try scratch().alloc(u8, 2 * scratch_retain_limit);
+    restoreEnv(outer_prev);
+
+    try std.testing.expectEqual(@as(u32, 0), scratch_depth);
+    try std.testing.expect(scratch_arena.queryCapacity() <= scratch_retain_limit);
+
+    freeScratch();
+    try std.testing.expectEqual(@as(usize, 0), scratch_arena.queryCapacity());
 }
