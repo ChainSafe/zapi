@@ -62,6 +62,55 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
         null,
     ));
 
+    // Examples of composite types converted by createCallback: optionals map to
+    // null/undefined, structs to objects, tuples and slices to arrays, enums to integers.
+    try module.setNamedProperty("greet", try env.createFunction(
+        "greet",
+        2,
+        zapi.createCallback(2, greet, .{
+            .args = .{ .string, .string },
+            .returns = .string,
+        }),
+        null,
+    ));
+
+    try module.setNamedProperty("scalePoint", try env.createFunction(
+        "scalePoint",
+        2,
+        zapi.createCallback(2, scale_point, .{
+            .returns = .string,
+        }),
+        null,
+    ));
+
+    try module.setNamedProperty("sum", try env.createFunction(
+        "sum",
+        1,
+        zapi.createCallback(1, sum, .{}),
+        null,
+    ));
+
+    try module.setNamedProperty("swap", try env.createFunction(
+        "swap",
+        1,
+        zapi.createCallback(1, swap, .{}),
+        null,
+    ));
+
+    try module.setNamedProperty("reverse3", try env.createFunction(
+        "reverse3",
+        1,
+        zapi.createCallback(1, reverse3, .{}),
+        null,
+    ));
+
+    try module.setNamedProperty("nextColor", try env.createFunction(
+        "nextColor",
+        1,
+        zapi.createCallback(1, next_color, .{}),
+        null,
+    ));
+
     try module.setNamedProperty("copyArrayBuffer", try env.createFunction(
         "copyArrayBuffer",
         1,
@@ -174,6 +223,47 @@ fn add_semimanual(env: zapi.Env, a: i32, b: zapi.Value) !zapi.Value {
 
 fn surprise() []const u8 {
     return "Surprise!";
+}
+
+var greet_buf: [256]u8 = undefined;
+
+fn greet(name: []const u8, title: ?[]const u8) ![]const u8 {
+    if (title) |t| return std.fmt.bufPrint(&greet_buf, "Hello, {s} {s}!", .{ t, name });
+    return std.fmt.bufPrint(&greet_buf, "Hey {s}!", .{name});
+}
+
+const Point = struct {
+    x: f64,
+    y: f64,
+    label: ?[]const u8,
+};
+
+fn scale_point(p: Point, factor: f64) Point {
+    return .{ .x = p.x * factor, .y = p.y * factor, .label = p.label };
+}
+
+fn sum(values: []const i32) i32 {
+    var total: i32 = 0;
+    for (values) |v| total += v;
+    return total;
+}
+
+fn swap(pair: struct { i32, bool }) struct { bool, i32 } {
+    return .{ pair[1], pair[0] };
+}
+
+fn reverse3(a: [3]u8) [3]u8 {
+    return .{ a[2], a[1], a[0] };
+}
+
+const Color = enum(u8) { red, green, blue };
+
+fn next_color(color: Color) Color {
+    return switch (color) {
+        .red => .green,
+        .green => .blue,
+        .blue => .red,
+    };
 }
 
 fn copy_arraybuffer(env: zapi.Env, cb: zapi.CallbackInfo(1)) !zapi.Value {

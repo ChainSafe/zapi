@@ -15,6 +15,35 @@ describe("example mod", () => {
 		expect(example.surprise()).toEqual("Surprise!");
 	});
 
+	it("converts optional string arguments", () => {
+		expect(example.greet("Alice", "Dr.")).toEqual("Hello, Dr. Alice!");
+		expect(example.greet("Bob")).toEqual("Hey Bob!");
+		expect(example.greet("Bob", null)).toEqual("Hey Bob!");
+		expect(() => example.greet(1)).toThrow();
+	});
+
+	it("converts structs to and from objects", () => {
+		expect(example.scalePoint({ x: 1, y: 2.5, label: "p" }, 2)).toEqual({ x: 2, y: 5, label: "p" });
+		expect(example.scalePoint({ x: 1, y: 1 }, 3)).toEqual({ x: 3, y: 3, label: null });
+		expect(() => example.scalePoint(1, 2)).toThrow();
+	});
+
+	it("converts slices, tuples and fixed arrays to and from arrays", () => {
+		expect(example.sum([1, 2, 3, 4])).toEqual(10);
+		expect(example.sum([])).toEqual(0);
+		expect(example.swap([7, true])).toEqual([true, 7]);
+		expect(example.reverse3([1, 2, 3])).toEqual([3, 2, 1]);
+		expect(() => example.swap([7])).toThrow();
+		expect(() => example.reverse3([1, 2])).toThrow();
+		expect(() => example.sum("nope")).toThrow();
+	});
+
+	it("converts enums to and from integers", () => {
+		expect(example.nextColor(0)).toEqual(1);
+		expect(example.nextColor(2)).toEqual(0);
+		expect(() => example.nextColor(7)).toThrow();
+	});
+
 	it("copies immutable input into independently writable buffers", () => {
 		const arrayBuffer = example.copyArrayBuffer(false);
 		const arrayBufferBytes = new Uint8Array(arrayBuffer);

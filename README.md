@@ -615,6 +615,31 @@ napi.createCallback(2, myFunc, .{
 | `.buffer` | Borrow Buffer arguments as byte slices; copy byte-slice returns |
 | `.external_buffer` | Transfer an `OwnedBuffer` to JavaScript without copying |
 
+Composite types are converted recursively, and the hint applies to their nested byte slices too:
+
+| Zig type | JavaScript |
+|----------|------------|
+| `?T` | `null`/`undefined` ↔ `null`; an omitted trailing argument is `null` |
+| `enum(Int)` | integer tag value; unknown tags are rejected |
+| `struct { ... }` | object with the same field names |
+| `struct { A, B }` (tuple), `[N]T` | array of exactly that length |
+| `[]T`, `[]const T` | array |
+
+A `.auto` byte-slice argument accepts either a string or a Buffer. Strings and slices read from
+arguments are allocated per call and freed when the function returns, so copy them if you need them
+afterwards.
+
+```zig
+const Point = struct { x: f64, y: f64, label: ?[]const u8 };
+
+fn scale(p: Point, factor: f64) Point {
+    return .{ .x = p.x * factor, .y = p.y * factor, .label = p.label };
+}
+
+// scale({ x: 1, y: 2, label: "p" }, 2) → { x: 2, y: 4, label: "p" }
+napi.createCallback(2, scale, .{ .returns = .string });
+```
+
 External buffers require explicit ownership transfer:
 
 ```zig

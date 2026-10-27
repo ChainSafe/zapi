@@ -28,6 +28,9 @@ pub fn createCallback(
             info: CallbackInfo(argc_cap),
         ) anyerror!Value {
             var args: Args = undefined;
+            // Backs strings and slices read from arguments; freed after `func` returns.
+            var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+            defer arena.deinit();
 
             var cb_arg_i: usize = 0;
             inline for (0..fn_info.params.len) |i| {
@@ -38,7 +41,7 @@ pub fn createCallback(
                 const is_value_arg = arg_hint == .value or (arg_hint == .auto and param_type == Value);
 
                 if (arg_hint == .data) {
-                    args[i] = @alignCast(@ptrCast(info.data));
+                    args[i] = @ptrCast(@alignCast(info.data));
                 } else if (is_env_arg) {
                     args[i] = env;
                 } else if (is_value_arg) {
@@ -49,11 +52,14 @@ pub fn createCallback(
                     args[i] = value_arg;
                     cb_arg_i += 1;
                 } else {
-                    const value_arg = info.getArg(cb_arg_i) orelse {
+                    if (info.getArg(cb_arg_i)) |value_arg| {
+                        args[i] = try fromValue(param_type, value_arg, arg_hint, arena.allocator());
+                    } else if (@typeInfo(param_type) == .optional) {
+                        args[i] = null;
+                    } else {
                         try env.throwError("ERR_INVALID_ARG_COUNT", "Invalid callback argument count");
                         return error.PendingException;
-                    };
-                    args[i] = try fromValue(param_type, value_arg, arg_hint);
+                    }
                     cb_arg_i += 1;
                 }
             }
