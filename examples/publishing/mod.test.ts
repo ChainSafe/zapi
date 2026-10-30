@@ -1,8 +1,10 @@
-import {spawnSync} from "node:child_process";
+import {execFile, spawnSync} from "node:child_process";
 import {existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {createServer} from "node:http";
 import {tmpdir} from "node:os";
 import {delimiter, join} from "node:path";
 import {fileURLToPath} from "node:url";
+import {promisify} from "node:util";
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 
 const cli = fileURLToPath(new URL("../../lib/cli.js", import.meta.url));
@@ -72,6 +74,56 @@ describe("package preparation", () => {
     expect(readFileSync(join(directory, "package.json"), "utf8")).toBe(JSON.stringify(manifest));
     expect(existsSync(join(directory, "npm"))).toBe(false);
   });
+
+  it("preserves unrelated optional dependencies and removes retired native targets", () => {
+    writeFileSync(
+      join(directory, "package.json"),
+      JSON.stringify({
+        ...manifest,
+        optionalDependencies: {other: "^2.0.0", [`${name}-x86_64-apple-darwin`]: "1.0.0"},
+      })
+    );
+    const result = run("--main-only");
+    expect(result.status, result.stderr).toBe(0);
+    const pkg = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+    expect(pkg.optionalDependencies).toEqual({
+      other: "^2.0.0",
+      ...Object.fromEntries(targets.map((target) => [`${name}-${target}`, version])),
+    });
+  });
+
+  it("can prepare platforms repeatedly from the same build artifacts", () => {
+    expect(run("--platforms-only").status).toBe(0);
+    rmSync(join(directory, "npm"), {recursive: true});
+    const result = run("--platforms-only");
+    expect(result.status, result.stderr).toBe(0);
+    for (const target of targets) {
+      expect(readFileSync(join(directory, "npm", target, "bindings.node"), "utf8"), target).toBe(target);
+    }
+  });
+
+  it("fails on missing artifacts instead of repackaging an old binary", () => {
+    expect(run("--platforms-only").status).toBe(0);
+    rmSync(join(directory, "artifacts"), {recursive: true, force: true});
+    writeFileSync(join(directory, "package.json"), JSON.stringify({...manifest, version: "2.0.0"}));
+    const result = run("--platforms-only");
+    expect(result.status).not.toBe(0);
+    for (const target of targets) {
+      const pkg = JSON.parse(readFileSync(join(directory, "npm", target, "package.json"), "utf8"));
+      expect(pkg.version, target).toBe(version);
+    }
+  });
+
+  it("passes the wrapper's publish configuration to generated platforms", () => {
+    const publishConfig = {registry: "https://registry.example", access: "public"};
+    writeFileSync(join(directory, "package.json"), JSON.stringify({...manifest, publishConfig}));
+    const result = run("--platforms-only");
+    expect(result.status, result.stderr).toBe(0);
+    for (const target of targets) {
+      const pkg = JSON.parse(readFileSync(join(directory, "npm", target, "package.json"), "utf8"));
+      expect(pkg.publishConfig, target).toEqual(publishConfig);
+    }
+  });
 });
 
 describe("publishing", () => {
@@ -89,6 +141,7 @@ describe("publishing", () => {
       const path = join(directory, "npm", target);
       mkdirSync(path, {recursive: true});
       writeFileSync(join(path, "package.json"), JSON.stringify({name: `${name}-${target}`, version}));
+      writeFileSync(join(path, "bindings.node"), target);
     }
     writeFileSync(join(directory, "published.json"), "[]");
     writeFileSync(join(directory, "calls.jsonl"), "");
@@ -133,10 +186,24 @@ fs.writeFileSync(state, JSON.stringify(published));
     return JSON.parse(readFileSync(join(directory, "published.json"), "utf8"));
   }
 
+  function calls(): {args: string[]; spec: string}[] {
+    return readFileSync(join(directory, "calls.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  }
+
   it("preserves the default platform-first, main-last publish order", () => {
     const result = run([]);
     expect(result.status, result.stderr).toBe(0);
     expect(published()).toEqual([...targets.map((target) => `${name}-${target}@${version}`), `${name}@${version}`]);
+  });
+
+  it("accepts an absolute path to the prepared platform packages", () => {
+    const result = run(["--platforms-only", "--npm-dir", join(directory, "npm")]);
+    expect(result.status, result.stderr).toBe(0);
+    expect(published()).toEqual(targets.map((target) => `${name}-${target}@${version}`));
   });
 
   it("resumes a partial platform publish without touching the main package", () => {
@@ -165,9 +232,136 @@ fs.writeFileSync(state, JSON.stringify(published));
       calls
         .filter((call) => call.args[0] === "view")
         .slice(-2)
-        .every((call) => call.args.includes("https://registry.example"))
+        .every((call) => call.args.includes("--registry=https://registry.example"))
     ).toBe(true);
     expect(calls.at(-1)?.args).toEqual(["publish", "--registry=https://registry.example", "--tag", "next"]);
+  });
+
+  it.each([{extraArgs: []}, {extraArgs: ["--registry=https://override.example", "--userconfig=/tmp/custom.npmrc"]}])(
+    "queries the publish registry while preserving explicit npm overrides: $extraArgs",
+    ({extraArgs}) => {
+      for (const target of targets) {
+        writeFileSync(
+          join(directory, "npm", target, "package.json"),
+          JSON.stringify({
+            name: `${name}-${target}`,
+            version,
+            publishConfig: {registry: "https://registry.example"},
+          })
+        );
+      }
+      const result = run(["--platforms-only", "--skip-existing", "--", ...extraArgs]);
+      expect(result.status, result.stderr).toBe(0);
+      for (const call of calls().filter((call) => call.args[0] === "view")) {
+        expect(call.args, call.spec).toEqual([
+          "view",
+          call.spec,
+          "version",
+          "--registry=https://registry.example",
+          ...extraArgs,
+          "--json",
+          "--prefer-online",
+        ]);
+      }
+    }
+  );
+
+  it.each(["name", "version"])("refuses stale platform %s before publishing any package", (field) => {
+    const target = targets[1];
+    writeFileSync(
+      join(directory, "npm", target, "package.json"),
+      JSON.stringify({
+        name: `${name}-${target}`,
+        version,
+        [field]: "stale",
+      })
+    );
+    const result = run(["--platforms-only", "--skip-existing"]);
+    expect(result.status).not.toBe(0);
+    expect(calls()).toEqual([]);
+  });
+
+  it.each(["manifest", "cli", "scoped"])(
+    "uses the correct registry with real npm (%s)",
+    async (mode) => {
+      const requests: number[] = [];
+      const servers = [0, 1].map((index) =>
+        createServer((request, response) => {
+          requests.push(index);
+          const packageName = decodeURIComponent(request.url?.slice(1) ?? "");
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({name: packageName, versions: {[version]: {name: packageName, version}}}));
+        })
+      );
+      try {
+        const registries = await Promise.all(
+          servers.map(async (server) => {
+            await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+            const address = server.address();
+            if (!address || typeof address === "string") throw new Error("Expected a TCP address");
+            return `http://127.0.0.1:${address.port}`;
+          })
+        );
+        const registryKey = mode === "scoped" ? "@zapi-test:registry" : "registry";
+        for (const target of targets) {
+          writeFileSync(
+            join(directory, "npm", target, "package.json"),
+            JSON.stringify({
+              name: `${name}-${target}`,
+              version,
+              publishConfig: {[registryKey]: registries[1]},
+            })
+          );
+        }
+        writeFileSync(join(directory, "user.npmrc"), "");
+        writeFileSync(join(directory, "global.npmrc"), "");
+        await promisify(execFile)(
+          process.execPath,
+          [
+            cli,
+            "publish",
+            "--platforms-only",
+            "--skip-existing",
+            "--dry-run",
+            "--",
+            "--access",
+            "public",
+            "--ignore-scripts",
+            "--provenance",
+            "--tag",
+            "next",
+            ...(mode === "cli" ? ["--registry", registries[0]] : []),
+          ],
+          {
+            cwd: directory,
+            timeout: 10000,
+            env: {
+              ...process.env,
+              npm_config_registry: registries[0],
+              npm_config_userconfig: join(directory, "user.npmrc"),
+              npm_config_globalconfig: join(directory, "global.npmrc"),
+              npm_config_cache: join(directory, "cache"),
+              npm_config_update_notifier: "false",
+            },
+          }
+        );
+        expect(requests).toEqual(targets.map(() => (mode === "cli" ? 0 : 1)));
+      } finally {
+        for (const server of servers) server.close();
+      }
+    },
+    15000
+  );
+
+  it("refuses a missing platform binary before publishing any package", () => {
+    rmSync(join(directory, "npm", targets[1], "bindings.node"));
+    expect(run(["--platforms-only"]).status).not.toBe(0);
+    expect(calls()).toEqual([]);
+  });
+
+  it("rejects unsupported zapi options instead of silently publishing every package", () => {
+    expect(run(["--main-only"]).status).not.toBe(0);
+    expect(calls()).toEqual([]);
   });
 
   it.each(["E401", "E500", "ENOTFOUND"])("aborts on %s instead of treating it as a missing version", (code) => {

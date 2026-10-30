@@ -1,8 +1,8 @@
 import {execFile, spawn} from "node:child_process";
-import {readFile} from "node:fs/promises";
-import {join} from "node:path";
+import {access, readFile} from "node:fs/promises";
+import {join, resolve} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs, promisify} from "node:util";
-import {loadConfig} from "./config.js";
+import {type PkgJson, loadConfig} from "./config.js";
 import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
@@ -69,21 +69,19 @@ async function runNpm(args: string[], cwd: string): Promise<void> {
   }
 }
 
-async function isPublished(cwd: string, extraArgs: string[]): Promise<boolean> {
-  const manifest = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as {name: string; version: string};
+async function isPublished(manifest: PkgJson, cwd: string, extraArgs: string[]): Promise<boolean> {
   const spec = `${manifest.name}@${manifest.version}`;
-  const {values} = parseArgs({
-    allowPositionals: true,
-    args: extraArgs,
-    options: {registry: {type: "string"}},
-    strict: false,
-  });
-  const registryArgs = typeof values.registry === "string" ? ["--registry", values.registry] : [];
+  const registryArgs = Object.entries(manifest.publishConfig ?? {})
+    .filter(([key]) => key === "registry" || key.endsWith(":registry"))
+    .map(([key, value]) => {
+      if (typeof value !== "string") throw new Error(`publishConfig.${key} must be a string`);
+      return `--${key}=${value}`;
+    });
   let stdout: string;
   try {
     ({stdout} = await promisify(execFile)(
       "npm",
-      ["view", spec, "version", "--json", "--prefer-online", ...registryArgs],
+      ["view", spec, "version", ...registryArgs, ...extraArgs, "--json", "--prefer-online"],
       {cwd}
     ));
   } catch (error) {
@@ -105,18 +103,27 @@ async function isPublished(cwd: string, extraArgs: string[]): Promise<boolean> {
 export async function publish(opts: PublishOpts): Promise<void> {
   const extraArgs = extraPublishArgs();
   const publishArgv = ["publish", ...extraArgs];
-  const {config} = await loadConfig();
+  const {config, pkgJson} = await loadConfig();
+  const platforms = [];
+  for (const target of config.targets) {
+    const cwd = resolve(opts["npm-dir"], target);
+    const manifest = JSON.parse(await readFile(join(cwd, "package.json"), "utf8")) as PkgJson;
+    if (manifest.name !== `${pkgJson.name}-${target}` || manifest.version !== pkgJson.version) {
+      throw new Error(`Stale platform package ${target}; run zapi prepublish before publishing`);
+    }
+    await access(join(cwd, `${config.binaryName}.node`));
+    platforms.push({cwd, manifest, target});
+  }
   const total = config.targets.length + (opts["platforms-only"] ? 0 : 1);
   const description = `${config.targets.length} target package(s)${opts["platforms-only"] ? "" : " + main package"}`;
 
   logInfo(`${opts["dry-run"] ? "[DRY RUN] " : ""}Publishing ${description} with concurrency ${opts.concurrency}...`);
-  logDetail(`Extra npm args: ${extraArgs.length > 0 ? extraArgs.join(" ") : "(none)"}`);
 
   let started = 0;
   let skipped = 0;
-  const publishPackage = async (label: string, cwd: string): Promise<void> => {
+  const publishPackage = async (label: string, cwd: string, manifest: PkgJson): Promise<void> => {
     const step = ++started;
-    if (opts["skip-existing"] && (await isPublished(cwd, extraArgs))) {
+    if (opts["skip-existing"] && (await isPublished(manifest, cwd, extraArgs))) {
       skipped += 1;
       logStep(step, total, `Skipping ${label}: version already published`);
       return;
@@ -129,10 +136,10 @@ export async function publish(opts: PublishOpts): Promise<void> {
     }
   };
 
-  await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
-    await publishPackage(target, join(process.cwd(), opts["npm-dir"], target));
+  await runWithConcurrency(platforms, opts.concurrency, async ({target, cwd, manifest}) => {
+    await publishPackage(target, cwd, manifest);
   });
-  if (!opts["platforms-only"]) await publishPackage("main package", process.cwd());
+  if (!opts["platforms-only"]) await publishPackage("main package", process.cwd(), pkgJson);
 
   logSuccess(
     `${opts["dry-run"] ? "[DRY RUN] Would publish" : "Published"} ${total - skipped} package(s); skipped ${skipped}`
@@ -143,7 +150,6 @@ export async function publishCli(): Promise<void> {
   const {values} = parseArgs({
     allowPositionals: true,
     options: publishOptions,
-    strict: false,
   });
 
   await publish({
