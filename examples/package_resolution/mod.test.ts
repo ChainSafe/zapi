@@ -4,15 +4,15 @@ import {join, relative} from "node:path";
 import {afterEach, describe, expect, it} from "vitest";
 import {getTarget, requireNapiLibrary} from "../../ts/lib.js";
 
-const directories: string[] = [];
-
-afterEach(() => {
-	for (const directory of directories.splice(0)) {
-		rmSync(directory, {recursive: true, force: true});
-	}
-});
-
 describe("native package resolution", () => {
+	const directories: string[] = [];
+
+	afterEach(() => {
+		for (const directory of directories.splice(0)) {
+			rmSync(directory, {recursive: true, force: true});
+		}
+	});
+
 	it.each([false, true])("loads each wrapper's own platform dependency (relative path: %s)", (relativePath) => {
 		const directory = mkdtempSync(join(tmpdir(), "zapi-package-resolution-"));
 		directories.push(directory);
