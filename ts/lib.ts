@@ -1,10 +1,8 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: We have usage of dynamic library objects which we can not type-check */
 import {existsSync, readFileSync} from "node:fs";
 import {createRequire} from "node:module";
-import {join} from "node:path";
+import {resolve} from "node:path";
 import {parsePkgJson} from "./config.js";
-
-const require = createRequire(import.meta.url);
 
 export const TARGETS = [
   "aarch64-apple-darwin",
@@ -212,9 +210,11 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
  * - published, `${targetPackageName}`
  */
 export function requireNapiLibrary(packageDir: string): unknown {
-  const pkgJson = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf-8"));
+  const packageJsonPath = resolve(packageDir, "package.json");
+  const require = createRequire(packageJsonPath);
+  const pkgJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
   const config = parsePkgJson(pkgJson);
-  const localPath = join(packageDir, `zig-out/lib/${config.binaryName}.node`);
+  const localPath = resolve(packageDir, `zig-out/lib/${config.binaryName}.node`);
   if (existsSync(localPath)) {
     return require(localPath);
   }
