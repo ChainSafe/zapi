@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.2.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.1.0...zapi-v4.2.0) (2026-10-30)
+
+
+### Features
+
+* **js:** add js.scratch() per-call arena allocator ([#85](https://github.com/ChainSafe/zapi/issues/85)) ([ce2f063](https://github.com/ChainSafe/zapi/commit/ce2f063695c42a13181a5979e5f26dc66dfa983d))
+
+
+### Bug Fixes
+
+* resolve native packages from the addon wrapper ([#86](https://github.com/ChainSafe/zapi/issues/86)) ([8864e2a](https://github.com/ChainSafe/zapi/commit/8864e2a64a70c55b91e3fae29970c898bb1eeab3))
+
 ## [4.1.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.0.0...zapi-v4.1.0) (2026-09-25)
 
 
