@@ -289,6 +289,25 @@ pub fn applyCallback(val: Number, cb: Function) !Value {
     return try cb.call(.{val});
 }
 
+/// Repeat a string, building the result in the per-call scratch arena.
+pub fn repeatString(str: String, count: Number) !String {
+    const scratch = js.scratch();
+    const part = try str.toOwnedSlice(scratch);
+    const n = try count.toU32Exact();
+    const out = try scratch.alloc(u8, part.len * n);
+    for (0..n) |i| @memcpy(out[i * part.len ..][0..part.len], part);
+    return String.from(out);
+}
+
+/// Scratch memory from before a re-entrant callback stays valid after it.
+pub fn scratchAcrossCallback(str: String, cb: Function) !String {
+    const scratch = js.scratch();
+    const before = try str.toOwnedSlice(scratch);
+    _ = try cb.call(.{});
+    const after = try scratch.dupe(u8, "-after");
+    return String.from(try std.mem.concat(scratch, u8, &.{ before, after }));
+}
+
 // ============================================================================
 // Section 9: Classes
 // ============================================================================
