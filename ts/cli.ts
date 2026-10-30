@@ -34,11 +34,15 @@ Commands:
       --artifacts-dir  Directory containing built artifacts (default: artifacts)
       --npm-dir        Directory for npm packages (default: npm)
       --concurrency    Parallel filesystem prep jobs (default: min(cpu, 4))
+      --platforms-only Prepare target packages without changing the main manifest
+      --main-only      Update only the main manifest's optionalDependencies
 
   publish           Publish all packages to npm
       --npm-dir        Directory containing npm packages (default: npm)
       --dry-run        Preview what would be published without publishing
       --concurrency    Parallel target publishes (default: 1)
+      --platforms-only Publish target packages without the main package
+      --skip-existing  Skip package versions already present in the registry
       [-- <npm-args>]  Additional arguments passed to npm publish
 
 Options:

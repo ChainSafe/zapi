@@ -848,6 +848,10 @@ zapi prepublish [options]
 |--------|-------------|---------|
 | `--artifacts-dir` | Directory containing built artifacts | `artifacts` |
 | `--npm-dir` | Directory for npm packages | `npm` |
+| `--platforms-only` | Prepare target packages without changing the main manifest | `false` |
+| `--main-only` | Update only the main manifest’s `optionalDependencies` | `false` |
+
+`--platforms-only` and `--main-only` are mutually exclusive. Neither option changes the default behavior when omitted.
 
 **Example output:**
 ```
@@ -856,8 +860,9 @@ zapi prepublish [options]
   → x86_64-unknown-linux-gnu → npm/x86_64-unknown-linux-gnu/my-addon.node
 ▶ Generating target package.json files...
   → Created npm/x86_64-unknown-linux-gnu/package.json
-▶ Updating package.json with optionalDependencies...
 ✓ Prepared 6 target package(s) in npm/
+▶ Updating package.json with optionalDependencies...
+✓ Prepared main package
 ```
 
 #### `zapi publish`
@@ -872,20 +877,26 @@ zapi publish [options] [-- <npm-args>]
 |--------|-------------|---------|
 | `--npm-dir` | Directory containing npm packages | `npm` |
 | `--dry-run` | Preview what would be published without publishing | `false` |
+| `--platforms-only` | Leave the main package to another publisher, such as Lerna | `false` |
+| `--skip-existing` | Skip exact versions already published; registry errors abort the publish | `false` |
 
 Any arguments after `--` are passed directly to `npm publish` (e.g., `--access public`, `--tag beta`).
+
+For workspace releases managed by Lerna, build the artifacts, then run `zapi prepublish --platforms-only` and `zapi publish --platforms-only --skip-existing -- --access public`. These commands leave the main manifest unchanged. Set the main package's `prepack` script to `zapi prepublish --main-only` so Lerna generates its exact platform dependencies during packaging, after checking the working tree. Lerna then publishes the main package alongside the workspace.
+
+With `--skip-existing`, dry runs query the registry but never publish. An explicit npm `--registry` also applies to these queries.
 
 **Example dry-run:**
 ```bash
 zapi publish --dry-run
 ```
 ```
-▶ [DRY RUN] Would publish 6 target package(s) + main package
+▶ [DRY RUN] Publishing 6 target package(s) + main package with concurrency 1...
   → Extra npm args: (none)
 [1/7] Would publish x86_64-unknown-linux-gnu
   → Directory: /path/to/npm/x86_64-unknown-linux-gnu
 ...
-✓ [DRY RUN] 7 package(s) would be published
+✓ [DRY RUN] Would publish 7 package(s); skipped 0
 ```
 
 ### Release Workflow
