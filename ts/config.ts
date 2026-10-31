@@ -15,6 +15,8 @@ export type PkgJson = {
   version: string;
   license?: string;
   repository?: string | {type?: string; url?: string};
+  optionalDependencies?: Record<string, string>;
+  publishConfig?: Record<string, unknown>;
   zapi?: {
     binaryName: string;
     targets: string[];

@@ -3,8 +3,8 @@ import {availableParallelism} from "node:os";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
 import {type Config, type PkgJson, getTargetParts, loadConfig} from "./config.js";
-import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
-import {logDetail, logInfo, logSuccess, logWarn} from "./log.js";
+import {TARGETS, parsePositiveIntOption, runWithConcurrency} from "./lib.js";
+import {logDetail, logInfo, logSuccess} from "./log.js";
 
 const defaultConcurrency = String(Math.max(1, Math.min(availableParallelism(), 4)));
 
@@ -19,19 +19,13 @@ export async function createNpmDirs(config: Config, opts: CreateNpmDirsOpts): Pr
   });
 }
 
-export async function moveArtifacts(_pkgJson: PkgJson, config: Config, opts: PrepublishOpts): Promise<void> {
-  logInfo("Moving artifacts to npm packages...");
+export async function copyArtifacts(config: Config, opts: PrepublishOpts): Promise<void> {
+  logInfo("Copying artifacts to npm packages...");
   await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
     const artifactPath = join(opts["artifacts-dir"], target, `${config.binaryName}.node`);
     const destPath = join(opts["npm-dir"], target, `${config.binaryName}.node`);
 
-    await fs.rename(artifactPath, destPath).catch((err) => {
-      if (err.code === "ENOENT") {
-        logWarn(`Artifact not found: ${artifactPath}`);
-        return;
-      }
-      throw err;
-    });
+    await fs.copyFile(artifactPath, destPath);
     logDetail(`${target} → ${destPath}`);
   });
 }
@@ -51,6 +45,7 @@ export async function updateTargetPkgJsons(pkgJson: PkgJson, config: Config, opt
       main: `${config.binaryName}.node`,
       name: `${pkgJson.name}-${target}`,
       os: [platform],
+      publishConfig: pkgJson.publishConfig,
       repository: pkgJson.repository,
       version: pkgJson.version,
       ...(libc ? {libc: [libc]} : {}),
@@ -68,7 +63,10 @@ This is the ${target} target package for ${pkgJson.name}.
 }
 
 export function updateOptionalDependencies(pkgJson: PkgJson, config: Config): PkgJson {
-  const optionalDependencies: Record<string, string> = {};
+  const optionalDependencies = {...pkgJson.optionalDependencies};
+  for (const target of TARGETS) {
+    delete optionalDependencies[`${pkgJson.name}-${target}`];
+  }
   for (const target of config.targets) {
     optionalDependencies[`${pkgJson.name}-${target}`] = pkgJson.version;
   }
@@ -91,9 +89,17 @@ const prepublishOptions = {
     default: defaultConcurrency,
     type: "string",
   },
+  "main-only": {
+    default: false,
+    type: "boolean",
+  },
   "npm-dir": {
     default: "npm",
     type: "string",
+  },
+  "platforms-only": {
+    default: false,
+    type: "boolean",
   },
 } satisfies ParseArgsOptionsConfig;
 
@@ -102,6 +108,10 @@ export async function prepublishCli(): Promise<void> {
     allowPositionals: true,
     options: prepublishOptions,
   });
+
+  if (values["platforms-only"] && values["main-only"]) {
+    throw new Error("--platforms-only and --main-only are mutually exclusive");
+  }
 
   const {pkgJson, config} = await loadConfig();
   const concurrency = parsePositiveIntOption(
@@ -118,13 +128,17 @@ export async function prepublishCli(): Promise<void> {
     "npm-dir": values["npm-dir"],
   };
 
-  await createNpmDirs(config, opts);
-  await moveArtifacts(pkgJson, config, opts);
-  await updateTargetPkgJsons(pkgJson, config, opts);
+  if (!values["main-only"]) {
+    await createNpmDirs(config, opts);
+    await copyArtifacts(config, opts);
+    await updateTargetPkgJsons(pkgJson, config, opts);
+    logSuccess(`Prepared ${config.targets.length} target package(s) in ${values["npm-dir"]}/`);
+  }
 
-  logInfo("Updating package.json with optionalDependencies...");
-  const updatedPkgJson = await updateOptionalDependencies(pkgJson, config);
-  await fs.writeFile("package.json", JSON.stringify(updatedPkgJson, null, 2));
-
-  logSuccess(`Prepared ${config.targets.length} target package(s) in ${values["npm-dir"]}/`);
+  if (!values["platforms-only"]) {
+    logInfo("Updating package.json with optionalDependencies...");
+    const updatedPkgJson = updateOptionalDependencies(pkgJson, config);
+    await fs.writeFile("package.json", JSON.stringify(updatedPkgJson, null, 2));
+    logSuccess("Prepared main package");
+  }
 }

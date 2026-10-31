@@ -836,9 +836,9 @@ zapi build-artifacts [options]
 
 Prepare npm packages for publishing:
 - Creates `npm/<target>/` directories for each target
-- Moves compiled `.node` binaries from artifacts into target packages
+- Copies compiled `.node` binaries from artifacts into target packages
 - Generates `package.json` for each target package (with correct `os`, `cpu`, `libc`)
-- Updates the main `package.json` with `optionalDependencies`
+- Updates native entries in the main `package.json`'s `optionalDependencies`, preserving unrelated entries
 
 ```bash
 zapi prepublish [options]
@@ -848,16 +848,21 @@ zapi prepublish [options]
 |--------|-------------|---------|
 | `--artifacts-dir` | Directory containing built artifacts | `artifacts` |
 | `--npm-dir` | Directory for npm packages | `npm` |
+| `--platforms-only` | Prepare target packages without changing the main manifest | `false` |
+| `--main-only` | Update only the main manifest’s `optionalDependencies` | `false` |
+
+`--platforms-only` and `--main-only` are mutually exclusive. Without either option, both package types are prepared. Preparation is local and makes no registry requests. Artifacts remain available for retries; a missing artifact fails preparation. Generated platform manifests inherit the wrapper's `publishConfig`.
 
 **Example output:**
 ```
 ▶ Preparing my-addon@1.0.0 for publishing...
-▶ Moving artifacts to npm packages...
+▶ Copying artifacts to npm packages...
   → x86_64-unknown-linux-gnu → npm/x86_64-unknown-linux-gnu/my-addon.node
 ▶ Generating target package.json files...
   → Created npm/x86_64-unknown-linux-gnu/package.json
-▶ Updating package.json with optionalDependencies...
 ✓ Prepared 6 target package(s) in npm/
+▶ Updating package.json with optionalDependencies...
+✓ Prepared main package
 ```
 
 #### `zapi publish`
@@ -872,20 +877,27 @@ zapi publish [options] [-- <npm-args>]
 |--------|-------------|---------|
 | `--npm-dir` | Directory containing npm packages | `npm` |
 | `--dry-run` | Preview what would be published without publishing | `false` |
+| `--platforms-only` | Leave the main package to another publisher, such as Lerna | `false` |
+| `--skip-existing` | Skip exact versions already published; registry errors abort the publish | `false` |
 
 Any arguments after `--` are passed directly to `npm publish` (e.g., `--access public`, `--tag beta`).
+
+For workspace releases managed by Lerna, build the artifacts, then run `zapi prepublish --platforms-only` and `zapi publish --platforms-only --skip-existing -- --access public`. These commands leave the main manifest unchanged. Set the main package's `prepack` script to `zapi prepublish --main-only` so its exact platform dependencies are generated during packaging, after Lerna checks the working tree. Lifecycle scripts must be enabled for that step. Lerna then publishes the main package alongside the workspace.
+
+Publishing requires platform manifests matching the wrapper's current name and version, with their binaries present. zapi validates every platform before making registry requests. The default publishes platforms first and the wrapper last; `--platforms-only` assigns the wrapper to an external publisher. To publish just the wrapper, use `npm publish`.
+
+With `--skip-existing`, version queries use the destination registry, including `publishConfig` and explicit npm CLI overrides. Existing versions are left untouched, including their dist-tags. This supports retrying a partial release; changing an existing version's dist-tags is a separate `npm dist-tag` operation. Dry runs perform local validation and, with `--skip-existing`, registry queries, but never publish.
 
 **Example dry-run:**
 ```bash
 zapi publish --dry-run
 ```
 ```
-▶ [DRY RUN] Would publish 6 target package(s) + main package
-  → Extra npm args: (none)
+▶ [DRY RUN] Publishing 6 target package(s) + main package with concurrency 1...
 [1/7] Would publish x86_64-unknown-linux-gnu
   → Directory: /path/to/npm/x86_64-unknown-linux-gnu
 ...
-✓ [DRY RUN] 7 package(s) would be published
+✓ [DRY RUN] Would publish 7 package(s); skipped 0
 ```
 
 ### Release Workflow
