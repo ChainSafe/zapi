@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.2.0...zapi-v4.3.0) (2026-10-31)
+
+
+### Features
+
+* support workspace-managed native publishing ([#88](https://github.com/ChainSafe/zapi/issues/88)) ([78ba34f](https://github.com/ChainSafe/zapi/commit/78ba34fc51a541f224e8e841b7f55b256c812c5e))
+
 ## [4.2.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.1.0...zapi-v4.2.0) (2026-10-30)
 
 
