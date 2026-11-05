@@ -51,7 +51,7 @@ Once fixed, **persist the counterexample** so it runs forever:
 
 ## Continuous fuzzing (ChainSafe fuzz platform)
 
-`Dockerfile.fuzz` packages these properties for the [fuzz platform](https://github.com/ChainSafe/lodestar-ansible-development/tree/main/playbooks/fuzz). `.github/workflows/fuzz-image.yml` builds and smoke-tests it on PRs and publishes `ghcr.io/chainsafe/zapi-fuzz:main` on every push to `main`; the platform switches the campaign to each new image.
+`Dockerfile.fuzz` packages these properties for the [fuzz platform](https://github.com/ChainSafe/lodestar-ansible-development/tree/main/playbooks/fuzz). `.github/workflows/fuzz-image.yml` builds and smoke-tests it on PRs. Publishing is manual: run the workflow from the Actions tab on `main` to move `ghcr.io/chainsafe/zapi-fuzz:main` (on another branch it publishes `branch-<name>`). The platform switches the campaign to each new image.
 
 The entrypoint, `tests/fuzz/platform/run-fuzz.ts`, re-runs every `*.fuzz.test.ts` in a loop (`FUZZ_RUNS` cases per property, default 100 000, fresh random seed each time) until `SIGTERM`:
 
