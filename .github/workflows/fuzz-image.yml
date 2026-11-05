@@ -1,0 +1,96 @@
+name: Fuzz image
+
+# Builds Dockerfile.fuzz and publishes it to GHCR for the ChainSafe fuzz platform,
+# which follows the `main` tag and restarts the campaign on each new image.
+#   - pull request touching the fuzzed code -> build and smoke test only
+#   - push to main / manual run on main     -> also publish `main` and `sha-<short>`
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "build.zig"
+      - "build.zig.zon"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "Dockerfile.fuzz"
+      - "Dockerfile.fuzz.dockerignore"
+      - ".github/workflows/fuzz-image.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fuzz-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/chainsafe/zapi-fuzz
+
+jobs:
+  build:
+    name: Build, test and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile.fuzz
+          platforms: linux/amd64
+          build-args: REVISION=${{ github.sha }}
+          tags: zapi-fuzz:ci
+          load: true
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=fuzz-image
+          cache-to: type=gha,scope=fuzz-image,mode=max
+
+      # The restrictions the fuzz platform applies: non-root uid, read-only root
+      # filesystem, no capabilities, no network, an init process.
+      - name: Campaign runs and reports status under the platform's restrictions
+        run: |
+          mkdir -p /tmp/fz/state /tmp/fz/artifacts /tmp/fz/failures /tmp/fz/metrics /tmp/fz/local
+          sudo chown -R 60001:60001 /tmp/fz
+          docker run -d --name smoke --user 60001:60001 --read-only --cap-drop all \
+            --security-opt no-new-privileges --network none --init --pids-limit 4096 \
+            -e FUZZ_PROJECT=zapi -e FUZZ_TARGET=round-trip \
+            -e FUZZ_STATE=/fuzz/state -e FUZZ_ARTIFACTS=/fuzz/artifacts \
+            -e FUZZ_FAILURES=/fuzz/failures -e FUZZ_METRICS=/fuzz/metrics \
+            -e TMPDIR=/local \
+            -v /tmp/fz/state:/fuzz/state -v /tmp/fz/artifacts:/fuzz/artifacts \
+            -v /tmp/fz/failures:/fuzz/failures -v /tmp/fz/metrics:/fuzz/metrics \
+            -v /tmp/fz/local:/local \
+            zapi-fuzz:ci
+          sleep 30
+          docker logs smoke
+          test "$(docker inspect -f '{{.State.Running}}' smoke)" = true
+          cat /tmp/fz/metrics/status
+          awk '$1 == "execs_total" && $2 > 0 { ok = 1 } END { exit !ok }' /tmp/fz/metrics/status
+          awk '$1 == "crashes_total" && $2 == 0 { ok = 1 } END { exit !ok }' /tmp/fz/metrics/status
+          docker stop -t 60 smoke
+          test "$(docker inspect -f '{{.State.ExitCode}}' smoke)" = 0
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          docker tag zapi-fuzz:ci "${IMAGE}:sha-${GITHUB_SHA::7}"
+          docker tag zapi-fuzz:ci "${IMAGE}:main"
+          docker push "${IMAGE}:sha-${GITHUB_SHA::7}"
+          docker push "${IMAGE}:main"
