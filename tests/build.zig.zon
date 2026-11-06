@@ -1,0 +1,38 @@
+.{
+    .name = .zapi_tests,
+    .version = "0.0.0",
+    .fingerprint = 0xd21dc10774fb3dc7,
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "fuzz",
+    },
+    .dependencies = .{
+        // Repository builds use --fork so the tests consume the local
+        // checkout while preserving the URL/hash dependency boundary.
+        .zapi = .{
+            .url = "https://github.com/ChainSafe/zapi/archive/b934988f8595e5a5fdc497b7212631004f800116.tar.gz",
+            .hash = "zapi-3.1.0-rIqzUfHFBADg6qo5AXJzbfHgs6LqpwgVKYal4qCG4XSW",
+        },
+        .zbuild = .{
+            .url = "git+https://github.com/chainsafe/zbuild.git#f7d5f19de09f2808e54acf599605f9e18c9bd804",
+            .hash = "zbuild-0.4.0-XJFav-1nAgDmfVY1nVSIIzbkcbuHZj7yMb7Fv8yvznPO",
+        },
+    },
+    .modules = .{
+        .test_fuzz_numeric = .{
+            .root_source_file = "fuzz/mod.zig",
+            .imports = .{.zapi},
+            .link_libc = true,
+        },
+    },
+    .libraries = .{
+        .test_fuzz_numeric = .{
+            .root_module = .test_fuzz_numeric,
+            .linkage = .dynamic,
+            .linker_allow_shlib_undefined = true,
+            .dest_sub_path = "test_fuzz_numeric.node",
+        },
+    },
+}
