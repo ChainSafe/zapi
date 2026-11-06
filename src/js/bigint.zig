@@ -34,6 +34,28 @@ pub const BigInt = struct {
         return self.val.getValueBigintUint64(lossless);
     }
 
+    /// Converts the JavaScript BigInt exactly to a Zig `i64`.
+    ///
+    /// Returns `error.Overflow` if the value is outside the `i64` range,
+    /// instead of the low 64 bits `toI64` returns.
+    pub fn toI64Exact(self: BigInt) !i64 {
+        var lossless = false;
+        const value = try self.toI64(&lossless);
+        if (!lossless) return error.Overflow;
+        return value;
+    }
+
+    /// Converts the JavaScript BigInt exactly to a Zig `u64`.
+    ///
+    /// Returns `error.Overflow` if the value is negative or outside the `u64`
+    /// range, instead of the low 64 bits `toU64` returns.
+    pub fn toU64Exact(self: BigInt) !u64 {
+        var lossless = false;
+        const value = try self.toU64(&lossless);
+        if (!lossless) return error.Overflow;
+        return value;
+    }
+
     /// Attempts to convert the JavaScript BigInt to a Zig `i128`.
     ///
     /// This function reads the BigInt as two 64-bit words and reconstructs it
@@ -55,6 +77,24 @@ pub const BigInt = struct {
         }
         if (magnitude > max_positive) return error.Overflow;
         return @intCast(magnitude);
+    }
+
+    /// Converts the JavaScript BigInt to the low 128 bits as a Zig `i128`.
+    ///
+    /// Returns `BigInt.asIntN(128, b)`
+    /// (https://tc39.es/ecma262/#sec-bigint.asintn), so out-of-range values
+    /// wrap instead of failing. Use `toI128` for an exact conversion.
+    pub fn toI128LowBits(self: BigInt) !i128 {
+        var sign_bit: u1 = 0;
+        var words: [2]u64 = .{ 0, 0 };
+        // On overflow N-API still fills the two low words and the sign.
+        _ = self.val.getValueBigintWords(&sign_bit, &words) catch |err| switch (err) {
+            error.Overflow => {},
+            else => |e| return e,
+        };
+        const magnitude: u128 = (@as(u128, words[1]) << 64) | words[0];
+        if (sign_bit == 1) return @bitCast(0 -% magnitude);
+        return @bitCast(magnitude);
     }
 
     /// Converts the JavaScript BigInt to a Zig `i64`, panicking on failure.
