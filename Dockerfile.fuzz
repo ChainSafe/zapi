@@ -1,0 +1,63 @@
+# Fuzz image for the ChainSafe fuzz platform: the fast-check round-trip properties
+# in tests/fuzz/, driven by tests/fuzz/platform/run-fuzz.ts. The platform provides
+# the FUZZ_* environment and the /fuzz volume. See tests/fuzz/README.md.
+#
+#   docker build -f Dockerfile.fuzz -t zapi-fuzz .
+
+# --- build: Zig compiles the test_fuzz_numeric.node addon
+FROM node:24-bookworm-slim AS build
+
+ARG ZIG_VERSION=0.16.0
+# From https://ziglang.org/download/index.json -- update together with ZIG_VERSION.
+ARG ZIG_SHA256_X86_64=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
+ARG ZIG_SHA256_AARCH64=ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17
+ARG TARGETARCH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN case "${TARGETARCH}" in \
+        amd64) arch=x86_64;  sum="${ZIG_SHA256_X86_64}" ;; \
+        arm64) arch=aarch64; sum="${ZIG_SHA256_AARCH64}" ;; \
+        *) echo "unsupported TARGETARCH '${TARGETARCH}'" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL -o /tmp/zig.tar.xz \
+        "https://ziglang.org/download/${ZIG_VERSION}/zig-${arch}-linux-${ZIG_VERSION}.tar.xz" \
+    && echo "${sum}  /tmp/zig.tar.xz" | sha256sum -c - \
+    && mkdir /opt/zig && tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1 \
+    && rm /tmp/zig.tar.xz
+ENV PATH=/opt/zig:$PATH
+
+WORKDIR /src
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+
+# ReleaseSafe keeps Zig's safety checks (bounds, overflow), so those bugs panic
+# instead of passing silently. -Dcpu=baseline: otherwise the addon targets the
+# build runner's CPU and dies with SIGILL on a host without its extensions.
+RUN --mount=type=cache,target=/root/.cache/zig \
+    cd tests && zig build --fork=.. --prefix ../zig-out -Doptimize=ReleaseSafe -Dcpu=baseline
+
+# --- runtime: node, the addon, the tests and their node_modules only
+FROM node:24-bookworm-slim
+
+WORKDIR /opt/zapi
+COPY --from=build /src/node_modules ./node_modules
+COPY --from=build /src/zig-out/lib/test_fuzz_numeric.node ./zig-out/lib/
+COPY --from=build /src/package.json ./
+COPY --from=build /src/tests/fuzz ./tests/fuzz
+COPY --from=build /src/tests/utils ./tests/utils
+# The platform runs the container as an arbitrary non-root uid.
+RUN chmod -R a+rX /opt/zapi
+
+ARG REVISION=unknown
+ENV FUZZ_REVISION=${REVISION}
+LABEL org.opencontainers.image.source="https://github.com/ChainSafe/zapi" \
+      org.opencontainers.image.title="zapi-fuzz" \
+      org.opencontainers.image.description="fast-check round-trip fuzz targets for zapi" \
+      org.opencontainers.image.revision="${REVISION}"
+
+ENTRYPOINT ["node", "/opt/zapi/tests/fuzz/platform/run-fuzz.ts"]
