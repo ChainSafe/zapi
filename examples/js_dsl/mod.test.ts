@@ -113,6 +113,11 @@ describe("primitive types", () => {
 		expect(mod.doubleBigInt(50n)).toEqual(100n);
 	});
 
+	it("doubleBigInt rejects BigInts outside the i64 range", () => {
+		expect(() => mod.doubleBigInt(2n ** 63n)).toThrow("Overflow");
+		expect(() => mod.doubleBigInt(-(2n ** 63n) - 1n)).toThrow("Overflow");
+	});
+
 	it("doubleBigInt rejects non-bigint arguments at the JS boundary", () => {
 		expectTypeErrorWithMessage(() => mod.doubleBigInt(50), "Argument 1 must be a bigint");
 		expectTypeErrorWithMessage(() => mod.doubleBigInt("50"), "Argument 1 must be a bigint");
