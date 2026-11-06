@@ -74,7 +74,7 @@ To reproduce a saved failure, take its `seed` and `path` into the `it.only` show
 ## Adding a new fuzz target
 
 1. Add the round-trip export to `mod.zig`.
-2. Add the oracle to `oracle.test.ts` and run it against every entry in the relevant edge list.
+2. Add the oracle to `tests/utils/oracles.ts` and a unit test in `tests/unit/conversions.test.ts` that runs it against every entry in the relevant edge list.
 3. Add the fast-check property to the relevant `*.fuzz.test.ts` file.
 4. Update `tests/utils/edge.ts` if the target needs new edge values.
 5. Run `pnpm test:fuzz:round_trip` and watch it pass (or find a bug).

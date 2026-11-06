@@ -115,8 +115,7 @@ function runIteration(): Promise<{code: number | null; output: string}> {
       [
         path.join(ROOT, "node_modules/vitest/vitest.mjs"),
         "run",
-        "tests/fuzz/",
-        "--exclude=**/oracle.test.ts",
+        ".fuzz.test.ts",
         "--reporter=json",
         `--outputFile=${REPORT_FILE}`,
       ],

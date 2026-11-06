@@ -113,40 +113,6 @@ describe("oracle sanity: rtBigIntI128", () => {
 	}
 });
 
-describe("rtBigIntI128 boundary cases", () => {
-	it("0n → 0n (zero)", () => {
-		expect(mod.rtBigIntI128(0n)).toBe(0n);
-	});
-
-	it("I128_MIN = -(1n << 127n) → -(1n << 127n) (in-range lower bound)", () => {
-		const b = -(1n << 127n);
-		expect(mod.rtBigIntI128(b)).toBe(b);
-	});
-
-	it("I128_MAX = (1n << 127n) - 1n → (1n << 127n) - 1n (in-range upper bound)", () => {
-		const b = (1n << 127n) - 1n;
-		expect(mod.rtBigIntI128(b)).toBe(b);
-	});
-
-	it("1n << 127n (just out-of-range positive) throws", () => {
-		const b = 1n << 127n;
-		expect(() => mod.rtBigIntI128(b)).toThrow();
-	});
-
-	it("-(1n << 127n) - 1n (just out-of-range negative) throws", () => {
-		const b = -(1n << 127n) - 1n;
-		expect(() => mod.rtBigIntI128(b)).toThrow();
-	});
-
-	it("1n << 128n (oversized positive) throws", () => {
-		expect(() => mod.rtBigIntI128(1n << 128n)).toThrow();
-	});
-
-	it("-(1n << 128n) (oversized negative) throws", () => {
-		expect(() => mod.rtBigIntI128(-(1n << 128n))).toThrow();
-	});
-});
-
 describe("oracle sanity: rtBigIntI128LowBits", () => {
 	for (const b of edgeBigInts) {
 		it(`agrees with low-bits oracle on ${b}n`, () => {
