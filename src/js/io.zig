@@ -1,7 +1,7 @@
 const std = @import("std");
 const lifecycle = @import("lifecycle.zig");
 
-const gpa: std.mem.Allocator = std.heap.page_allocator;
+const gpa: std.mem.Allocator = std.heap.c_allocator;
 
 const hooks = struct {
     fn init(instance: *std.Io.Threaded, prev_refcount: u32) !void {
