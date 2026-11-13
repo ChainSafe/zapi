@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.4.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.3.0...zapi-v4.4.0) (2026-11-13)
+
+
+### Features
+
+* **js:** add exact BigInt conversions, toI128LowBits and fromWords ([#91](https://github.com/ChainSafe/zapi/issues/91)) ([b56bf2d](https://github.com/ChainSafe/zapi/commit/b56bf2d85cc49d69e8923786b277ecaeddecb636))
+
+
+### Performance Improvements
+
+* use c allocator for shared io ([#92](https://github.com/ChainSafe/zapi/issues/92)) ([a736d8a](https://github.com/ChainSafe/zapi/commit/a736d8a15ba8c30820aee83b0062bd860cedc4d1))
+
 ## [4.3.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.2.0...zapi-v4.3.0) (2026-10-31)
 
 
