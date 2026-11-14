@@ -1,6 +1,8 @@
 import {spawn} from "node:child_process";
+import {promises as fs} from "node:fs";
+import {join, resolve} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
-import {loadConfig} from "./config.js";
+import {getBinaryFileName, loadConfig} from "./config.js";
 import {type Optimize, type Target, getZigTriple, validateOptimize, validateTarget} from "./lib.js";
 import {logInfo, logSuccess} from "./log.js";
 
@@ -12,6 +14,8 @@ export type BuildOptions = {
   prefix?: string;
   cacheDir?: string;
   globalCacheDir?: string;
+  /** Extra arguments appended to `zig build` */
+  zigArgs?: string[];
   /** Skip logging (useful when called from buildArtifacts which has its own logging) */
   quiet?: boolean;
 };
@@ -36,6 +40,10 @@ export async function build(opts: BuildOptions): Promise<void> {
 
   if (opts.globalCacheDir) {
     args.push("--global-cache-dir", opts.globalCacheDir);
+  }
+
+  if (opts.zigArgs) {
+    args.push(...opts.zigArgs);
   }
 
   if (!opts.quiet) {
@@ -70,10 +78,16 @@ const buildCliOptions = {
   optimize: {
     type: "string",
   },
+  prefix: {
+    type: "string",
+  },
   step: {
     type: "string",
   },
   target: {
+    type: "string",
+  },
+  variant: {
     type: "string",
   },
   "zig-cwd": {
@@ -96,12 +110,23 @@ export async function buildCli(): Promise<void> {
   const target = validateTarget(values.target as string | undefined);
   const optimize = validateOptimize(values.optimize as string | undefined);
 
+  const variant = values.variant as string | undefined;
+  const binaryFileName = getBinaryFileName(config, variant);
+  const prefix = values.prefix as string | undefined;
+
   const buildOptions: BuildOptions = {
     optimize,
+    prefix,
     step,
     target,
+    zigArgs: variant === undefined ? undefined : config.variants?.[variant],
     zigCwd: values["zig-cwd"],
   };
 
   await build(buildOptions);
+
+  if (variant !== undefined) {
+    const libDir = resolve(values["zig-cwd"], prefix ?? "zig-out", "lib");
+    await fs.rename(join(libDir, `${config.binaryName}.node`), join(libDir, binaryFileName));
+  }
 }

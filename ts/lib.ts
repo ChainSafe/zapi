@@ -2,7 +2,7 @@
 import {existsSync, readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {resolve} from "node:path";
-import {parsePkgJson} from "./config.js";
+import {getBinaryFileName, parsePkgJson} from "./config.js";
 
 export const TARGETS = [
   "aarch64-apple-darwin",
@@ -198,6 +198,11 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
   throw new Error(`Unsupported platform: ${platform} or architecture: ${arch}`);
 }
 
+export type RequireNapiLibraryOpts = {
+  /** Which of the package's `zapi.variants` to load. Required if and only if the package declares variants. */
+  variant?: string;
+};
+
 /**
  * This function searches all feasible library paths and attempts to load the library.
  *
@@ -208,13 +213,16 @@ export function getTarget(platform: NodeJS.Platform, arch: NodeJS.Architecture):
  * Eg:
  * - built locally, `zig-out/lib/${binaryName}.node`
  * - published, `${targetPackageName}`
+ *
+ * With variants, the file is `${binaryName}-${variant}.node` in both locations.
  */
-export function requireNapiLibrary(packageDir: string): unknown {
+export function requireNapiLibrary(packageDir: string, opts?: RequireNapiLibraryOpts): unknown {
   const packageJsonPath = resolve(packageDir, "package.json");
   const require = createRequire(packageJsonPath);
   const pkgJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
   const config = parsePkgJson(pkgJson);
-  const localPath = resolve(packageDir, `zig-out/lib/${config.binaryName}.node`);
+  const binaryFileName = getBinaryFileName(config, opts?.variant);
+  const localPath = resolve(packageDir, "zig-out/lib", binaryFileName);
   if (existsSync(localPath)) {
     return require(localPath);
   }
@@ -222,5 +230,5 @@ export function requireNapiLibrary(packageDir: string): unknown {
   const arch = process.arch;
   const target = getTarget(platform, arch);
   const targetPkgName = `${pkgJson.name}-${target}`;
-  return require(targetPkgName);
+  return require(config.variants ? `${targetPkgName}/${binaryFileName}` : targetPkgName);
 }

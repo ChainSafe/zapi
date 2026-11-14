@@ -2,7 +2,7 @@ import {execFile, spawn} from "node:child_process";
 import {access, readFile} from "node:fs/promises";
 import {join, resolve} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs, promisify} from "node:util";
-import {type PkgJson, loadConfig} from "./config.js";
+import {type PkgJson, getBinaryFileNames, loadConfig} from "./config.js";
 import {parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logStep, logSuccess} from "./log.js";
 
@@ -111,7 +111,9 @@ export async function publish(opts: PublishOpts): Promise<void> {
     if (manifest.name !== `${pkgJson.name}-${target}` || manifest.version !== pkgJson.version) {
       throw new Error(`Stale platform package ${target}; run zapi prepublish before publishing`);
     }
-    await access(join(cwd, `${config.binaryName}.node`));
+    for (const fileName of getBinaryFileNames(config)) {
+      await access(join(cwd, fileName));
+    }
     platforms.push({cwd, manifest, target});
   }
   const total = config.targets.length + (opts["platforms-only"] ? 0 : 1);
