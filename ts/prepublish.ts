@@ -2,7 +2,7 @@ import {promises as fs} from "node:fs";
 import {availableParallelism} from "node:os";
 import {join} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
-import {type Config, type PkgJson, getTargetParts, loadConfig} from "./config.js";
+import {type Config, type PkgJson, getBinaryFileNames, getTargetParts, loadConfig} from "./config.js";
 import {TARGETS, parsePositiveIntOption, runWithConcurrency} from "./lib.js";
 import {logDetail, logInfo, logSuccess} from "./log.js";
 
@@ -22,11 +22,12 @@ export async function createNpmDirs(config: Config, opts: CreateNpmDirsOpts): Pr
 export async function copyArtifacts(config: Config, opts: PrepublishOpts): Promise<void> {
   logInfo("Copying artifacts to npm packages...");
   await runWithConcurrency(config.targets, opts.concurrency, async (target) => {
-    const artifactPath = join(opts["artifacts-dir"], target, `${config.binaryName}.node`);
-    const destPath = join(opts["npm-dir"], target, `${config.binaryName}.node`);
+    for (const fileName of getBinaryFileNames(config)) {
+      const destPath = join(opts["npm-dir"], target, fileName);
 
-    await fs.copyFile(artifactPath, destPath);
-    logDetail(`${target} → ${destPath}`);
+      await fs.copyFile(join(opts["artifacts-dir"], target, fileName), destPath);
+      logDetail(`${target} → ${destPath}`);
+    }
   });
 }
 
@@ -40,9 +41,10 @@ export async function updateTargetPkgJsons(pkgJson: PkgJson, config: Config, opt
     const targetDir = join(opts["npm-dir"], target);
     const targetPkgJson = {
       cpu: [arch],
-      files: [`${config.binaryName}.node`],
+      files: getBinaryFileNames(config),
       license: pkgJson.license,
-      main: `${config.binaryName}.node`,
+      // A package with variants has no single entry point, `requireNapiLibrary` loads the variant file by path
+      ...(config.variants ? {} : {main: `${config.binaryName}.node`}),
       name: `${pkgJson.name}-${target}`,
       os: [platform],
       publishConfig: pkgJson.publishConfig,

@@ -8,6 +8,8 @@ export type Config = {
   binaryName: string;
   targets: Target[];
   step?: string;
+  /** Variant name to the extra `zig build` arguments that produce it */
+  variants?: Record<string, string[]>;
 };
 
 export type PkgJson = {
@@ -21,6 +23,7 @@ export type PkgJson = {
     binaryName: string;
     targets: string[];
     step?: string;
+    variants?: Record<string, string[]>;
   };
   [key: string]: unknown;
 };
@@ -41,16 +44,66 @@ export async function loadConfig(cwd = "."): Promise<LoadedConfig> {
   return {config, pkgJson};
 }
 
-function validateBinaryName(binaryName: string): void {
-  if (!BINARY_NAME_RE.test(binaryName)) {
-    throw new Error("zapi.binaryName must match /^[A-Za-z0-9._-]+$/");
+function validateFileNamePart(field: string, value: string): void {
+  if (!BINARY_NAME_RE.test(value)) {
+    throw new Error(`${field} must match /^[A-Za-z0-9._-]+$/`);
   }
-  if (binaryName !== basename(binaryName)) {
-    throw new Error("zapi.binaryName must not include path segments");
+  if (value !== basename(value)) {
+    throw new Error(`${field} must not include path segments`);
   }
-  if (binaryName.includes("/") || binaryName.includes("\\") || binaryName.includes("..")) {
-    throw new Error("zapi.binaryName must not contain path separators or '..'");
+  if (value.includes("/") || value.includes("\\") || value.includes("..")) {
+    throw new Error(`${field} must not contain path separators or '..'`);
   }
+}
+
+function parseVariants(variants: unknown): Record<string, string[]> | undefined {
+  if (variants == null) {
+    return undefined;
+  }
+  if (typeof variants !== "object" || Array.isArray(variants)) {
+    throw new Error("zapi.variants must be an object of variant name to zig build arguments");
+  }
+  const entries = Object.entries(variants);
+  if (entries.length === 0) {
+    throw new Error("zapi.variants must not be empty");
+  }
+  for (const [name, zigArgs] of entries) {
+    validateFileNamePart("zapi.variants names", name);
+    if (!Array.isArray(zigArgs) || zigArgs.some((arg) => typeof arg !== "string")) {
+      throw new Error(`zapi.variants.${name} must be an array of strings`);
+    }
+  }
+  return variants as Record<string, string[]>;
+}
+
+/**
+ * The variants to build, or a single `undefined` entry for a package without variants.
+ */
+export function getVariants(config: Config): (string | undefined)[] {
+  return config.variants ? Object.keys(config.variants) : [undefined];
+}
+
+/**
+ * File name of the addon binary: `<binaryName>.node`, or `<binaryName>-<variant>.node` for a package with variants.
+ */
+export function getBinaryFileName(config: Config, variant?: string): string {
+  if (config.variants) {
+    if (variant === undefined) {
+      throw new Error(`A variant is required, one of: ${Object.keys(config.variants).join(", ")}`);
+    }
+    if (!Object.hasOwn(config.variants, variant)) {
+      throw new Error(`Unknown variant "${variant}". Valid values: ${Object.keys(config.variants).join(", ")}`);
+    }
+    return `${config.binaryName}-${variant}.node`;
+  }
+  if (variant !== undefined) {
+    throw new Error(`Variant "${variant}" requested but zapi.variants is not set in package.json`);
+  }
+  return `${config.binaryName}.node`;
+}
+
+export function getBinaryFileNames(config: Config): string[] {
+  return getVariants(config).map((variant) => getBinaryFileName(config, variant));
 }
 
 export function parsePkgJson(pkgJson: PkgJson): Config {
@@ -62,7 +115,7 @@ export function parsePkgJson(pkgJson: PkgJson): Config {
   if (typeof binaryName !== "string") {
     throw new Error("zapi.binaryName must be a string");
   }
-  validateBinaryName(binaryName);
+  validateFileNamePart("zapi.binaryName", binaryName);
 
   const targets = napi.targets;
   if (!Array.isArray(targets) || targets.length === 0) {
@@ -85,6 +138,7 @@ export function parsePkgJson(pkgJson: PkgJson): Config {
     binaryName,
     step,
     targets: targets as Target[],
+    variants: parseVariants(napi.variants),
   };
 }
 
