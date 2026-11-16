@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.4.0...zapi-v4.5.0) (2026-11-16)
+
+
+### Features
+
+* add build variants ([#94](https://github.com/ChainSafe/zapi/issues/94)) ([05659c6](https://github.com/ChainSafe/zapi/commit/05659c62bd56f59fc90bfd884b29650153d65ab2))
+
 ## [4.4.0](https://github.com/ChainSafe/zapi/compare/zapi-v4.3.0...zapi-v4.4.0) (2026-11-13)
 
 
