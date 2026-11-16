@@ -770,6 +770,26 @@ Add a `zapi` field to your `package.json`:
 }
 ```
 
+### Variants
+
+A package can ship several builds of the same addon, for example one per compile-time preset. Add `variants`, mapping each variant name to the extra `zig build` arguments that produce it:
+
+```json
+{
+  "zapi": {
+    "binaryName": "my-addon",
+    "step": "my-lib",
+    "targets": ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"],
+    "variants": {
+      "mainnet": ["-Dpreset=mainnet"],
+      "minimal": ["-Dpreset=minimal"]
+    }
+  }
+}
+```
+
+The build step still installs `<binaryName>.node`. zapi runs it once per variant and stores the result as `<binaryName>-<variant>.node`. Every target package contains all variants, and [`requireNapiLibrary`](#requirenapilibrarypackagedir-opts) loads the one it is asked for. Without `variants`, nothing changes.
+
 ### Supported Targets
 
 | Target | Platform | Arch | ABI |
@@ -805,10 +825,14 @@ zapi build [options]
 | `--target` | Target triple | Current platform |
 | `--optimize` | `Debug`, `ReleaseSafe`, `ReleaseFast`, `ReleaseSmall` | - |
 | `--zig-cwd` | Working directory for zig build | `.` |
+| `--prefix` | Zig install prefix, relative to `--zig-cwd` | `zig-out` |
+| `--variant` | Variant to build, required when `zapi.variants` is set | - |
+
+With `--variant`, the installed binary is renamed to `<binaryName>-<variant>.node`.
 
 #### `zapi build-artifacts`
 
-Build for all configured targets and collect artifacts.
+Build for all configured targets, and all variants of each, and collect artifacts.
 
 ```bash
 zapi build-artifacts [options]
@@ -919,7 +943,7 @@ Set `DEBUG=1` for full stack traces on errors.
 
 ## Runtime Loading
 
-### `requireNapiLibrary(packageDir)`
+### `requireNapiLibrary(packageDir, opts?)`
 
 Load the native addon, automatically selecting the correct binary for the current platform:
 
@@ -935,6 +959,14 @@ const addon = requireNapiLibrary(__dirname);
 Resolution order:
 1. Local build: `zig-out/lib/<binaryName>.node`
 2. Published package: `<pkg-name>-<target>`
+
+For a package with [variants](#variants), pass the variant to load. It is required, and must be one of the configured names:
+
+```typescript
+const addon = requireNapiLibrary(__dirname, { variant: process.env.MY_PRESET ?? "mainnet" });
+```
+
+This resolves `zig-out/lib/<binaryName>-<variant>.node`, then `<pkg-name>-<target>/<binaryName>-<variant>.node`.
 
 ---
 

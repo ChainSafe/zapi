@@ -22,8 +22,10 @@ Commands:
       --optimize    Optimization level: Debug, ReleaseSafe, ReleaseFast, ReleaseSmall
       --step        Zig build step (required)
       --zig-cwd     Working directory for zig build (default: .)
+      --prefix      Zig install prefix, relative to --zig-cwd (default: zig-out)
+      --variant     Variant to build, one of zapi.variants
 
-  build-artifacts   Build for all configured targets
+  build-artifacts   Build for all configured targets and variants
       --optimize       Optimization level
       --step           Zig build step (required)
       --zig-cwd        Working directory for zig build (default: .)
@@ -54,9 +56,13 @@ Configuration:
   {
     "zapi": {
       "binaryName": "my-addon",
-      "targets": ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", ...]
+      "targets": ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", ...],
+      "variants": {"mainnet": ["-Dpreset=mainnet"], "minimal": ["-Dpreset=minimal"]}
     }
   }
+
+  "variants" is optional. Each variant is built with its extra zig build arguments
+  and shipped as <binaryName>-<variant>.node in every target package.
 `.trim();
 
 export async function cli(): Promise<void> {
