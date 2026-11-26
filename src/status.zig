@@ -57,7 +57,7 @@ pub const NapiError = error{
 };
 
 pub fn check(code: c_uint) NapiError!void {
-    switch (@as(Status, @enumFromInt(code))) {
+    switch (@as(Status, @fromBackingInt(@intCast(code)))) {
         .ok => return,
         .invalid_arg => return error.InvalidArg,
         .object_expected => return error.ObjectExpected,
@@ -96,18 +96,18 @@ pub fn exec(comptime napi_func: anytype, napi_args: std.meta.ArgsTuple(@TypeOf(n
 
 /// Returns true if the error is an instance of NapiError.
 pub fn isNapiError(err: anyerror) bool {
-    inline for (comptime std.meta.fields(NapiError)) |field| {
-        if (err == @field(NapiError, field.name)) return true;
+    inline for (@typeInfo(NapiError).error_set.error_names.?) |name| {
+        if (err == @field(NapiError, name)) return true;
     }
     return false;
 }
 
 test "check returns void on ok" {
-    try check(@intFromEnum(Status.ok));
+    try check(@backingInt(Status.ok));
 }
 
 test "check returns error on non-ok status" {
-    const result = check(@intFromEnum(Status.invalid_arg));
+    const result = check(@backingInt(Status.invalid_arg));
     try std.testing.expectError(error.InvalidArg, result);
 }
 

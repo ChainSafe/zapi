@@ -3,7 +3,7 @@ import {promises as fs} from "node:fs";
 import {join, resolve} from "node:path";
 import {type ParseArgsOptionsConfig, parseArgs} from "node:util";
 import {getBinaryFileName, loadConfig} from "./config.js";
-import {type Optimize, type Target, getZigTriple, validateOptimize, validateTarget} from "./lib.js";
+import {Optimize, type Target, getZigTriple, validateOptimize, validateTarget} from "./lib.js";
 import {logInfo, logSuccess} from "./log.js";
 
 export type BuildOptions = {
@@ -27,7 +27,13 @@ export async function build(opts: BuildOptions): Promise<void> {
   args.push(`-Dtarget=${triple}`);
 
   if (opts.optimize) {
-    args.push(`-Doptimize=${opts.optimize}`);
+    const modes: Record<Optimize, string> = {
+      [Optimize.Debug]: "debug",
+      [Optimize.ReleaseSafe]: "safe",
+      [Optimize.ReleaseFast]: "fast",
+      [Optimize.ReleaseSmall]: "small",
+    };
+    args.push(`-Doptimize=${modes[opts.optimize]}`);
   }
 
   if (opts.prefix) {

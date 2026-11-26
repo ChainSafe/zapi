@@ -8,14 +8,14 @@ pub fn registerDecls(comptime decls: anytype, comptime options: anytype) void {
 
     const mod = (struct {
         pub fn mod(env: Env, module: Value) anyerror!void {
-            inline for (@typeInfo(@TypeOf(decls)).@"struct".fields) |field| {
-                const decl = @field(decls, field.name);
+            inline for (@typeInfo(@TypeOf(decls)).@"struct".field_names) |field| {
+                const decl = @field(decls, field);
                 const value = switch (@typeInfo(@TypeOf(decl.value))) {
                     .@"fn" => try env.createFunction(
-                        field.name,
-                        @typeInfo(@TypeOf(decl.value)).@"fn".params.len,
+                        field,
+                        @typeInfo(@TypeOf(decl.value)).@"fn".param_types.len,
                         createCallback(
-                            @typeInfo(@TypeOf(decl.value)).@"fn".params.len,
+                            @typeInfo(@TypeOf(decl.value)).@"fn".param_types.len,
                             decl.value,
                             .{},
                         ),
@@ -31,7 +31,7 @@ pub fn registerDecls(comptime decls: anytype, comptime options: anytype) void {
                     else => @compileError("unsupported value type"),
                 };
 
-                try module.setNamedProperty(field.name, value);
+                try module.setNamedProperty(field, value);
             }
         }
     }).mod;

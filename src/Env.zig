@@ -409,7 +409,7 @@ pub fn symbolFor(self: Env, description: []const u8) NapiError!Value {
 pub fn createTypedarray(self: Env, array_type: TypedarrayType, length: usize, arraybuffer: Value, byte_offset: usize) NapiError!Value {
     var value: c.napi_value = undefined;
     try status.check(
-        c.napi_create_typedarray(self.env, @intFromEnum(array_type), length, arraybuffer.value, byte_offset, &value),
+        c.napi_create_typedarray(self.env, @backingInt(array_type), length, arraybuffer.value, byte_offset, &value),
     );
     return Value{
         .env = self.env,

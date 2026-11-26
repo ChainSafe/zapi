@@ -32,7 +32,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
     }
 
     return struct {
-        const all_decls = @typeInfo(T).@"struct".decls;
+        const all_decls = @typeInfo(T).@"struct".decl_names;
         const max_property_count = if (class_meta.hasProperties(T))
             class_meta.propertyFields(T).len
         else
@@ -83,8 +83,8 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
             return ParamType == *T or ParamType == *const T or ParamType == T;
         }
 
-        fn isStaticMethod(comptime params: []const std.builtin.Type.Fn.Param) bool {
-            return params.len == 0 or !isClassSelfParam(params[0].type.?);
+        fn isStaticMethod(comptime params: []const ?type) bool {
+            return params.len == 0 or !isClassSelfParam(params[0].?);
         }
 
         fn returnedClassType(comptime Func: type) ?type {
@@ -133,8 +133,8 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                 @compileError("property getter '" ++ getter_name ++ "' is not a function in " ++ @typeName(T));
             }
 
-            const getter_params = getter_info.@"fn".params;
-            if (getter_params.len == 0 or !isClassSelfParam(getter_params[0].type.?)) {
+            const getter_params = getter_info.@"fn".param_types;
+            if (getter_params.len == 0 or !isClassSelfParam(getter_params[0].?)) {
                 @compileError("getter '" ++ getter_name ++ "' must have a self parameter in " ++ @typeName(T));
             }
             if (getter_params.len > 1) {
@@ -150,7 +150,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                 @compileError("getter '" ++ getter_name ++ "' must return a value");
             }
 
-            return getter_params[0].type.? == T;
+            return getter_params[0].? == T;
         }
 
         fn validateSetterMethod(comptime setter_name: []const u8, comptime setter_field: anytype) void {
@@ -159,8 +159,8 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                 @compileError("property setter '" ++ setter_name ++ "' is not a function in " ++ @typeName(T));
             }
 
-            const setter_params = setter_info.@"fn".params;
-            if (setter_params.len == 0 or setter_params[0].type.? != *T) {
+            const setter_params = setter_info.@"fn".param_types;
+            if (setter_params.len == 0 or setter_params[0].? != *T) {
                 @compileError("setter '" ++ setter_name ++ "' must take self as *" ++ @typeName(T));
             }
             if (setter_params.len != 2) {
@@ -188,15 +188,14 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
             var properties: [max_property_count]PropertyMeta = undefined;
             var property_count: usize = 0;
 
-            var consumed_methods = [_]bool{false} ** all_decls.len;
+            var consumed_methods: [all_decls.len]bool = @splat(false);
             var methods: [all_decls.len]MethodMeta = undefined;
             inline for (all_decls, 0..) |decl, idx| {
-                methods[idx] = .{ .name = decl.name };
+                methods[idx] = .{ .name = decl };
             }
 
             if (class_meta.hasProperties(T)) {
-                inline for (class_meta.propertyFields(T)) |prop_field| {
-                    const property_name = prop_field.name;
+                inline for (class_meta.propertyFields(T)) |property_name| {
                     const spec = @field(T.js_meta.options.properties, property_name);
                     switch (class_meta.propertyKind(spec)) {
                         .prop => {
@@ -226,7 +225,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
 
             var method_count: usize = 0;
             inline for (all_decls, 0..) |decl, idx| {
-                const name = decl.name;
+                const name = decl;
                 if (shouldSkipDecl(name) or consumed_methods[idx]) continue;
                 // A `pub var`'s value can't be read at comptime.
                 if (!isConstDecl(T, name)) continue;
@@ -235,10 +234,10 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                 const field_info = @typeInfo(@TypeOf(field));
                 if (field_info != .@"fn") continue;
 
-                const params = field_info.@"fn".params;
+                const params = field_info.@"fn".param_types;
                 methods[idx].category = if (isStaticMethod(params)) .static_method else .instance_method;
-                methods[idx].is_by_value = if (params.len > 0 and isClassSelfParam(params[0].type.?))
-                    params[0].type.? == T
+                methods[idx].is_by_value = if (params.len > 0 and isClassSelfParam(params[0].?))
+                    params[0].? == T
                 else
                     false;
                 method_count += 1;
@@ -254,7 +253,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
 
         fn consumedMethod(flags: *[all_decls.len]bool, comptime name: []const u8) void {
             inline for (all_decls, 0..) |decl, idx| {
-                if (std.mem.eql(u8, decl.name, name)) {
+                if (std.mem.eql(u8, decl, name)) {
                     flags[idx] = true;
                     return;
                 }
@@ -285,7 +284,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                     if (prop.setter_name) |setter_name| {
                         desc.setter = wrapSetter(T, @field(T, setter_name));
                     }
-                    desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_jsproperty);
+                    desc.attributes = @backingInt(napi.value_types.PropertyAttributes.default_jsproperty);
                     descs[idx] = desc;
                     idx += 1;
                 }
@@ -299,12 +298,12 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                     switch (meta.category) {
                         .instance_method => {
                             desc.method = wrapMethod(T, field, meta.is_by_value);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method);
+                            desc.attributes = @backingInt(napi.value_types.PropertyAttributes.default_method);
                         },
                         .static_method => {
                             desc.method = wrapStaticMethod(T, field);
-                            desc.attributes = @intFromEnum(napi.value_types.PropertyAttributes.default_method) |
-                                @intFromEnum(napi.value_types.PropertyAttributes.static);
+                            desc.attributes = @backingInt(napi.value_types.PropertyAttributes.default_method) |
+                                @backingInt(napi.value_types.PropertyAttributes.static);
                         },
                         .skip => unreachable,
                     }
@@ -336,7 +335,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
             const init_fn = @field(T, "init");
             const InitFnType = @TypeOf(init_fn);
             const init_info = @typeInfo(InitFnType).@"fn";
-            const init_params = init_info.params;
+            const init_params = init_info.param_types;
             const init_argc = init_params.len;
 
             const cb = struct {
@@ -395,7 +394,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
 
                     var args: std.meta.ArgsTuple(InitFnType) = undefined;
                     inline for (0..init_argc) |i| {
-                        const ParamType = init_params[i].type.?;
+                        const ParamType = init_params[i].?;
                         args[i] = wrap_function.convertArgWithOptional(
                             ParamType,
                             Identity,
@@ -471,7 +470,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
         fn wrapMethod(comptime Class: type, comptime method: anytype, comptime is_by_value: bool) napi.c.napi_callback {
             const MethodFnType = @TypeOf(method);
             const method_info = @typeInfo(MethodFnType).@"fn";
-            const method_params = method_info.params;
+            const method_params = method_info.param_types;
             const js_argc = method_params.len - 1;
             const ReturnClass = comptime returnedClassType(MethodFnType);
             const prefers_receiver_ctor = ReturnClass != null and ReturnClass.? == Class;
@@ -520,7 +519,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
                     args[0] = if (is_by_value) self_ptr.* else self_ptr;
 
                     inline for (0..js_argc) |i| {
-                        const ParamType = method_params[i + 1].type.?;
+                        const ParamType = method_params[i + 1].?;
                         args[i + 1] = wrap_function.convertArgWithOptional(
                             ParamType,
                             Identity,
@@ -610,7 +609,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
         fn wrapStaticMethod(comptime Class: type, comptime method: anytype) napi.c.napi_callback {
             const MethodFnType = @TypeOf(method);
             const method_info = @typeInfo(MethodFnType).@"fn";
-            const method_params = method_info.params;
+            const method_params = method_info.param_types;
             const method_argc = method_params.len;
             const required_argc = comptime wrap_function.requiredArgCount(method_params);
             const ReturnClass = comptime returnedClassType(MethodFnType);
@@ -644,7 +643,7 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
 
                     var args: std.meta.ArgsTuple(MethodFnType) = undefined;
                     inline for (0..method_argc) |i| {
-                        const ParamType = method_params[i].type.?;
+                        const ParamType = method_params[i].?;
                         args[i] = wrap_function.convertArgWithOptional(
                             ParamType,
                             Identity,
@@ -677,8 +676,8 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
         fn wrapSetter(comptime Class: type, comptime setter_fn: anytype) napi.c.napi_callback {
             const SetterFnType = @TypeOf(setter_fn);
             const setter_info = @typeInfo(SetterFnType).@"fn";
-            const setter_params = setter_info.params;
-            const ValueParamType = setter_params[1].type.?;
+            const setter_params = setter_info.param_types;
+            const ValueParamType = setter_params[1].?;
 
             const setter_cb = struct {
                 pub fn callback(raw_env: napi.c.napi_env, cb_info: napi.c.napi_callback_info) callconv(.c) napi.c.napi_value {
@@ -758,18 +757,18 @@ pub fn wrapClass(comptime T: type, comptime Identity: type) type {
 /// and remaining decls are silently skipped — so existing methods/getters and
 /// the `js_meta` decl naturally fall out.
 pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value) !void {
-    inline for (@typeInfo(T).@"struct".decls) |decl| {
-        if (comptime !isConstDecl(T, decl.name)) continue;
-        const value = @field(T, decl.name);
+    inline for (@typeInfo(T).@"struct".decl_names) |decl| {
+        if (comptime !isConstDecl(T, decl)) continue;
+        const value = @field(T, decl);
         const ValueType = @TypeOf(value);
         if (comptime ValueType == type and @typeInfo(value) == .@"enum") {
-            const enum_obj = try createEnumObject(value, @typeName(T) ++ "." ++ decl.name, env);
-            const name: [:0]const u8 = decl.name ++ "";
+            const enum_obj = try createEnumObject(value, @typeName(T) ++ "." ++ decl, env);
+            const name: [:0]const u8 = decl ++ "";
             try class_val.setNamedProperty(name, enum_obj);
         } else if (comptime isStaticValueType(ValueType)) {
-            comptime assertExportableInt(@typeName(T) ++ "." ++ decl.name, @field(T, decl.name));
+            comptime assertExportableInt(@typeName(T) ++ "." ++ decl, @field(T, decl));
             const napi_value = try createStaticFieldValue(env, value);
-            const name: [:0]const u8 = decl.name ++ "";
+            const name: [:0]const u8 = decl ++ "";
             try class_val.setNamedProperty(name, napi_value);
         }
     }
@@ -779,17 +778,17 @@ pub fn applyStaticFields(comptime T: type, env: napi.Env, class_val: napi.Value)
 /// value at comptime is a compile error and its runtime value would only be a
 /// registration-time snapshot, so reflection checks this before `@field`.
 pub fn isConstDecl(comptime T: type, comptime name: []const u8) bool {
-    return @typeInfo(@TypeOf(&@field(T, name))).pointer.is_const;
+    return @typeInfo(@TypeOf(&@field(T, name))).pointer.attrs.@"const";
 }
 
 /// Builds the frozen plain JS object for an exported enum type: tag names
 /// verbatim, values as numbers. `path` names the decl in compile errors.
 pub fn createEnumObject(comptime E: type, comptime path: []const u8, env: napi.Env) !napi.Value {
     const enum_obj = try env.createObject();
-    inline for (@typeInfo(E).@"enum".fields) |tag| {
-        comptime assertExportableInt(path ++ "." ++ tag.name, tag.value);
-        const tag_value = try createStaticFieldValue(env, tag.value);
-        const tag_name: [:0]const u8 = tag.name ++ "";
+    inline for (@typeInfo(E).@"enum".field_names, @typeInfo(E).@"enum".field_values) |name, value| {
+        comptime assertExportableInt(path ++ "." ++ name, value);
+        const tag_value = try createStaticFieldValue(env, value);
+        const tag_name: [:0]const u8 = name ++ "";
         try enum_obj.setNamedProperty(tag_name, tag_value);
     }
     try enum_obj.objectFreeze();
@@ -815,7 +814,7 @@ pub fn isStaticValueType(comptime T: type) bool {
     return switch (@typeInfo(T)) {
         .comptime_int, .int, .comptime_float, .float, .bool => true,
         .pointer => |ptr| blk: {
-            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) break :blk true;
+            if (ptr.size == .slice and ptr.child == u8 and ptr.attrs.@"const") break :blk true;
             if (ptr.size == .one and @typeInfo(ptr.child) == .array and
                 @typeInfo(ptr.child).array.child == u8) break :blk true;
             break :blk false;
@@ -849,7 +848,7 @@ pub fn createStaticFieldValue(env: napi.Env, value: anytype) !napi.Value {
         .comptime_float, .float => return env.createDouble(@floatCast(value)),
         .bool => return env.getBoolean(value),
         .pointer => |ptr| {
-            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) {
+            if (ptr.size == .slice and ptr.child == u8 and ptr.attrs.@"const") {
                 return env.createStringUtf8(value);
             }
             if (ptr.size == .one and @typeInfo(ptr.child) == .array and

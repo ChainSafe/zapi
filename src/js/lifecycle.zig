@@ -23,7 +23,7 @@ pub fn SharedResource(comptime T: type, comptime hooks: anytype) type {
 
         /// Returns the refcount before this retain (0 for the first holder).
         pub fn retain() !u32 {
-            std.Io.Threaded.mutexLock(&mutex);
+            std.Io.Threaded.mutexLockUncancelable(&mutex);
             defer std.Io.Threaded.mutexUnlock(&mutex);
 
             const prev = refcount;
@@ -33,7 +33,7 @@ pub fn SharedResource(comptime T: type, comptime hooks: anytype) type {
         }
 
         pub fn release() void {
-            std.Io.Threaded.mutexLock(&mutex);
+            std.Io.Threaded.mutexLockUncancelable(&mutex);
             defer std.Io.Threaded.mutexUnlock(&mutex);
 
             std.debug.assert(refcount > 0);
@@ -46,7 +46,7 @@ pub fn SharedResource(comptime T: type, comptime hooks: anytype) type {
         /// The pointer is only valid while the caller holds a retain; without
         /// one, a concurrent last `release()` may tear the instance down.
         pub fn get() ?*T {
-            std.Io.Threaded.mutexLock(&mutex);
+            std.Io.Threaded.mutexLockUncancelable(&mutex);
             defer std.Io.Threaded.mutexUnlock(&mutex);
 
             if (refcount == 0) return null;

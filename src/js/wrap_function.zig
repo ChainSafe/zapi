@@ -13,8 +13,8 @@ const typed_arrays = @import("typed_arrays.zig");
 pub fn isDslType(comptime T: type) bool {
     const info = @typeInfo(T);
     if (info != .@"struct") return false;
-    inline for (info.@"struct".fields) |field| {
-        if (std.mem.eql(u8, field.name, "val") and field.type == napi.Value) {
+    inline for (info.@"struct".field_names, info.@"struct".field_types) |name, Field| {
+        if (std.mem.eql(u8, name, "val") and Field == napi.Value) {
             return true;
         }
     }
@@ -49,10 +49,10 @@ pub fn isDslOrOptionalDsl(comptime T: type) bool {
 ///
 /// This comptime function is used to validate the `argc` passed from JavaScript
 /// against the expected number of required arguments in the Zig function.
-pub fn requiredArgCount(comptime params: []const std.builtin.Type.Fn.Param) usize {
+pub fn requiredArgCount(comptime params: []const ?type) usize {
     var count: usize = 0;
     for (params) |p| {
-        const PT = p.type orelse continue;
+        const PT = p orelse continue;
         if (@typeInfo(PT) != .optional) count += 1;
     }
     return count;
@@ -114,7 +114,7 @@ fn argTypeDescription(comptime T: type) []const u8 {
 /// Panics if N-API error creation fails.
 pub fn throwArgTypeError(e: napi.Env, comptime T: type, arg_index: usize) void {
     var buf: [128:0]u8 = undefined;
-    const message = std.fmt.bufPrintZ(&buf, "Argument {d} must be {s}", .{ arg_index + 1, argTypeDescription(T) }) catch return;
+    const message = std.mem.printSentinel(&buf, "Argument {d} must be {s}", .{ arg_index + 1, argTypeDescription(T) }, 0) catch return;
     e.throwTypeError("", message) catch {};
 }
 
@@ -397,7 +397,7 @@ pub fn callAndConvert(
 pub fn wrapFunction(comptime func: anytype, comptime Identity: type) napi.c.napi_callback {
     const FnType = @TypeOf(func);
     const fn_info = @typeInfo(FnType).@"fn";
-    const params = fn_info.params;
+    const params = fn_info.param_types;
     const argc = params.len;
     const required_argc = comptime requiredArgCount(params);
 
@@ -429,7 +429,7 @@ pub fn wrapFunction(comptime func: anytype, comptime Identity: type) napi.c.napi
 
             var args: std.meta.ArgsTuple(FnType) = undefined;
             inline for (0..argc) |i| {
-                const ParamType = params[i].type.?;
+                const ParamType = params[i].?;
                 args[i] = convertArgWithOptional(
                     ParamType,
                     Identity,

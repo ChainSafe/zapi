@@ -44,7 +44,7 @@ pub fn wrapAsyncCompleteCallback(
         ) callconv(.c) void {
             if (raw_data == null) return;
             const env = Env{ .env = raw_env };
-            const stat: Status = @enumFromInt(raw_status);
+            const stat: Status = @fromBackingInt(@intCast(raw_status));
             const data: *Data = @ptrCast(@alignCast(raw_data));
             cb(env, stat, data);
         }

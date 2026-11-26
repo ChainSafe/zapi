@@ -2,7 +2,7 @@ const std = @import("std");
 const c = @import("c.zig").c;
 const Value = @import("Value.zig");
 
-pub fn tupleToRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".fields.len]c.napi_value {
+pub fn tupleToRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".field_names.len]c.napi_value {
     const ArgsT = @TypeOf(args);
     const info = @typeInfo(ArgsT);
 
@@ -10,11 +10,11 @@ pub fn tupleToRaw(args: anytype) [@typeInfo(@TypeOf(args)).@"struct".fields.len]
         @compileError("args must be a tuple of napi.Value");
     }
 
-    const len = info.@"struct".fields.len;
+    const len = info.@"struct".field_names.len;
     var argv: [len]c.napi_value = undefined;
 
-    inline for (info.@"struct".fields, 0..) |field, i| {
-        const arg = @field(args, field.name);
+    inline for (info.@"struct".field_names, 0..) |field, i| {
+        const arg = @field(args, field);
         if (@TypeOf(arg) != Value) {
             @compileError("Only napi.Value is supported in arguments tuple");
         }

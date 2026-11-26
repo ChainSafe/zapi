@@ -31,11 +31,11 @@ pub const Function = struct {
             @compileError("Function.call expects a tuple of arguments");
         }
 
-        const fields = args_info.@"struct".fields;
+        const fields = args_info.@"struct".field_names;
         var raw_args: [fields.len]napi.c.napi_value = undefined;
 
         inline for (fields, 0..) |field, i| {
-            const arg = @field(args, field.name);
+            const arg = @field(args, field);
             raw_args[i] = toRawValue(arg);
         }
 

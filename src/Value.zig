@@ -460,7 +460,7 @@ pub fn getPropertyNames(self: Value) NapiError!Value {
 pub fn getAllPropertyNames(self: Value, mode: KeyCollectionMode, filter: KeyFilter, conversion: KeyConversion) NapiError!Value {
     var names: c.napi_value = undefined;
     try status.check(
-        c.napi_get_all_property_names(self.env, self.value, @intFromEnum(mode), @intFromEnum(filter), @intFromEnum(conversion), &names),
+        c.napi_get_all_property_names(self.env, self.value, @backingInt(mode), @backingInt(filter), @backingInt(conversion), &names),
     );
     return Value{
         .env = self.env,
