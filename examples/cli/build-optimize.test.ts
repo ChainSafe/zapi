@@ -28,3 +28,11 @@ test.each([
     {cwd: ".", stdio: "inherit"}
   );
 });
+
+test("passes a per-target cache via the environment instead of the removed Zig flag", async () => {
+  const globalCacheDir = "/tmp/zapi-cache";
+  await build({target: "aarch64-apple-darwin", globalCacheDir, zigCwd: ".", step: "build-lib:addon", quiet: true});
+  const [, args, options] = spawn.mock.calls[0];
+  expect(args).toEqual(["build", "build-lib:addon", "-Dtarget=aarch64-macos-none"]);
+  expect(options.env).toEqual({...process.env, ZIG_GLOBAL_CACHE_DIR: globalCacheDir});
+});
