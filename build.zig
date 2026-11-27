@@ -1,19 +1,20 @@
 const std = @import("std");
+const Translator = @import("translate_c").Translator;
 const zbuild = @import("zbuild");
 
 pub fn build(b: *std.Build) !void {
     @setEvalBranchQuota(200_000);
     const manifest = @import("build.zig.zon");
     const result = try zbuild.configureBuild(b, manifest, .{});
-    const headers = b.addTranslateC(.{
-        .root_source_file = b.path("include/node_api.h"),
+    const headers: Translator = .init(b.dependency("translate_c", .{}), .{
+        .c_source_file = b.path("include/node_api.h"),
         .link_libc = false,
         .target = result.module("zapi").?.resolved_target.?,
         .optimize = result.module("zapi").?.optimize.?,
     });
     headers.addIncludePath(b.path("include"));
     headers.defineCMacro("NAPI_VERSION", b.option([]const u8, "build_options.napi_version", "Node.js NAPI version") orelse "10");
-    const c = headers.createModule();
+    const c = headers.mod;
     result.module("napi").?.addImport("napi_c", c);
     result.module("zapi").?.addImport("napi_c", c);
 }
