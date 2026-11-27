@@ -44,10 +44,6 @@ export async function build(opts: BuildOptions): Promise<void> {
     args.push("--cache-dir", opts.cacheDir);
   }
 
-  if (opts.globalCacheDir) {
-    args.push("--global-cache-dir", opts.globalCacheDir);
-  }
-
   if (opts.zigArgs) {
     args.push(...opts.zigArgs);
   }
@@ -59,6 +55,7 @@ export async function build(opts: BuildOptions): Promise<void> {
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     const child = spawn("zig", args, {
       cwd: opts.zigCwd,
+      env: opts.globalCacheDir ? {...process.env, ZIG_GLOBAL_CACHE_DIR: opts.globalCacheDir} : process.env,
       stdio: "inherit",
     });
 
