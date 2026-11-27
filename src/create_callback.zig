@@ -30,15 +30,15 @@ pub fn createCallback(
             var args: Args = undefined;
 
             var cb_arg_i: usize = 0;
-            inline for (0..fn_info.params.len) |i| {
+            inline for (0..fn_info.param_types.len) |i| {
                 const arg_hint = comptime getArgsHint(options, i);
-                const param_type = fn_info.params[i].type.?;
+                const param_type = fn_info.param_types[i].?;
 
                 const is_env_arg = arg_hint == .env or (arg_hint == .auto and param_type == Env);
                 const is_value_arg = arg_hint == .value or (arg_hint == .auto and param_type == Value);
 
                 if (arg_hint == .data) {
-                    args[i] = @alignCast(@ptrCast(info.data));
+                    args[i] = @ptrCast(@alignCast(info.data));
                 } else if (is_env_arg) {
                     args[i] = env;
                 } else if (is_value_arg) {

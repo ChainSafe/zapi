@@ -719,7 +719,7 @@ pub const BlsPublicKey = struct {
     bytes: [96]u8,
 
     pub fn init() BlsPublicKey {
-        return .{ .bytes = [_]u8{0} ** 96 };
+        return .{ .bytes = @splat(0) };
     }
 };
 

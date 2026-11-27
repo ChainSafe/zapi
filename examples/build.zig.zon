@@ -2,7 +2,7 @@
     .name = .zapi_examples,
     .version = "0.0.0",
     .fingerprint = 0x5ce1fd8530722186,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.1",
     .paths = .{
         "build.zig",
         "build.zig.zon",
@@ -21,8 +21,8 @@
             .hash = "zapi-3.1.0-rIqzUfHFBADg6qo5AXJzbfHgs6LqpwgVKYal4qCG4XSW",
         },
         .zbuild = .{
-            .url = "git+https://github.com/chainsafe/zbuild.git#f7d5f19de09f2808e54acf599605f9e18c9bd804",
-            .hash = "zbuild-0.4.0-XJFav-1nAgDmfVY1nVSIIzbkcbuHZj7yMb7Fv8yvznPO",
+            .url = "git+https://github.com/chainsafe/zbuild.git#dd2f7b8b59d5ff81b1f2d3b946edd25feaf7854c",
+            .hash = "zbuild-0.4.0-XJFav1tyAgAQQesNERZs46t9bbJ_Az-WMLR5Cvz2Owgw",
         },
     },
     .modules = .{

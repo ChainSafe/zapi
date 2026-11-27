@@ -35,7 +35,7 @@ pub fn wrapCallback(
                         e.throwError(@errorName(err), "NapiError") catch {};
                         return null;
                     };
-                    const error_info_status = @as(status.Status, @enumFromInt(error_info.error_code));
+                    const error_info_status = @as(status.Status, @fromBackingInt(@intCast(error_info.error_code)));
                     if (error_info_status == .ok) {
                         e.throwError(@errorName(err), "NapiError") catch {};
                     } else {

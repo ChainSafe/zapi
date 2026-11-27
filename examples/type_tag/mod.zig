@@ -23,6 +23,12 @@ fn typeTagMod(env: napi.Env, module: napi.Value) anyerror!void {
             &[_]napi.c.napi_property_descriptor{.{
                 .utf8name = "name",
                 .method = napi.wrapCallback(0, Cat_name),
+                .name = null,
+                .getter = null,
+                .setter = null,
+                .value = null,
+                .attributes = 0,
+                .data = null,
             }},
         ),
     );
@@ -37,6 +43,12 @@ fn typeTagMod(env: napi.Env, module: napi.Value) anyerror!void {
             &[_]napi.c.napi_property_descriptor{.{
                 .utf8name = "name",
                 .method = napi.wrapCallback(0, Dog_name),
+                .name = null,
+                .getter = null,
+                .setter = null,
+                .value = null,
+                .attributes = 0,
+                .data = null,
             }},
         ),
     );

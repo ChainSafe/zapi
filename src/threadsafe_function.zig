@@ -135,7 +135,7 @@ pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type 
         /// `data` must persist until the callback runs (unless it's a value type fitting in pointer, but here we use pointers).
         /// If CallData is void, passed data is ignored.
         pub fn call(self: Self, data: *CallData, mode: CallMode) NapiError!void {
-            try status.check(c.napi_call_threadsafe_function(self.tsfn, if (CallData == void) null else data, @intFromEnum(mode)));
+            try status.check(c.napi_call_threadsafe_function(self.tsfn, if (CallData == void) null else data, @backingInt(mode)));
         }
 
         pub fn acquire(self: Self) NapiError!void {
@@ -143,7 +143,7 @@ pub fn ThreadSafeFunction(comptime Context: type, comptime CallData: type) type 
         }
 
         pub fn release(self: Self, mode: ReleaseMode) NapiError!void {
-            try status.check(c.napi_release_threadsafe_function(self.tsfn, @intFromEnum(mode)));
+            try status.check(c.napi_release_threadsafe_function(self.tsfn, @backingInt(mode)));
         }
 
         pub fn ref(self: Self, env: Env) NapiError!void {

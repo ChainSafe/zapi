@@ -128,14 +128,14 @@ pub fn hasProperties(comptime T: type) bool {
     return @hasField(@TypeOf(T.js_meta.options), "properties");
 }
 
-/// Returns a slice of `std.builtin.Type.StructField` for the properties defined
+/// Returns a slice of field names for the properties defined
 /// in a ZAPI DSL class `T`'s `js_meta`.
 ///
 /// This comptime function is used to iterate over the declared properties of a
 /// class. Returns an empty slice if the class has no properties.
-pub fn propertyFields(comptime T: type) []const std.builtin.Type.StructField {
+pub fn propertyFields(comptime T: type) []const [:0]const u8 {
     if (!hasProperties(T)) return &.{};
-    return @typeInfo(@TypeOf(T.js_meta.options.properties)).@"struct".fields;
+    return @typeInfo(@TypeOf(T.js_meta.options.properties)).@"struct".field_names;
 }
 
 /// Determines the JavaScript class name for a given Zig class type `T`.
@@ -182,8 +182,8 @@ fn validateClassOptions(comptime Opts: type, comptime opts: Opts) void {
         @compileError("js.class expects a struct literal");
     }
 
-    inline for (@typeInfo(Opts).@"struct".fields) |field_info| {
-        if (!std.mem.eql(u8, field_info.name, "name") and !std.mem.eql(u8, field_info.name, "properties")) {
+    inline for (@typeInfo(Opts).@"struct".field_names) |name| {
+        if (!std.mem.eql(u8, name, "name") and !std.mem.eql(u8, name, "properties")) {
             @compileError("js.class only supports .name and .properties");
         }
     }
@@ -208,11 +208,11 @@ fn validateProperties(comptime Props: type, comptime props: Props) void {
         @compileError("js.class .properties must be a struct literal");
     }
 
-    inline for (@typeInfo(Props).@"struct".fields) |field_info| {
-        const value = @field(props, field_info.name);
+    inline for (@typeInfo(Props).@"struct".field_names) |name| {
+        const value = @field(props, name);
         switch (propertyKind(value)) {
             .prop => {},
-            .invalid => @compileError("unsupported property spec for '" ++ field_info.name ++ "' (use js.prop)"),
+            .invalid => @compileError("unsupported property spec for '" ++ name ++ "' (use js.prop)"),
         }
     }
 }
@@ -229,7 +229,7 @@ fn coerceStringLike(comptime value: anytype) []const u8 {
     _ = comptime coerceStringLikeType(T, "string");
     switch (@typeInfo(T)) {
         .pointer => |ptr| {
-            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) return value;
+            if (ptr.size == .slice and ptr.child == u8 and ptr.attrs.@"const") return value;
             if (ptr.size == .one and @typeInfo(ptr.child) == .array) {
                 const arr = @typeInfo(ptr.child).array;
                 if (arr.child == u8) return value[0..arr.len];
@@ -243,7 +243,7 @@ fn coerceStringLike(comptime value: anytype) []const u8 {
 fn coerceStringLikeType(comptime T: type, comptime label: []const u8) type {
     switch (@typeInfo(T)) {
         .pointer => |ptr| {
-            if (ptr.size == .slice and ptr.child == u8 and ptr.is_const) return T;
+            if (ptr.size == .slice and ptr.child == u8 and ptr.attrs.@"const") return T;
             if (ptr.size == .one and @typeInfo(ptr.child) == .array) {
                 const arr = @typeInfo(ptr.child).array;
                 if (arr.child == u8) return T;

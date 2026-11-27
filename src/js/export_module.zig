@@ -152,29 +152,29 @@ fn registerDecls(
     module: napi.Value,
     comptime depth: usize,
 ) !bool {
-    const decls = @typeInfo(Module).@"struct".decls;
+    const decls = @typeInfo(Module).@"struct".decl_names;
     var exported_any = false;
 
     inline for (decls) |decl| {
-        const field = @field(Module, decl.name);
+        const field = @field(Module, decl);
         const FieldType = @TypeOf(field);
         const field_info = @typeInfo(FieldType);
 
         if (field_info == .@"fn") {
             // Skip functions whose parameters aren't DSL types
-            const fn_params = field_info.@"fn".params;
+            const fn_params = field_info.@"fn".param_types;
             const is_dsl_fn = comptime blk: {
                 for (fn_params) |p| {
-                    const PT = p.type orelse break :blk false;
+                    const PT = p orelse break :blk false;
                     if (!wrap_function.isDslOrOptionalDsl(PT)) break :blk false;
                 }
                 break :blk true;
             };
-            if (!is_dsl_fn) @compileError("zapi: cannot export non-DSL `pub fn " ++ @typeName(Module) ++ "." ++ decl.name ++ "` — use DSL params (e.g. `js.Number`), drop `pub`, or pass `.register` to `exportModule` to export it manually");
+            if (!is_dsl_fn) @compileError("zapi: cannot export non-DSL `pub fn " ++ @typeName(Module) ++ "." ++ decl ++ "` — use DSL params (e.g. `js.Number`), drop `pub`, or pass `.register` to `exportModule` to export it manually");
 
             // DSL function — wrap and register
             const cb = wrap_function.wrapFunction(field, Identity);
-            const name: [:0]const u8 = decl.name ++ "";
+            const name: [:0]const u8 = decl ++ "";
 
             var js_fn: napi.c.napi_value = null;
             try napi.status.check(napi.c.napi_create_function(
@@ -195,7 +195,7 @@ fn registerDecls(
                 if (comptime class_meta.hasClassMeta(InnerType)) {
                     const wrapped = wrap_class.wrapClass(InnerType, Identity);
                     const props = wrapped.getPropertyDescriptors();
-                    const class_name = comptime class_meta.getClassName(InnerType, decl.name);
+                    const class_name = comptime class_meta.getClassName(InnerType, decl);
                     const name: [:0]const u8 = class_name ++ "";
 
                     var class_val: napi.c.napi_value = null;
@@ -218,7 +218,7 @@ fn registerDecls(
                 } else {
                     const ns_obj = try env.createObject();
                     if (try registerDecls(InnerType, Identity, env, ns_obj, depth + 1)) {
-                        const name: [:0]const u8 = decl.name ++ "";
+                        const name: [:0]const u8 = decl ++ "";
                         try module.setNamedProperty(name, ns_obj);
                         exported_any = true;
                     }
@@ -228,24 +228,24 @@ fn registerDecls(
                 // to its integer value, mirroring napi-rs `#[napi] pub enum`.
                 const enum_obj = try wrap_class.createEnumObject(
                     InnerType,
-                    @typeName(Module) ++ "." ++ decl.name,
+                    @typeName(Module) ++ "." ++ decl,
                     env,
                 );
-                const name: [:0]const u8 = decl.name ++ "";
+                const name: [:0]const u8 = decl ++ "";
                 try module.setNamedProperty(name, enum_obj);
                 exported_any = true;
             }
-        } else if (comptime (wrap_class.isConstDecl(Module, decl.name) and
+        } else if (comptime (wrap_class.isConstDecl(Module, decl) and
             wrap_class.isStaticValueType(FieldType)))
         {
             // Scalar/string const (never a `pub var` snapshot) — same
             // auto-export as class static fields.
             comptime wrap_class.assertExportableInt(
-                @typeName(Module) ++ "." ++ decl.name,
-                @field(Module, decl.name),
+                @typeName(Module) ++ "." ++ decl,
+                @field(Module, decl),
             );
             const const_val = try wrap_class.createStaticFieldValue(env, field);
-            const name: [:0]const u8 = decl.name ++ "";
+            const name: [:0]const u8 = decl ++ "";
             try module.setNamedProperty(name, const_val);
             exported_any = true;
         }

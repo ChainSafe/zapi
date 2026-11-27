@@ -13,7 +13,7 @@ const napi = @import("../napi.zig");
 /// (i.e., a struct with a `.val: napi.Value` field) because the `get` and `set`
 /// methods perform conversions based on these wrapper types.
 pub fn Object(comptime T: type) type {
-    const fields = @typeInfo(T).@"struct".fields;
+    const fields = @typeInfo(T).@"struct".field_names;
 
     return struct {
         /// The underlying `napi.Value` representing the JavaScript object.
@@ -41,9 +41,9 @@ pub fn Object(comptime T: type) type {
         pub fn get(self: Self) !T {
             var result: T = undefined;
             inline for (fields) |field| {
-                const name: [:0]const u8 = field.name ++ "";
+                const name: [:0]const u8 = field ++ "";
                 const prop = try self.val.getNamedProperty(name);
-                @field(result, field.name) = .{ .val = prop };
+                @field(result, field) = .{ .val = prop };
             }
             return result;
         }
@@ -57,8 +57,8 @@ pub fn Object(comptime T: type) type {
         /// Returns an error if any property cannot be set.
         pub fn set(self: Self, value: T) !void {
             inline for (fields) |field| {
-                const name: [:0]const u8 = field.name ++ "";
-                const field_val = @field(value, field.name);
+                const name: [:0]const u8 = field ++ "";
+                const field_val = @field(value, field);
                 try self.val.setNamedProperty(name, field_val.val);
             }
         }

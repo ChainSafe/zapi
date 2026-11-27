@@ -119,12 +119,30 @@ fn exampleMod(env: zapi.Env, module: zapi.Value) anyerror!void {
             &[_]zapi.c.napi_property_descriptor{ .{
                 .utf8name = "reset",
                 .method = zapi.wrapCallback(0, Timer_reset),
+                .name = null,
+                .getter = null,
+                .setter = null,
+                .value = null,
+                .attributes = 0,
+                .data = null,
             }, .{
                 .utf8name = "read",
                 .method = zapi.wrapCallback(0, Timer_read),
+                .name = null,
+                .getter = null,
+                .setter = null,
+                .value = null,
+                .attributes = 0,
+                .data = null,
             }, .{
                 .utf8name = "lap",
                 .method = zapi.wrapCallback(0, Timer_lap),
+                .name = null,
+                .getter = null,
+                .setter = null,
+                .value = null,
+                .attributes = 0,
+                .data = null,
             } },
         ),
     );
@@ -188,23 +206,46 @@ fn copy_buffer(env: zapi.Env, _: zapi.CallbackInfo(0)) !zapi.Value {
 const external_buffer_source = [_]u8{ 1, 2, 3 };
 
 var slice_data = [_]u8{ 1, 2, 3 };
-var external_buffer_allocator: std.heap.DebugAllocator(.{
-    .enable_memory_limit = true,
-    .thread_safe = false,
-}) = .init;
+var external_buffer_allocator: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
+var external_buffer_bytes: std.atomic.Value(usize) = .init(0);
+
+// The example exposes outstanding bytes so JS can assert that finalization
+// releases both the payload and its owner. Neither allocation needs resizing.
+const tracked_external_buffer_allocator: std.mem.Allocator = .{
+    .ptr = &external_buffer_allocator,
+    .vtable = &.{
+        .alloc = trackExternalAllocation,
+        .resize = std.mem.Allocator.noResize,
+        .remap = std.mem.Allocator.noRemap,
+        .free = trackExternalFree,
+    },
+};
+
+fn trackExternalAllocation(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+    const backing: *std.heap.SafeAllocator = @ptrCast(@alignCast(ctx));
+    const ptr = backing.allocator().rawAlloc(len, alignment, ret_addr) orelse return null;
+    _ = external_buffer_bytes.fetchAdd(len, .monotonic);
+    return ptr;
+}
+
+fn trackExternalFree(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+    const backing: *std.heap.SafeAllocator = @ptrCast(@alignCast(ctx));
+    backing.allocator().rawFree(memory, alignment, ret_addr);
+    _ = external_buffer_bytes.fetchSub(memory.len, .monotonic);
+}
 
 fn copy_slice() []u8 {
     return &slice_data;
 }
 
 fn external_buffer() !zapi.OwnedBuffer {
-    const owned_allocator = external_buffer_allocator.allocator();
+    const owned_allocator = tracked_external_buffer_allocator;
     const data = try owned_allocator.dupe(u8, &external_buffer_source);
     return zapi.OwnedBuffer.fromOwnedSlice(owned_allocator, data);
 }
 
 fn external_buffer_allocated_bytes() usize {
-    return external_buffer_allocator.total_requested_bytes;
+    return external_buffer_bytes.load(.monotonic);
 }
 
 const S = struct {

@@ -2,36 +2,30 @@
     .name = .zapi,
     .version = "4.5.0", // x-release-please-version
     .fingerprint = 0x77829ef951b38aac,
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.1",
     .paths = .{ "build.zig", "build.zig.zon", "src", "include" },
     .dependencies = .{
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c#cfac21f3199b2b02ce3fd7db652aa456421fe4ab",
+            .hash = "translate_c-2.0.2-Q_BUWvBNBwDnyehSiuAJmdFcMYHYGA-Jc3KiYdrV2Dqx",
+        },
         .zbuild = .{
-            .url = "git+https://github.com/chainsafe/zbuild.git#f7d5f19de09f2808e54acf599605f9e18c9bd804",
-            .hash = "zbuild-0.4.0-XJFav-1nAgDmfVY1nVSIIzbkcbuHZj7yMb7Fv8yvznPO",
+            .url = "git+https://github.com/chainsafe/zbuild.git#dd2f7b8b59d5ff81b1f2d3b946edd25feaf7854c",
+            .hash = "zbuild-0.4.0-XJFav1tyAgAQQesNERZs46t9bbJ_Az-WMLR5Cvz2Owgw",
         },
     },
-    .options_modules = .{
-        .build_options = .{
-            .napi_version = .{
-                .type = .string,
-                .default = "10",
-                .description = "Node.js NAPI version (default: 10).",
-            },
-        },
-    },
+
     .modules = .{
-        // `napi` and `zapi` share the same source file but expose different
-        // imports — `napi` is used by `napi.zig`-only consumers, while `zapi`
+        // `napi` and `zapi` share the same source file. `napi` is used by
+        // `napi.zig`-only consumers, while `zapi`
         // links libc and is the canonical entry point for consumers.
         .napi = .{
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
-            .imports = .{.build_options},
         },
         .zapi = .{
             .root_source_file = "src/root.zig",
             .include_paths = .{"include"},
-            .imports = .{.build_options},
             .link_libc = true,
         },
     },
